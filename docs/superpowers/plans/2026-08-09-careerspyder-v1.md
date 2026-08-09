@@ -36,6 +36,10 @@
 - [ ] **Step 1: Create `pyproject.toml`**
 
 ```toml
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "careerspyder"
 version = "0.1.0"
@@ -57,6 +61,9 @@ dev = [
     "pytest>=8.0",
     "httpx>=0.27",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
