@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from app import config
+from app.adapters import ADAPTERS
 from app.web.source_form import source_from_form
 
 router = APIRouter()
@@ -48,3 +50,17 @@ async def update_source(request: Request, source_id: str):
     source = source_from_form(form)
     config.update_source(request.app.state.sources_path, source_id, source)
     return RedirectResponse(url="/sources", status_code=303)
+
+
+@router.post("/sources/test-preview")
+async def test_source_preview(request: Request):
+    form = dict((await request.form()).items())
+    try:
+        source = source_from_form(form)
+    except ValidationError as exc:
+        return {"error": str(exc)}
+    try:
+        jobs = ADAPTERS[source.type](source)
+    except Exception as exc:
+        return {"error": str(exc)}
+    return {"jobs": [{"title": j.title, "url": j.url} for j in jobs]}
