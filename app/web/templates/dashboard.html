@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>CareerSpyder</h1>
+<form method="post" action="/run-now">
+  <button type="submit">Run now</button>
+</form>
+{% if last_run %}
+  <p>Last run: {{ last_run.started_at }} — {{ last_run.new_job_count }} new job(s)</p>
+  {% if last_run.failed_sources %}
+    <p>Failed sources: {{ last_run.failed_sources | join(", ") }}</p>
+  {% endif %}
+{% else %}
+  <p>No runs yet.</p>
+{% endif %}
+{% endblock %}
