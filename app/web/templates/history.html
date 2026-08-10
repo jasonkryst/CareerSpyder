@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Run history</h1>
+<table border="1" cellpadding="4">
+  <tr><th>Started</th><th>Finished</th><th>New jobs</th><th>Failed sources</th></tr>
+  {% for run in runs %}
+  <tr>
+    <td>{{ run.started_at }}</td>
+    <td>{{ run.finished_at or "in progress" }}</td>
+    <td>{{ run.new_job_count }}</td>
+    <td>{{ run.failed_sources | join(", ") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

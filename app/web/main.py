@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app import db
 from app.scheduler import create_scheduler
 from app.web.routes_dashboard import router as dashboard_router
+from app.web.routes_history import router as history_router
 
 
 @asynccontextmanager
@@ -37,3 +38,4 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CareerSpyder", lifespan=lifespan)
 app.include_router(dashboard_router)
+app.include_router(history_router)
