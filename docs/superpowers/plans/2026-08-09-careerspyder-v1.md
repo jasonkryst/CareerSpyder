@@ -1464,14 +1464,28 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'app.digest'`.
 
 ```python
 from dataclasses import dataclass
+from html import escape
+from urllib.parse import urlparse
 
 from app.models import Job
+
+_SAFE_URL_SCHEMES = {"http", "https"}
 
 
 @dataclass
 class Digest:
     subject: str
     html_body: str
+
+
+def _safe_href(url: str) -> str:
+    try:
+        scheme = urlparse(url).scheme.lower()
+    except ValueError:
+        return "#"
+    if scheme and scheme not in _SAFE_URL_SCHEMES:
+        return "#"
+    return escape(url, quote=True)
 
 
 def build_digest(new_jobs: list[Job], failed_sources: list[str]) -> Digest | None:
@@ -1486,20 +1500,27 @@ def build_digest(new_jobs: list[Job], failed_sources: list[str]) -> Digest | Non
         for job in new_jobs:
             by_company.setdefault(job.company or "Unknown", []).append(job)
         for company, jobs in by_company.items():
-            parts.append(f"<h3>{company}</h3><ul>")
+            parts.append(f"<h3>{escape(company)}</h3><ul>")
             for job in jobs:
-                location = f" — {job.location}" if job.location else ""
-                parts.append(f'<li><a href="{job.url}">{job.title}</a>{location}</li>')
+                location = f" — {escape(job.location)}" if job.location else ""
+                href = _safe_href(job.url)
+                title = escape(job.title)
+                parts.append(f'<li><a href="{href}">{title}</a>{location}</li>')
             parts.append("</ul>")
 
     if failed_sources:
         parts.append("<h3>Sources that failed this run</h3><ul>")
         for name in failed_sources:
-            parts.append(f"<li>{name}</li>")
+            parts.append(f"<li>{escape(name)}</li>")
         parts.append("</ul>")
 
     return Digest(subject=subject, html_body="".join(parts))
 ```
+
+Job titles, company names, and URLs come from scraped third-party sites and end up
+in an emailed HTML body — all text is HTML-escaped and `href` values are restricted
+to `http`/`https` schemes (anything else, e.g. `javascript:`, becomes `#`) to
+prevent HTML/attribute injection.
 
 - [ ] **Step 4: Run tests to verify they pass**
 

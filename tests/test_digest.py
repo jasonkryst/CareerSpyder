@@ -27,3 +27,35 @@ def test_includes_failed_sources_section():
     assert result is not None
     assert "Bad Co" in result.html_body
     assert "failed" in result.subject.lower()
+
+
+def test_scraped_fields_are_html_escaped():
+    jobs = [
+        Job(
+            key="1",
+            title='<script>alert(1)</script>',
+            url="https://x.test/1",
+            company='Acme" onmouseover="alert(2)',
+            location="<b>Remote</b>",
+            source_name="s",
+        ),
+    ]
+
+    result = build_digest(jobs, ["<img src=x onerror=alert(3)>"])
+
+    assert "<script>" not in result.html_body
+    assert "&lt;script&gt;" in result.html_body
+    assert 'onmouseover="alert' not in result.html_body
+    assert "<b>Remote</b>" not in result.html_body
+    assert "<img src=x onerror=alert(3)>" not in result.html_body
+
+
+def test_javascript_url_is_neutralized():
+    jobs = [
+        Job(key="1", title="Engineer", url="javascript:alert(1)", company="Acme", source_name="s"),
+    ]
+
+    result = build_digest(jobs, [])
+
+    assert 'href="javascript:alert(1)"' not in result.html_body
+    assert 'href="#"' in result.html_body
