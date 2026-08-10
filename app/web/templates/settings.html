@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Email settings</h1>
+<p>SMTP password is set via the <code>SMTP_PASSWORD</code> environment variable and is not editable here.</p>
+<form method="post" action="/settings">
+  <label>SMTP host <input type="text" name="smtp_host" value="{{ settings.smtp_host }}"></label><br>
+  <label>SMTP port <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"></label><br>
+  <label>SMTP user <input type="text" name="smtp_user" value="{{ settings.smtp_user }}"></label><br>
+  <label>From address <input type="text" name="email_from" value="{{ settings.email_from }}"></label><br>
+  <label>To address <input type="text" name="email_to" value="{{ settings.email_to }}"></label><br>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}
