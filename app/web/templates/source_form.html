@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ "Edit source" if source else "Add source" }}</h1>
+<form method="post" action="{{ action }}">
+  {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
+  <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label><br>
+  <label>Company <input type="text" name="company" value="{{ source.company if source else '' }}"></label><br>
+  <label>Type
+    <select name="type" onchange="showFieldsFor(this.value)">
+      {% for t in ["greenhouse", "lever", "generic_html", "linkedin", "indeed"] %}
+      <option value="{{ t }}" {% if source and source.type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label><br>
+
+  <div id="fields-greenhouse" class="type-fields">
+    <label>Board token <input type="text" name="board_token" value="{{ source.board_token if source and source.type in ['greenhouse', 'lever'] else '' }}"></label>
+  </div>
+  <div id="fields-lever" class="type-fields"></div>
+  <div id="fields-generic_html" class="type-fields">
+    <label>URL <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label><br>
+    <label>Render JS <input type="checkbox" name="render_js" {% if source and source.type == 'generic_html' and source.render_js %}checked{% endif %}></label><br>
+    <label>Job card selector <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label><br>
+    <label>Title selector <input type="text" name="selector_title" value="{{ source.selectors.title if source and source.type == 'generic_html' else '' }}"></label><br>
+    <label>Link selector <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label><br>
+    <label>Location selector <input type="text" name="selector_location" value="{{ source.selectors.location if source and source.type == 'generic_html' and source.selectors.location else '' }}"></label>
+  </div>
+  <div id="fields-linkedin" class="type-fields"></div>
+  <div id="fields-indeed" class="type-fields"></div>
+
+  <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label><br>
+  <label>Exclude keywords (comma separated) <input type="text" name="exclude_keywords" value="{{ source.exclude_keywords | join(', ') if source else '' }}"></label><br>
+
+  <button type="button" onclick="testSource()">Test this source</button>
+  <div id="test-results"></div>
+  <button type="submit">Save</button>
+</form>
+
+<script>
+function showFieldsFor(type) {
+  document.querySelectorAll(".type-fields").forEach(el => el.style.display = "none");
+  const el = document.getElementById("fields-" + type);
+  if (el) el.style.display = "block";
+}
+showFieldsFor(document.querySelector('select[name="type"]').value);
+
+async function testSource() {
+  const form = document.querySelector("form");
+  const data = new FormData(form);
+  const resp = await fetch("/sources/test-preview", { method: "POST", body: data });
+  const result = await resp.json();
+  const el = document.getElementById("test-results");
+  el.textContent = "";
+  if (result.error) {
+    el.textContent = "Error: " + result.error;
+    return;
+  }
+  const list = document.createElement("ul");
+  result.jobs.forEach(j => {
+    const item = document.createElement("li");
+    item.textContent = j.title + " - " + j.url;
+    list.appendChild(item);
+  });
+  el.appendChild(list);
+}
+</script>
+{% endblock %}

@@ -2259,22 +2259,30 @@ def source_from_form(form: dict):
 
     source_type = form["type"]
     if source_type in ("greenhouse", "lever"):
-        common["board_token"] = form["board_token"]
+        if "board_token" in form:
+            common["board_token"] = form["board_token"]
     elif source_type == "generic_html":
-        common["url"] = form["url"]
+        if "url" in form:
+            common["url"] = form["url"]
         common["render_js"] = form.get("render_js") == "on"
         common["selectors"] = Selectors(
-            job_card=form["selector_job_card"],
-            title=form["selector_title"],
-            link=form["selector_link"],
+            job_card=form.get("selector_job_card", ""),
+            title=form.get("selector_title", ""),
+            link=form.get("selector_link", ""),
             location=form.get("selector_location") or None,
         )
     else:
-        common["url"] = form["url"]
+        if "url" in form:
+            common["url"] = form["url"]
 
     model = TYPE_MODELS[source_type]
     return model.model_validate(common)
 ```
+
+Type-specific fields are only added to `common` when present in the submitted form
+(`if "board_token" in form: ...` rather than `form["board_token"]`) so a genuinely
+missing required field surfaces as a pydantic `ValidationError` from
+`model_validate` — not a bare `KeyError` from the dict lookup itself.
 
 - [ ] **Step 4: Run form-helper tests to verify they pass**
 
@@ -2399,15 +2407,27 @@ async function testSource() {
   const resp = await fetch("/sources/test-preview", { method: "POST", body: data });
   const result = await resp.json();
   const el = document.getElementById("test-results");
+  el.textContent = "";
   if (result.error) {
     el.textContent = "Error: " + result.error;
-  } else {
-    el.innerHTML = "<ul>" + result.jobs.map(j => `<li>${j.title} - ${j.url}</li>`).join("") + "</ul>";
+    return;
   }
+  const list = document.createElement("ul");
+  result.jobs.forEach(j => {
+    const item = document.createElement("li");
+    item.textContent = j.title + " - " + j.url;
+    list.appendChild(item);
+  });
+  el.appendChild(list);
 }
 </script>
 {% endblock %}
 ```
+
+Preview results come from a live scrape of a source you're still editing — the same
+untrusted-data caveat as the email digest applies. Results are inserted via
+`textContent`/DOM APIs rather than `innerHTML` with template-literal interpolation,
+so a scraped title or URL can't inject markup into the admin's own browser.
 
 - [ ] **Step 8: Add form routes to `app/web/routes_sources.py`**
 
