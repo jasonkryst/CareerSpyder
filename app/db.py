@@ -76,6 +76,7 @@ def save_jobs(conn: sqlite3.Connection, jobs: list[Job], run_id: int) -> None:
 def start_run(conn: sqlite3.Connection) -> int:
     cur = conn.execute("INSERT INTO runs (started_at) VALUES (?)", (_now(),))
     conn.commit()
+    assert cur.lastrowid is not None
     return cur.lastrowid
 
 
