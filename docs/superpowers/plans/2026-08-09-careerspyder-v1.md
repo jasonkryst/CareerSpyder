@@ -2728,6 +2728,9 @@ git commit -m "feat: add email settings page (SMTP password stays env-var only)"
 tests
 docs
 *.md
+.venv
+config
+data
 ```
 
 - [ ] **Step 2: Write `Dockerfile`**
@@ -2742,16 +2745,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
-RUN playwright install --with-deps chromium
-
 COPY app app
+RUN pip install --no-cache-dir .
+RUN playwright install --with-deps chromium
 
 RUN mkdir -p /app/config /app/data
 
 EXPOSE 8080
 CMD ["uvicorn", "app.web.main:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
+
+`app/` is copied before `pip install` (not after, and not with `-e`): setuptools'
+package discovery (`[tool.setuptools.packages.find]`) runs at install time, so if
+`app/` doesn't exist yet it finds zero packages and the install silently fails to
+register the `app` package — copying `app/` afterward wouldn't fix an editable
+install's already-built package registration. A plain (non-editable) install with
+the source already present avoids this entirely.
 
 - [ ] **Step 3: Write `docker-compose.yml`**
 
