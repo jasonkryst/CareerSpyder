@@ -22,3 +22,13 @@ def test_post_settings_saves_new_values(client):
     settings = db.get_settings(client.app.state.conn)
     assert settings["smtp_host"] == "smtp2.example.com"
     assert settings["smtp_port"] == 465
+
+
+def test_post_settings_rejects_file_upload_field(client):
+    resp = client.post(
+        "/settings",
+        data={"smtp_port": "465", "smtp_user": "user2", "email_from": "from2@x.test", "email_to": "to2@x.test"},
+        files={"smtp_host": ("evil.txt", b"not a hostname")},
+    )
+
+    assert resp.status_code == 400

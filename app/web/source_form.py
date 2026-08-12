@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from pydantic import BaseModel
+
 from app.config import (
     GenericHtmlSource,
     GreenhouseSource,
@@ -9,7 +11,7 @@ from app.config import (
     Selectors,
 )
 
-TYPE_MODELS = {
+TYPE_MODELS: dict[str, type[BaseModel]] = {
     "greenhouse": GreenhouseSource,
     "lever": LeverSource,
     "generic_html": GenericHtmlSource,

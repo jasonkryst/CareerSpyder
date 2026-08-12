@@ -93,7 +93,7 @@ async def test_source_preview(request: Request):
         # Adapters raise heterogeneous exceptions (requests, BeautifulSoup
         # selectors, Playwright) — this endpoint's job is to report any of
         # them back to the UI as a preview error, not to crash.
-        jobs = await run_in_threadpool(ADAPTERS[source.type], source)
+        jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {"jobs": [{"title": j.title, "url": j.url} for j in jobs]}
