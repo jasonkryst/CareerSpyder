@@ -1,7 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from app.models import Job
 
@@ -38,7 +37,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def init_db(path: str) -> sqlite3.Connection:
@@ -103,7 +102,7 @@ def list_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
     ]
 
 
-def get_settings(conn: sqlite3.Connection) -> Optional[dict]:
+def get_settings(conn: sqlite3.Connection) -> dict | None:
     row = conn.execute(
         "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to FROM settings WHERE id = 1"
     ).fetchone()

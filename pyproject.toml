@@ -22,6 +22,9 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "httpx>=0.27",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pip-audit>=2.7",
 ]
 
 [tool.setuptools.packages.find]
@@ -35,3 +38,14 @@ include-package-data = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true

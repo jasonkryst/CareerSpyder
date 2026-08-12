@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class BaseSource(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str
-    company: Optional[str] = None
+    company: str | None = None
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)
 
@@ -28,7 +28,7 @@ class Selectors(BaseModel):
     job_card: str = Field(min_length=1)
     title: str = Field(min_length=1)
     link: str = Field(min_length=1)
-    location: Optional[str] = None
+    location: str | None = None
 
 
 class GenericHtmlSource(BaseSource):
@@ -49,7 +49,7 @@ class IndeedSource(BaseSource):
 
 
 SourceConfig = Annotated[
-    Union[GreenhouseSource, LeverSource, GenericHtmlSource, LinkedInSource, IndeedSource],
+    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource,
     Field(discriminator="type"),
 ]
 
