@@ -1,0 +1,68 @@
+name: Docker
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  build-scan-smoketest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: careerspyder:latest
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          exit-code: "1"
+          format: table
+
+      - name: Start container
+        run: |
+          mkdir -p config data
+          echo '{"sources": []}' > config/sources.json
+          cat > .env <<'EOF'
+          SMTP_PASSWORD=ci-placeholder
+          SMTP_HOST=localhost
+          SMTP_PORT=587
+          SMTP_USER=ci
+          EMAIL_FROM=ci@example.test
+          EMAIL_TO=ci@example.test
+          RUN_HOUR=8
+          TZ=UTC
+          EOF
+          docker compose up -d
+
+      - name: Wait for app to respond
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:8080/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App never became ready" >&2
+          docker compose logs
+          exit 1
+
+      - name: Smoke test all pages
+        run: |
+          for path in / /sources /history /settings; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080$path")
+            if [ "$status" != "200" ]; then
+              echo "GET $path returned $status, expected 200" >&2
+              docker compose logs
+              exit 1
+            fi
+            echo "GET $path -> 200"
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker compose down
