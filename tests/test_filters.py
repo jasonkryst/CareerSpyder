@@ -14,7 +14,7 @@ def test_no_filters_returns_all():
 def test_include_keyword_is_case_insensitive_substring_match():
     jobs = [job("Backend Engineer"), job("Sales Rep")]
     result = apply_keyword_filters(jobs, ["engineer"], [])
-    assert [j.title for j in result] == ["Sales Rep"]
+    assert [j.title for j in result] == ["Backend Engineer"]
 
 
 def test_exclude_keyword_removes_matches():
