@@ -16,7 +16,7 @@ def fetch(source: LinkedInSource, html_renderer=render_html) -> list[Job]:
             continue
         company_el = card.select_one("h4.base-search-card__subtitle")
         location_el = card.select_one("span.job-search-card__location")
-        href = link_el.get("href", "").split("?")[0]
+        href = str(link_el.get("href", "")).split("?")[0]
         jobs.append(Job(
             key=f"linkedin:{href}",
             title=title_el.get_text(strip=True),
