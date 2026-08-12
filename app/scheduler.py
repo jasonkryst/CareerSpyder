@@ -15,6 +15,9 @@ def run_and_notify(conn, sources_path: str) -> None:
     if d is None:
         return
     settings = db.get_settings(conn)
+    if settings is None:
+        logger.warning("Skipping digest email for run %s: no settings configured", summary.run_id)
+        return
     try:
         emailer.send_email(
             settings["smtp_host"], settings["smtp_port"], settings["smtp_user"],
