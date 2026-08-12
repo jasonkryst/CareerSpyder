@@ -9,7 +9,7 @@ def send_email(smtp_host: str, smtp_port: int, smtp_user: str, smtp_password: st
     msg["From"] = email_from
     msg["To"] = email_to
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         server.starttls()
         server.login(smtp_user, smtp_password)
         server.sendmail(email_from, [email_to], msg.as_string())

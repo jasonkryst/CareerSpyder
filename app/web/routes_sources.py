@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from app import config
 from app.adapters import ADAPTERS
-from app.web.source_form import source_from_form
+from app.web.source_form import echo_source, source_from_form
+from app.web.templating import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
 
 
 @router.get("/sources", response_class=HTMLResponse)
@@ -19,7 +19,10 @@ def list_sources(request: Request):
 
 @router.post("/sources/{source_id}/delete")
 def delete_source(request: Request, source_id: str):
-    config.delete_source(request.app.state.sources_path, source_id)
+    try:
+        config.delete_source(request.app.state.sources_path, source_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Source not found")
     return RedirectResponse(url="/sources", status_code=303)
 
 
@@ -31,14 +34,25 @@ def new_source_form(request: Request):
 @router.post("/sources/new")
 async def create_source(request: Request):
     form = dict((await request.form()).items())
-    source = source_from_form(form)
+    try:
+        source = source_from_form(form)
+    except ValidationError as exc:
+        return templates.TemplateResponse(
+            request,
+            "source_form.html",
+            {"source": echo_source(form), "action": "/sources/new", "error": str(exc)},
+            status_code=400,
+        )
     config.add_source(request.app.state.sources_path, source)
     return RedirectResponse(url="/sources", status_code=303)
 
 
 @router.get("/sources/{source_id}/edit", response_class=HTMLResponse)
 def edit_source_form(request: Request, source_id: str):
-    source = config.get_source(request.app.state.sources_path, source_id)
+    try:
+        source = config.get_source(request.app.state.sources_path, source_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Source not found")
     return templates.TemplateResponse(
         request, "source_form.html", {"source": source, "action": f"/sources/{source_id}/edit"}
     )
@@ -47,8 +61,24 @@ def edit_source_form(request: Request, source_id: str):
 @router.post("/sources/{source_id}/edit")
 async def update_source(request: Request, source_id: str):
     form = dict((await request.form()).items())
-    source = source_from_form(form)
-    config.update_source(request.app.state.sources_path, source_id, source)
+    action = f"/sources/{source_id}/edit"
+    try:
+        source = source_from_form(form)
+    except ValidationError as exc:
+        return templates.TemplateResponse(
+            request,
+            "source_form.html",
+            {"source": echo_source(form), "action": action, "error": str(exc)},
+            status_code=400,
+        )
+    # The id is determined by the URL path, not by whatever the (hidden)
+    # form field carried — prevents a tampered hidden field from rewriting
+    # a different source's id.
+    source.id = source_id
+    try:
+        config.update_source(request.app.state.sources_path, source_id, source)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Source not found")
     return RedirectResponse(url="/sources", status_code=303)
 
 
@@ -60,7 +90,7 @@ async def test_source_preview(request: Request):
     except ValidationError as exc:
         return {"error": str(exc)}
     try:
-        jobs = ADAPTERS[source.type](source)
+        jobs = await run_in_threadpool(ADAPTERS[source.type], source)
     except Exception as exc:
         return {"error": str(exc)}
     return {"jobs": [{"title": j.title, "url": j.url} for j in jobs]}

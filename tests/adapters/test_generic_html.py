@@ -69,6 +69,29 @@ def test_fetch_render_js_uses_html_renderer_instead_of_http_get():
     assert len(jobs) == 2
 
 
+def test_relative_href_is_resolved_against_source_url():
+    html = """
+    <html><body>
+      <div class="job">
+        <span class="t">Backend Engineer</span>
+        <a href="/careers/apply/1">apply</a>
+        <span class="loc">Remote</span>
+      </div>
+    </body></html>
+    """
+
+    def fake_get(url, timeout):
+        return FakeResponse(html)
+
+    source = GenericHtmlSource(id="s1", name="Custom Co", company="Custom Co", type="generic_html",
+                                url="https://customco.test/careers", selectors=selectors())
+
+    jobs = generic_html.fetch(source, http_get=fake_get)
+
+    assert len(jobs) == 1
+    assert jobs[0].url == "https://customco.test/careers/apply/1"
+
+
 def test_missing_title_or_link_is_skipped_not_crashed():
     html = '<div class="job"><span class="t">No Link</span></div>'
 

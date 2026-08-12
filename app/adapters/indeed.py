@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 from bs4 import BeautifulSoup
 
 from app.adapters.browser import render_html
@@ -16,7 +18,7 @@ def fetch(source: IndeedSource, html_renderer=render_html) -> list[Job]:
             continue
         company_el = card.select_one("span.companyName")
         location_el = card.select_one("div.companyLocation")
-        href = link_el.get("href", "")
+        href = urljoin(source.url, link_el.get("href", ""))
         jobs.append(Job(
             key=f"indeed:{href}",
             title=title_el.get_text(strip=True),

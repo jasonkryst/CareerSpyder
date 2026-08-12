@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -22,7 +24,7 @@ def fetch(source: GenericHtmlSource, http_get=requests.get, html_renderer=render
         if title_el is None or link_el is None:
             continue
         location_el = card.select_one(source.selectors.location) if source.selectors.location else None
-        href = link_el.get("href", "")
+        href = urljoin(source.url, link_el.get("href", ""))
         title = title_el.get_text(strip=True)
         jobs.append(Job(
             key=f"html:{source.company}:{title}:{href}",

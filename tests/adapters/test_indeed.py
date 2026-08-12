@@ -29,8 +29,8 @@ def test_fetch_parses_indeed_cards():
     assert jobs[0].title == "Backend Engineer"
     assert jobs[0].company == "Acme Corp"
     assert jobs[0].location == "Remote"
-    assert jobs[0].url == "/rc/clk?jk=xyz"
-    assert jobs[0].key == "indeed:/rc/clk?jk=xyz"
+    assert jobs[0].url == "https://indeed.test/rc/clk?jk=xyz"
+    assert jobs[0].key == "indeed:https://indeed.test/rc/clk?jk=xyz"
 
 
 def test_fetch_returns_empty_list_when_no_cards_match():

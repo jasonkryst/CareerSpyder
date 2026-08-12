@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ "Edit source" if source else "Add source" }}</h1>
+<h1>{{ "Edit source" if source and source.id else "Add source" }}</h1>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
 <form method="post" action="{{ action }}">
   {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
   <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label><br>

@@ -1,12 +1,11 @@
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app import db
 from app.scheduler import run_and_notify
+from app.web.templating import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
 
 
 @router.get("/", response_class=HTMLResponse)

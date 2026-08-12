@@ -14,7 +14,7 @@ def test_send_email_logs_in_and_sends_via_starttls():
             subject="Subject", html_body="<p>Body</p>",
         )
 
-        mock_smtp_cls.assert_called_once_with("smtp.example.com", 587)
+        mock_smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=30)
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("user", "secret")
         assert mock_server.sendmail.call_count == 1

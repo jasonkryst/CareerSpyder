@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from typing import Annotated, Literal, Optional, Union
 
@@ -15,36 +16,36 @@ class BaseSource(BaseModel):
 
 class GreenhouseSource(BaseSource):
     type: Literal["greenhouse"]
-    board_token: str
+    board_token: str = Field(min_length=1)
 
 
 class LeverSource(BaseSource):
     type: Literal["lever"]
-    board_token: str
+    board_token: str = Field(min_length=1)
 
 
 class Selectors(BaseModel):
-    job_card: str
-    title: str
-    link: str
+    job_card: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    link: str = Field(min_length=1)
     location: Optional[str] = None
 
 
 class GenericHtmlSource(BaseSource):
     type: Literal["generic_html"]
-    url: str
+    url: str = Field(min_length=1)
     render_js: bool = False
     selectors: Selectors
 
 
 class LinkedInSource(BaseSource):
     type: Literal["linkedin"]
-    url: str
+    url: str = Field(min_length=1)
 
 
 class IndeedSource(BaseSource):
     type: Literal["indeed"]
-    url: str
+    url: str = Field(min_length=1)
 
 
 SourceConfig = Annotated[
@@ -58,6 +59,8 @@ class SourcesFile(BaseModel):
 
 
 def load_sources(path: str) -> list[SourceConfig]:
+    if not os.path.exists(path):
+        return []
     with open(path) as f:
         data = json.load(f)
     return SourcesFile.model_validate(data).sources
@@ -65,8 +68,13 @@ def load_sources(path: str) -> list[SourceConfig]:
 
 def save_sources(path: str, sources: list) -> None:
     payload = {"sources": [s.model_dump() for s in sources]}
-    with open(path, "w") as f:
+    dir_name = os.path.dirname(path)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(payload, f, indent=2)
+    os.replace(tmp_path, path)
 
 
 def add_source(path: str, source) -> None:

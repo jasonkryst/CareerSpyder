@@ -1,8 +1,11 @@
+import logging
 import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import config, db, digest, emailer, orchestrator
+
+logger = logging.getLogger(__name__)
 
 
 def run_and_notify(conn, sources_path: str) -> None:
@@ -12,11 +15,14 @@ def run_and_notify(conn, sources_path: str) -> None:
     if d is None:
         return
     settings = db.get_settings(conn)
-    emailer.send_email(
-        settings["smtp_host"], settings["smtp_port"], settings["smtp_user"],
-        os.environ["SMTP_PASSWORD"], settings["email_from"], settings["email_to"],
-        d.subject, d.html_body,
-    )
+    try:
+        emailer.send_email(
+            settings["smtp_host"], settings["smtp_port"], settings["smtp_user"],
+            os.environ.get("SMTP_PASSWORD", ""), settings["email_from"], settings["email_to"],
+            d.subject, d.html_body,
+        )
+    except Exception:
+        logger.exception("Failed to send digest email for run %s", summary.run_id)
 
 
 def create_scheduler(conn, sources_path: str, run_hour: int, tz: str) -> BackgroundScheduler:
