@@ -63,6 +63,30 @@ jobs:
             echo "GET $path -> 200"
           done
 
+      - name: Read version from pyproject.toml
+        if: github.event_name == 'push'
+        id: version
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push image to Docker Hub
+        if: github.event_name == 'push'
+        run: |
+          image="${{ secrets.DOCKERHUB_USERNAME }}/careerspyder"
+          version="${{ steps.version.outputs.version }}"
+          docker tag careerspyder:latest "$image:latest"
+          docker tag careerspyder:latest "$image:$version"
+          docker push "$image:latest"
+          docker push "$image:$version"
+
       - name: Tear down
         if: always()
         run: docker compose down
