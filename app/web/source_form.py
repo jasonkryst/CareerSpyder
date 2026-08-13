@@ -11,6 +11,7 @@ from app.config import (
     LeverSource,
     LinkedInSource,
     Selectors,
+    TalentBrewSource,
 )
 
 TYPE_MODELS: dict[str, type[BaseModel]] = {
@@ -21,6 +22,7 @@ TYPE_MODELS: dict[str, type[BaseModel]] = {
     "indeed": IndeedSource,
     "infor": InforSource,
     "healthcaresource": HealthcareSource,
+    "talentbrew": TalentBrewSource,
 }
 
 
@@ -65,6 +67,11 @@ def source_from_form(form: dict):
     elif source_type == "healthcaresource":
         if "site_id" in form:
             common["site_id"] = _strip(form["site_id"])
+    elif source_type == "talentbrew":
+        if "base_url" in form:
+            common["base_url"] = _strip(form["base_url"])
+        if form.get("max_pages"):
+            common["max_pages"] = int(form["max_pages"])
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])
@@ -95,6 +102,7 @@ def echo_source(form: dict):
         selectors=selectors,
         max_pages=form.get("max_pages", ""),
         site_id=form.get("site_id", ""),
+        base_url=form.get("base_url", ""),
         include_keywords=_keywords(form.get("include_keywords", "")),
         exclude_keywords=_keywords(form.get("exclude_keywords", "")),
     )
