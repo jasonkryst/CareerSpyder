@@ -12,6 +12,7 @@ from app.config import (
     LinkedInSource,
     Selectors,
     TalentBrewSource,
+    WorkdaySource,
 )
 
 TYPE_MODELS: dict[str, type[BaseModel]] = {
@@ -23,6 +24,7 @@ TYPE_MODELS: dict[str, type[BaseModel]] = {
     "infor": InforSource,
     "healthcaresource": HealthcareSource,
     "talentbrew": TalentBrewSource,
+    "workday": WorkdaySource,
 }
 
 
@@ -72,6 +74,11 @@ def source_from_form(form: dict):
             common["base_url"] = _strip(form["base_url"])
         if form.get("max_pages"):
             common["max_pages"] = int(form["max_pages"])
+    elif source_type == "workday":
+        if "career_site_url" in form:
+            common["career_site_url"] = _strip(form["career_site_url"])
+        if form.get("max_pages"):
+            common["max_pages"] = int(form["max_pages"])
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])
@@ -103,6 +110,7 @@ def echo_source(form: dict):
         max_pages=form.get("max_pages", ""),
         site_id=form.get("site_id", ""),
         base_url=form.get("base_url", ""),
+        career_site_url=form.get("career_site_url", ""),
         include_keywords=_keywords(form.get("include_keywords", "")),
         exclude_keywords=_keywords(form.get("exclude_keywords", "")),
     )

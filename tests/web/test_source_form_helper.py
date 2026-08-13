@@ -92,3 +92,25 @@ def test_talentbrew_max_pages_defaults_when_field_blank():
     }
     source = source_from_form(form)
     assert source.max_pages == 60
+
+
+def test_parses_workday_fields():
+    form = {
+        "type": "workday", "name": "Duly (Workday)",
+        "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+        "max_pages": "20", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "workday"
+    assert source.career_site_url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"
+    assert source.max_pages == 20
+
+
+def test_workday_max_pages_defaults_when_field_blank():
+    form = {
+        "type": "workday", "name": "Duly (Workday)",
+        "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+        "max_pages": "", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.max_pages == 60
