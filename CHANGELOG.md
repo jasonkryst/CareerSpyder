@@ -31,6 +31,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sort for deterministic pagination — the default "Relevancy" sort was
   verified to produce heavily overlapping, unreliable pages on a real
   site. Paginates up to the platform's own reported total page count.
+- `workday` source type, for employers on Workday's recruiting platform
+  (e.g. Duly Health and Care). Calls Workday's public CXS jobs API
+  directly — no auth, no browser, and the same adapter works for any
+  Workday tenant. Handles two verified pagination quirks: the reported
+  result total is only trustworthy on the first page, and paging past
+  the real end silently wraps back to page 1 instead of returning empty.
 
 ## [0.1.0] — 2026-08-11
 
