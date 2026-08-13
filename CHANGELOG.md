@@ -25,6 +25,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Center). Calls a directly-callable JSON API (no browser needed) and
   fetches every posting in one call — real per-job URLs, unlike the
   `infor` source type.
+- `talentbrew` source type, for employers on Radancy's TalentBrew
+  career-site platform (e.g. Northwestern Medicine). Calls the
+  platform's internal AJAX results endpoint with an explicit Title-A-Z
+  sort for deterministic pagination — the default "Relevancy" sort was
+  verified to produce heavily overlapping, unreliable pages on a real
+  site. Paginates up to the platform's own reported total page count.
 
 ## [0.1.0] — 2026-08-11
 
