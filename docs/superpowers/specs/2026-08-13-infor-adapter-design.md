@@ -30,12 +30,14 @@ out every simpler option:
   existing `browser.render_html()` helper returns `page.content()` on the
   *top-level* frame only — it would capture the empty frameset shell, not
   the iframe's content.
-- **Rendered by SlickGrid**, a virtualized, frozen-column JS data grid
-  (`slick-row`/`slick-cell` classes). Title lives in one pane
-  (`grid-canvas-left`), location/posted-date in a separate pane
-  (`grid-canvas-right`), correlated only by a shared `row="N"` index
-  attribute — there's no single self-contained "job card" element the way
-  `generic_html`'s selector model assumes.
+- **Rendered by SlickGrid**, a virtualized JS data grid (`slick-row`
+  classes) — nothing exists in the HTML until JavaScript populates it, so
+  `render_js: false` is a non-starter regardless of the iframe issue
+  above. Each row's single `.slick-cell` does contain one self-contained
+  `.inforCardstackCell` card (title, posted date, location all inside
+  it — confirmed via live DOM inspection, see exact structure below), so
+  once the grid has rendered, extracting one page's jobs is a normal
+  selector-based parse, not a multi-pane correlation problem.
 - **No stable per-job identifier or URL anywhere in the listing.**
   Checked row DOM attributes and jQuery `.data()` directly — nothing.
   Clicking a title navigates the SPA to a detail view in place (no URL
@@ -53,9 +55,33 @@ out every simpler option:
 
 Given all of that, this needs its own adapter that drives Playwright
 directly — navigate, find the iframe, wait for the grid, parse the
-current page's two panes, click "next," repeat up to a configurable
-limit — rather than fitting into `generic_html`'s single-fetch,
-single-selector-set model.
+current page's cards, click "next," repeat up to a configurable limit —
+rather than fitting into `generic_html`'s single-fetch model. (The
+per-card *parsing* step, once the HTML is in hand, is actually simple —
+see below — it's getting that HTML out of a paginated, iframe-nested, JS
+grid that `generic_html` has no support for.)
+
+### Real card HTML (Rush board, page 1, row 1)
+
+```html
+<div class="inforCardstackCell">
+  <span class="inforCardstackImg hotJobsSpan"></span>
+  <span class="inforCardstackHeading">Anesthesia Tech 1</span>
+  <div class="floatRight PostedDiv">
+    <label class="inforCardstackLabel PostedLbl">Posted</label>
+    <label class="inforCardstackValue">08/12/2026</label>
+  </div>
+  <br>
+  <label class="inforCardstackLabel LocationLbl">Location</label>
+  <label class="inforCardstackValue">US:IL:Chicago</label>
+</div>
+```
+
+Note there are two `.inforCardstackValue` labels per card (posted date
+and location) — distinguish them by position: the one inside
+`.PostedDiv` is the posted date, the one that's a direct sibling of
+`.LocationLbl` (after the `<br>`) is the location. No `<a href>` anywhere
+in the card, confirming the "no per-job link" finding above.
 
 ## Config schema
 
@@ -86,9 +112,9 @@ post far more than 30 jobs/day can raise `max_pages`.
 | `Job` field | Source |
 |---|---|
 | `key` | hash of `company + title + location` (same pattern as `generic_html`/`linkedin`/`indeed` — no platform-native ID is available, see above) |
-| `title` | left-pane cell text (`.inforCardstackHeading`) |
-| `location` | right-pane cell text, parsed from `Location:<value>` |
-| `posted_date` | right-pane cell text, parsed from `Posted:<value>` |
+| `title` | `.inforCardstackHeading` text within the card |
+| `location` | the `.inforCardstackValue` label that follows `.LocationLbl` |
+| `posted_date` | the `.inforCardstackValue` label inside `.PostedDiv` |
 | `company` | `source.company` (config field — not present in row data) |
 | `url` | `source.url` — the listing page itself. No per-job link exists (see above); this is a deliberate, documented degradation, not an oversight. The digest still shows the job title so a user can search for it on the board. |
 | `source_name` | `source.name`, same as every other adapter |
@@ -111,22 +137,29 @@ def fetch(source: InforSource, frame_fetcher=default_frame_fetcher) -> list[Job]
     """
 ```
 
-- `default_frame_fetcher` (in `app/adapters/infor.py` or reusing/extending
-  `app/adapters/browser.py`) is the real implementation: launches
-  Playwright, navigates to `url` on page 1, locates the iframe, waits for
-  `.slick-row` to appear, returns that frame's HTML; for `page_number > 1`
-  it clicks the pagination control the right number of times from a
-  persistent page session and returns each subsequent page's frame HTML.
-  This is **not unit tested directly** — same precedent as
-  `browser.render_html()` in the existing codebase, which the v1 plan
+- `default_frame_fetcher` (in `app/adapters/infor.py`) is the real
+  implementation: launches Playwright, navigates to `url`, locates the
+  job-content iframe via `page.frame_locator("#parentIframe")` (a stable
+  `id`/`name` on the iframe element, confirmed via live inspection — not
+  a positional index, which would be fragile if the site ever adds
+  another iframe), waits for `.slick-row` to appear, returns that frame's
+  HTML for page 1. For `page_number > 1`, it clicks
+  `button.nextPage[title="Next"]` (also confirmed via live inspection)
+  the needed number of times from a persistent page/browser session,
+  waiting for the grid to re-render between clicks, and returns each
+  subsequent page's frame HTML. If `button.nextPage` is disabled (its
+  `disabled` DOM property — confirmed present on the real button when no
+  further pages exist) before `page_number` is reached, returns `None`
+  early. This function is **not unit tested directly** — same precedent
+  as `browser.render_html()` in the existing codebase, which the v1 plan
   explicitly calls out as verified only by manual smoke test.
-- The parsing logic (frozen-pane row correlation, title/location/date
-  extraction, building `Job` objects) is a separate, pure function that
-  takes HTML strings in and returns `list[Job]` out — this gets full
-  fixture-based unit tests, feeding canned two-pane HTML per page,
-  including edge cases (a row present in the left pane but missing from
-  the right pane, a page with zero rows signaling end-of-results before
-  `max_pages` is reached, a malformed "Posted"/"Location" line).
+- The parsing logic (extracting each `.inforCardstackCell` card's title,
+  posted date, and location, building `Job` objects) is a separate, pure
+  function that takes one page's HTML in and returns `list[Job]` out —
+  this gets full fixture-based unit tests, feeding canned card HTML per
+  page, including edge cases (a card missing its posted-date or location
+  block, a page with zero cards signaling end-of-results before
+  `max_pages` is reached).
 - `fetch()` itself just loops calling `frame_fetcher` up to `max_pages`
   times, stops early on `None`, and delegates each page's HTML to the
   parsing function — this loop *is* tested, with a fake `frame_fetcher`
@@ -157,9 +190,9 @@ Follows the existing pattern for adding a source type:
 
 ## Testing / verification plan
 
-- Fixture-based unit tests for the parsing function: two-pane HTML with
-  multiple correlated rows, a row missing from one pane, an empty page,
-  malformed location/date text.
+- Fixture-based unit tests for the parsing function: multi-card HTML, a
+  card missing its posted-date or location block, an empty page (zero
+  cards).
 - Unit tests for `fetch()`'s pagination loop using a fake `frame_fetcher`:
   stops at `max_pages`, stops early when a page returns `None`, dedupes
   nothing extra (dedup is the orchestrator's job, unchanged).
