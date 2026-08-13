@@ -17,6 +17,11 @@ def test_healthcaresource_adapter_is_registered():
     assert "healthcaresource" in ADAPTERS
 
 
+def test_talentbrew_adapter_is_registered():
+    from app.adapters import ADAPTERS
+    assert "talentbrew" in ADAPTERS
+
+
 def test_run_once_collects_new_jobs_and_isolates_failures(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     good_source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
