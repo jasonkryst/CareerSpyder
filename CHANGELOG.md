@@ -37,6 +37,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Workday tenant. Handles two verified pagination quirks: the reported
   result total is only trustworthy on the first page, and paging past
   the real end silently wraps back to page 1 instead of returning empty.
+- `phenompeople` source type, for employers on Phenom People's
+  "CareerConnect" career-site platform (e.g. Ascension Health). Calls
+  the platform's own internal, unauthenticated JSON search endpoint —
+  no cookies, no CSRF token, no browser — and fetches every matching job
+  in a single call. An optional `state` field scopes results to one of
+  the platform's own facets, since the unfiltered listing was found to
+  be personalized to the requester's own IP-geolocated location rather
+  than a stable nationwide list.
 
 ## [0.1.0] — 2026-08-11
 
