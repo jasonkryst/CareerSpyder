@@ -248,9 +248,29 @@ build).
 
 ## Deployment
 
-Ships with a `Dockerfile` and `docker-compose.yml` usable directly as a
-Portainer stack definition on a Proxmox-hosted Docker host (or anywhere
-else Docker runs). Two bind-mounted volumes carry all persistent state:
+Every push to `master` that passes `docker.yml`'s build/scan/smoke-test job
+publishes the image to Docker Hub as
+[`jasonkryst/careerspyder`](https://hub.docker.com/r/jasonkryst/careerspyder),
+tagged both `:latest` and with the version from `pyproject.toml` (bump that
+version before merging a release-worthy change — otherwise the next push
+just overwrites the same version tag).
+
+Two compose files, for two different purposes:
+
+- **`docker-compose.yml`** — builds the image from source (`build: .`).
+  Used by local development and by `docker.yml`'s CI job, which needs to
+  test *this* PR's code, not whatever's currently published.
+- **`docker-compose.prod.yml`** — pulls `jasonkryst/careerspyder:latest`
+  instead of building. Use this one for a Portainer stack on a
+  Proxmox-hosted Docker host (or anywhere else Docker runs) — no build
+  context, no Playwright/Chromium install on the deploy host, just a pull
+  and restart:
+  ```bash
+  docker compose -f docker-compose.prod.yml pull
+  docker compose -f docker-compose.prod.yml up -d
+  ```
+
+Both files use the same two bind-mounted volumes for persistent state:
 
 - `./config` → `/app/config` — `sources.json`.
 - `./data` → `/app/data` — `state.db` (dedup store, run history, settings).
