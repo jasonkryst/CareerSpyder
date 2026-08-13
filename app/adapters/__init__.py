@@ -1,6 +1,14 @@
 from collections.abc import Callable
 
-from app.adapters import generic_html, greenhouse, indeed, infor, lever, linkedin
+from app.adapters import (
+    generic_html,
+    greenhouse,
+    healthcaresource,
+    indeed,
+    infor,
+    lever,
+    linkedin,
+)
 from app.models import Job
 
 ADAPTERS: dict[str, Callable[..., list[Job]]] = {
@@ -10,4 +18,5 @@ ADAPTERS: dict[str, Callable[..., list[Job]]] = {
     "linkedin": linkedin.fetch,
     "indeed": indeed.fetch,
     "infor": infor.fetch,
+    "healthcaresource": healthcaresource.fetch,
 }
