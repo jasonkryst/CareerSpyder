@@ -54,8 +54,13 @@ class InforSource(BaseSource):
     max_pages: int = 3
 
 
+class HealthcareSource(BaseSource):
+    type: Literal["healthcaresource"]
+    site_id: str = Field(min_length=1)
+
+
 SourceConfig = Annotated[
-    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource,
+    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource | HealthcareSource,
     Field(discriminator="type"),
 ]
 
