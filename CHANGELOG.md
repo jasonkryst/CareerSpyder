@@ -20,6 +20,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   same-origin iframe and paginated via a JS grid — no public API or
   static HTML is available on this platform. No per-job link exists on
   this platform; the digest links to the listing page itself.
+- `healthcaresource` source type, for employers on the
+  HealthcareSource/symplr talent platform (e.g. Rush Copley Medical
+  Center). Calls a directly-callable JSON API (no browser needed) and
+  fetches every posting in one call — real per-job URLs, unlike the
+  `infor` source type.
 
 ## [0.1.0] — 2026-08-11
 
