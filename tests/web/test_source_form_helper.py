@@ -62,3 +62,13 @@ def test_infor_max_pages_defaults_when_field_blank():
     }
     source = source_from_form(form)
     assert source.max_pages == 3
+
+
+def test_parses_healthcaresource_fields():
+    form = {
+        "type": "healthcaresource", "name": "Rush Copley (HealthcareSource)",
+        "site_id": "rcmc", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "healthcaresource"
+    assert source.site_id == "rcmc"
