@@ -1,0 +1,20 @@
+services:
+  careerspyder:
+    image: jasonkryst/careerspyder:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_TO: ${EMAIL_TO:-}
+      RUN_HOUR: ${RUN_HOUR:-8}
+      TZ: ${TZ:-UTC}
+      CAREERSPYDER_DB_PATH: /app/data/state.db
+      CAREERSPYDER_SOURCES_PATH: /app/config/sources.json
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
