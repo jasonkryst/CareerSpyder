@@ -22,13 +22,17 @@ def test_load_sources_parses_each_type(tmp_path):
         },
         {"id": "s4", "name": "LinkedIn", "type": "linkedin", "url": "https://linkedin.test/jobs"},
         {"id": "s5", "name": "Indeed", "type": "indeed", "url": "https://indeed.test/jobs"},
+        {"id": "s6", "name": "Rush (Infor)", "type": "infor", "url": "https://rush.test/careers", "max_pages": 5},
     ])
 
     sources = config.load_sources(str(path))
 
-    assert [s.type for s in sources] == ["greenhouse", "lever", "generic_html", "linkedin", "indeed"]
+    assert [s.type for s in sources] == [
+        "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor",
+    ]
     assert sources[0].board_token == "acme"
     assert sources[2].selectors.job_card == ".job"
+    assert sources[5].max_pages == 5
 
 
 def test_add_update_delete_round_trip(tmp_path):
@@ -97,3 +101,13 @@ def test_generic_html_rejects_empty_url():
 def test_selectors_reject_empty_job_card():
     with pytest.raises(ValidationError):
         config.Selectors(job_card="", title=".t", link="a")
+
+
+def test_infor_rejects_empty_url():
+    with pytest.raises(ValidationError):
+        config.InforSource(name="Rush", type="infor", url="")
+
+
+def test_infor_max_pages_defaults_to_three():
+    source = config.InforSource(name="Rush", type="infor", url="https://rush.test/careers")
+    assert source.max_pages == 3

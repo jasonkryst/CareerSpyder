@@ -14,6 +14,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `docker-compose.prod.yml` — a pull-only compose file for Portainer/production
   deployment, separate from `docker-compose.yml` (which still builds from
   source, since CI needs to test each PR's actual code).
+- `infor` source type, for employers on Infor's Global HR /
+  CandidateSelfService platform (e.g. Rush University Medical Center).
+  Drives Playwright directly to reach job listings nested in a
+  same-origin iframe and paginated via a JS grid — no public API or
+  static HTML is available on this platform. No per-job link exists on
+  this platform; the digest links to the listing page itself.
 
 ## [0.1.0] — 2026-08-11
 

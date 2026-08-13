@@ -48,8 +48,14 @@ class IndeedSource(BaseSource):
     url: str = Field(min_length=1)
 
 
+class InforSource(BaseSource):
+    type: Literal["infor"]
+    url: str = Field(min_length=1)
+    max_pages: int = 3
+
+
 SourceConfig = Annotated[
-    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource,
+    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource,
     Field(discriminator="type"),
 ]
 

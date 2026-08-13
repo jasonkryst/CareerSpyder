@@ -8,7 +8,7 @@
   <label>Company <input type="text" name="company" value="{{ source.company if source else '' }}"></label><br>
   <label>Type
     <select name="type" onchange="showFieldsFor(this.value)">
-      {% for t in ["greenhouse", "lever", "generic_html", "linkedin", "indeed"] %}
+      {% for t in ["greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor"] %}
       <option value="{{ t }}" {% if source and source.type == t %}selected{% endif %}>{{ t }}</option>
       {% endfor %}
     </select>
@@ -28,6 +28,10 @@
   </div>
   <div id="fields-linkedin" class="type-fields"></div>
   <div id="fields-indeed" class="type-fields"></div>
+  <div id="fields-infor" class="type-fields">
+    <label>URL <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label><br>
+    <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'infor' else 3 }}"></label>
+  </div>
 
   <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label><br>
   <label>Exclude keywords (comma separated) <input type="text" name="exclude_keywords" value="{{ source.exclude_keywords | join(', ') if source else '' }}"></label><br>
