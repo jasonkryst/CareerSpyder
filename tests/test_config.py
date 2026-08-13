@@ -23,16 +23,18 @@ def test_load_sources_parses_each_type(tmp_path):
         {"id": "s4", "name": "LinkedIn", "type": "linkedin", "url": "https://linkedin.test/jobs"},
         {"id": "s5", "name": "Indeed", "type": "indeed", "url": "https://indeed.test/jobs"},
         {"id": "s6", "name": "Rush (Infor)", "type": "infor", "url": "https://rush.test/careers", "max_pages": 5},
+        {"id": "s7", "name": "Rush Copley (HealthcareSource)", "type": "healthcaresource", "site_id": "rcmc"},
     ])
 
     sources = config.load_sources(str(path))
 
     assert [s.type for s in sources] == [
-        "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor",
+        "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor", "healthcaresource",
     ]
     assert sources[0].board_token == "acme"
     assert sources[2].selectors.job_card == ".job"
     assert sources[5].max_pages == 5
+    assert sources[6].site_id == "rcmc"
 
 
 def test_add_update_delete_round_trip(tmp_path):
@@ -111,3 +113,8 @@ def test_infor_rejects_empty_url():
 def test_infor_max_pages_defaults_to_three():
     source = config.InforSource(name="Rush", type="infor", url="https://rush.test/careers")
     assert source.max_pages == 3
+
+
+def test_healthcaresource_rejects_empty_site_id():
+    with pytest.raises(ValidationError):
+        config.HealthcareSource(name="Rush Copley", type="healthcaresource", site_id="")

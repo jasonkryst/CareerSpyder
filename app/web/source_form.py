@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.config import (
     GenericHtmlSource,
     GreenhouseSource,
+    HealthcareSource,
     IndeedSource,
     InforSource,
     LeverSource,
@@ -19,6 +20,7 @@ TYPE_MODELS: dict[str, type[BaseModel]] = {
     "linkedin": LinkedInSource,
     "indeed": IndeedSource,
     "infor": InforSource,
+    "healthcaresource": HealthcareSource,
 }
 
 
@@ -60,6 +62,9 @@ def source_from_form(form: dict):
             common["url"] = _strip(form["infor_url"])
         if form.get("max_pages"):
             common["max_pages"] = int(form["max_pages"])
+    elif source_type == "healthcaresource":
+        if "site_id" in form:
+            common["site_id"] = _strip(form["site_id"])
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])
@@ -89,6 +94,7 @@ def echo_source(form: dict):
         render_js=form.get("render_js") == "on",
         selectors=selectors,
         max_pages=form.get("max_pages", ""),
+        site_id=form.get("site_id", ""),
         include_keywords=_keywords(form.get("include_keywords", "")),
         exclude_keywords=_keywords(form.get("exclude_keywords", "")),
     )
