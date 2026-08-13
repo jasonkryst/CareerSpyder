@@ -5,7 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Nothing yet — see [ROADMAP.md](ROADMAP.md) for what's planned.
+### Added
+
+- `docker.yml`'s build/scan/smoke-test job now publishes the image to Docker
+  Hub (`jasonkryst/careerspyder`, tagged `:latest` and with the
+  `pyproject.toml` version) on every push to `master`, after the existing
+  Trivy scan and smoke test pass — never on PRs.
+- `docker-compose.prod.yml` — a pull-only compose file for Portainer/production
+  deployment, separate from `docker-compose.yml` (which still builds from
+  source, since CI needs to test each PR's actual code).
 
 ## [0.1.0] — 2026-08-11
 
