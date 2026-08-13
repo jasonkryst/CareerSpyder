@@ -65,9 +65,15 @@ class TalentBrewSource(BaseSource):
     max_pages: int = 60
 
 
+class WorkdaySource(BaseSource):
+    type: Literal["workday"]
+    career_site_url: str = Field(min_length=1)
+    max_pages: int = 60
+
+
 SourceConfig = Annotated[
     GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource
-    | HealthcareSource | TalentBrewSource,
+    | HealthcareSource | TalentBrewSource | WorkdaySource,
     Field(discriminator="type"),
 ]
 
