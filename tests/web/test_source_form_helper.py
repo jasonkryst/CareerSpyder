@@ -114,3 +114,25 @@ def test_workday_max_pages_defaults_when_field_blank():
     }
     source = source_from_form(form)
     assert source.max_pages == 60
+
+
+def test_parses_phenompeople_fields():
+    form = {
+        "type": "phenompeople", "name": "Ascension (PhenomPeople)",
+        "phenompeople_career_site_url": "https://jobs.ascension.org", "state": "Illinois",
+        "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "phenompeople"
+    assert source.career_site_url == "https://jobs.ascension.org"
+    assert source.state == "Illinois"
+
+
+def test_phenompeople_state_is_none_when_field_blank():
+    form = {
+        "type": "phenompeople", "name": "Ascension (PhenomPeople)",
+        "phenompeople_career_site_url": "https://jobs.ascension.org", "state": "",
+        "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.state is None

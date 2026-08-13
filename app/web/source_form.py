@@ -10,6 +10,7 @@ from app.config import (
     InforSource,
     LeverSource,
     LinkedInSource,
+    PhenomPeopleSource,
     Selectors,
     TalentBrewSource,
     WorkdaySource,
@@ -25,6 +26,7 @@ TYPE_MODELS: dict[str, type[BaseModel]] = {
     "healthcaresource": HealthcareSource,
     "talentbrew": TalentBrewSource,
     "workday": WorkdaySource,
+    "phenompeople": PhenomPeopleSource,
 }
 
 
@@ -79,6 +81,11 @@ def source_from_form(form: dict):
             common["career_site_url"] = _strip(form["career_site_url"])
         if form.get("max_pages"):
             common["max_pages"] = int(form["max_pages"])
+    elif source_type == "phenompeople":
+        if "phenompeople_career_site_url" in form:
+            common["career_site_url"] = _strip(form["phenompeople_career_site_url"])
+        if form.get("state"):
+            common["state"] = _strip(form["state"])
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])
@@ -98,6 +105,11 @@ def echo_source(form: dict):
         location=form.get("selector_location") or None,
     )
     url = form.get("infor_url", "") if form.get("type") == "infor" else form.get("url", "")
+    career_site_url = (
+        form.get("phenompeople_career_site_url", "")
+        if form.get("type") == "phenompeople"
+        else form.get("career_site_url", "")
+    )
     return SimpleNamespace(
         id=form.get("id", ""),
         name=form.get("name", ""),
@@ -110,7 +122,8 @@ def echo_source(form: dict):
         max_pages=form.get("max_pages", ""),
         site_id=form.get("site_id", ""),
         base_url=form.get("base_url", ""),
-        career_site_url=form.get("career_site_url", ""),
+        career_site_url=career_site_url,
+        state=form.get("state", ""),
         include_keywords=_keywords(form.get("include_keywords", "")),
         exclude_keywords=_keywords(form.get("exclude_keywords", "")),
     )
