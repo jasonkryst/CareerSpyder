@@ -25,12 +25,17 @@ def test_load_sources_parses_each_type(tmp_path):
         {"id": "s6", "name": "Rush (Infor)", "type": "infor", "url": "https://rush.test/careers", "max_pages": 5},
         {"id": "s7", "name": "Rush Copley (HealthcareSource)", "type": "healthcaresource", "site_id": "rcmc"},
         {"id": "s8", "name": "NM (TalentBrew)", "type": "talentbrew", "base_url": "https://jobs.nm.org", "max_pages": 10},
+        {
+            "id": "s9", "name": "Duly (Workday)", "type": "workday",
+            "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly", "max_pages": 20,
+        },
     ])
 
     sources = config.load_sources(str(path))
 
     assert [s.type for s in sources] == [
-        "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor", "healthcaresource", "talentbrew",
+        "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor",
+        "healthcaresource", "talentbrew", "workday",
     ]
     assert sources[0].board_token == "acme"
     assert sources[2].selectors.job_card == ".job"
@@ -38,6 +43,8 @@ def test_load_sources_parses_each_type(tmp_path):
     assert sources[6].site_id == "rcmc"
     assert sources[7].base_url == "https://jobs.nm.org"
     assert sources[7].max_pages == 10
+    assert sources[8].career_site_url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"
+    assert sources[8].max_pages == 20
 
 
 def test_add_update_delete_round_trip(tmp_path):
@@ -130,4 +137,17 @@ def test_talentbrew_rejects_empty_base_url():
 
 def test_talentbrew_max_pages_defaults_to_sixty():
     source = config.TalentBrewSource(name="Northwestern Medicine", type="talentbrew", base_url="https://jobs.nm.org")
+    assert source.max_pages == 60
+
+
+def test_workday_rejects_empty_career_site_url():
+    with pytest.raises(ValidationError):
+        config.WorkdaySource(name="Duly", type="workday", career_site_url="")
+
+
+def test_workday_max_pages_defaults_to_sixty():
+    source = config.WorkdaySource(
+        name="Duly", type="workday",
+        career_site_url="https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+    )
     assert source.max_pages == 60

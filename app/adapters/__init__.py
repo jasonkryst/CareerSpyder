@@ -9,6 +9,7 @@ from app.adapters import (
     lever,
     linkedin,
     talentbrew,
+    workday,
 )
 from app.models import Job
 
@@ -21,4 +22,5 @@ ADAPTERS: dict[str, Callable[..., list[Job]]] = {
     "infor": infor.fetch,
     "healthcaresource": healthcaresource.fetch,
     "talentbrew": talentbrew.fetch,
+    "workday": workday.fetch,
 }
