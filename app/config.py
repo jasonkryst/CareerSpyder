@@ -71,9 +71,15 @@ class WorkdaySource(BaseSource):
     max_pages: int = 60
 
 
+class PhenomPeopleSource(BaseSource):
+    type: Literal["phenompeople"]
+    career_site_url: str = Field(min_length=1)
+    state: str | None = None
+
+
 SourceConfig = Annotated[
     GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource
-    | HealthcareSource | TalentBrewSource | WorkdaySource,
+    | HealthcareSource | TalentBrewSource | WorkdaySource | PhenomPeopleSource,
     Field(discriminator="type"),
 ]
 

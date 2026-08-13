@@ -29,13 +29,17 @@ def test_load_sources_parses_each_type(tmp_path):
             "id": "s9", "name": "Duly (Workday)", "type": "workday",
             "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly", "max_pages": 20,
         },
+        {
+            "id": "s10", "name": "Ascension (PhenomPeople)", "type": "phenompeople",
+            "career_site_url": "https://jobs.ascension.org", "state": "Illinois",
+        },
     ])
 
     sources = config.load_sources(str(path))
 
     assert [s.type for s in sources] == [
         "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor",
-        "healthcaresource", "talentbrew", "workday",
+        "healthcaresource", "talentbrew", "workday", "phenompeople",
     ]
     assert sources[0].board_token == "acme"
     assert sources[2].selectors.job_card == ".job"
@@ -45,6 +49,8 @@ def test_load_sources_parses_each_type(tmp_path):
     assert sources[7].max_pages == 10
     assert sources[8].career_site_url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"
     assert sources[8].max_pages == 20
+    assert sources[9].career_site_url == "https://jobs.ascension.org"
+    assert sources[9].state == "Illinois"
 
 
 def test_add_update_delete_round_trip(tmp_path):
@@ -151,3 +157,15 @@ def test_workday_max_pages_defaults_to_sixty():
         career_site_url="https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
     )
     assert source.max_pages == 60
+
+
+def test_phenompeople_rejects_empty_career_site_url():
+    with pytest.raises(ValidationError):
+        config.PhenomPeopleSource(name="Ascension", type="phenompeople", career_site_url="")
+
+
+def test_phenompeople_state_defaults_to_none():
+    source = config.PhenomPeopleSource(
+        name="Ascension", type="phenompeople", career_site_url="https://jobs.ascension.org",
+    )
+    assert source.state is None

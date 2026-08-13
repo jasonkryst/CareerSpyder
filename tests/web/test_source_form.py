@@ -134,6 +134,32 @@ def test_post_new_workday_source_with_empty_career_site_url_shows_error_and_does
         assert json.load(f)["sources"] == []
 
 
+def test_post_new_phenompeople_source_saves_and_redirects(client):
+    resp = client.post("/sources/new", data={
+        "type": "phenompeople", "name": "Ascension (PhenomPeople)",
+        "phenompeople_career_site_url": "https://jobs.ascension.org", "state": "Illinois",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["type"] == "phenompeople"
+    assert saved[0]["career_site_url"] == "https://jobs.ascension.org"
+    assert saved[0]["state"] == "Illinois"
+
+
+def test_post_new_phenompeople_source_with_empty_career_site_url_shows_error_and_does_not_save(client):
+    resp = client.post("/sources/new", data={
+        "type": "phenompeople", "name": "Ascension (PhenomPeople)", "phenompeople_career_site_url": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    with open(client.app.state.sources_path) as f:
+        assert json.load(f)["sources"] == []
+
+
 def test_post_edit_updates_existing_source(client):
     with open(client.app.state.sources_path, "w") as f:
         json.dump({"sources": [
