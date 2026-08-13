@@ -8,6 +8,7 @@ from app.adapters import (
     infor,
     lever,
     linkedin,
+    talentbrew,
 )
 from app.models import Job
 
@@ -19,4 +20,5 @@ ADAPTERS: dict[str, Callable[..., list[Job]]] = {
     "indeed": indeed.fetch,
     "infor": infor.fetch,
     "healthcaresource": healthcaresource.fetch,
+    "talentbrew": talentbrew.fetch,
 }

@@ -59,8 +59,15 @@ class HealthcareSource(BaseSource):
     site_id: str = Field(min_length=1)
 
 
+class TalentBrewSource(BaseSource):
+    type: Literal["talentbrew"]
+    base_url: str = Field(min_length=1)
+    max_pages: int = 60
+
+
 SourceConfig = Annotated[
-    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource | HealthcareSource,
+    GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource
+    | HealthcareSource | TalentBrewSource,
     Field(discriminator="type"),
 ]
 

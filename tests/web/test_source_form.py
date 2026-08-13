@@ -83,6 +83,31 @@ def test_post_new_healthcaresource_source_with_empty_site_id_shows_error_and_doe
         assert json.load(f)["sources"] == []
 
 
+def test_post_new_talentbrew_source_saves_and_redirects(client):
+    resp = client.post("/sources/new", data={
+        "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "https://jobs.nm.org",
+        "max_pages": "10", "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["type"] == "talentbrew"
+    assert saved[0]["base_url"] == "https://jobs.nm.org"
+    assert saved[0]["max_pages"] == 10
+
+
+def test_post_new_talentbrew_source_with_empty_base_url_shows_error_and_does_not_save(client):
+    resp = client.post("/sources/new", data={
+        "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    with open(client.app.state.sources_path) as f:
+        assert json.load(f)["sources"] == []
+
+
 def test_post_edit_updates_existing_source(client):
     with open(client.app.state.sources_path, "w") as f:
         json.dump({"sources": [

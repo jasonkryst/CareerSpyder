@@ -72,3 +72,23 @@ def test_parses_healthcaresource_fields():
     source = source_from_form(form)
     assert source.type == "healthcaresource"
     assert source.site_id == "rcmc"
+
+
+def test_parses_talentbrew_fields():
+    form = {
+        "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "https://jobs.nm.org",
+        "max_pages": "10", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "talentbrew"
+    assert source.base_url == "https://jobs.nm.org"
+    assert source.max_pages == 10
+
+
+def test_talentbrew_max_pages_defaults_when_field_blank():
+    form = {
+        "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "https://jobs.nm.org",
+        "max_pages": "", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.max_pages == 60
