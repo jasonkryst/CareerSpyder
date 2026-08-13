@@ -41,3 +41,24 @@ def test_preserves_existing_id_when_provided():
     }
     source = source_from_form(form)
     assert source.id == "s1"
+
+
+def test_parses_infor_fields():
+    form = {
+        "type": "infor", "name": "Rush (Infor)", "company": "Rush University Medical Center",
+        "infor_url": "https://rush.test/careers", "max_pages": "5",
+        "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "infor"
+    assert source.url == "https://rush.test/careers"
+    assert source.max_pages == 5
+
+
+def test_infor_max_pages_defaults_when_field_blank():
+    form = {
+        "type": "infor", "name": "Rush (Infor)", "infor_url": "https://rush.test/careers",
+        "max_pages": "", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.max_pages == 3

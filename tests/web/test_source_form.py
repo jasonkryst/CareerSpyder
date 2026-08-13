@@ -33,6 +33,32 @@ def test_edit_form_prefills_existing_values(client):
     assert 'value="Acme"' in resp.text
 
 
+def test_post_new_infor_source_saves_and_redirects(client):
+    resp = client.post("/sources/new", data={
+        "type": "infor", "name": "Rush (Infor)", "company": "Rush University Medical Center",
+        "infor_url": "https://rush.test/careers", "max_pages": "5",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["type"] == "infor"
+    assert saved[0]["url"] == "https://rush.test/careers"
+    assert saved[0]["max_pages"] == 5
+
+
+def test_post_new_infor_source_with_empty_url_shows_error_and_does_not_save(client):
+    resp = client.post("/sources/new", data={
+        "type": "infor", "name": "Rush (Infor)", "infor_url": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    with open(client.app.state.sources_path) as f:
+        assert json.load(f)["sources"] == []
+
+
 def test_post_edit_updates_existing_source(client):
     with open(client.app.state.sources_path, "w") as f:
         json.dump({"sources": [
