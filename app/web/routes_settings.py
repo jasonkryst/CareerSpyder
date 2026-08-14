@@ -1,5 +1,9 @@
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import ValidationError
+from starlette.datastructures import UploadFile
 
 from app import config, db
 from app.web.templating import templates
@@ -55,3 +59,21 @@ def export_sources(request: Request):
         media_type="application/json",
         headers={"Content-Disposition": 'attachment; filename="sources.json"'},
     )
+
+
+@router.post("/settings/data/sources/import")
+async def import_sources(request: Request):
+    form = await request.form()
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile) or not upload.filename:
+        return templates.TemplateResponse(
+            request, "settings_data.html", {"error": "Choose a file to import."}, status_code=400,
+        )
+    raw = await upload.read()
+    try:
+        sources = config.import_sources_json(request.app.state.sources_path, raw)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        return templates.TemplateResponse(
+            request, "settings_data.html", {"error": f"Import failed: {exc}"}, status_code=400,
+        )
+    return RedirectResponse(url=f"/settings/data?imported={len(sources)}", status_code=303)

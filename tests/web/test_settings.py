@@ -89,3 +89,70 @@ def test_get_export_sources_returns_current_sources_as_download(client):
     assert "attachment" in resp.headers["content-disposition"]
     assert "sources.json" in resp.headers["content-disposition"]
     assert json.loads(resp.text) == {"sources": [source.model_dump()]}
+
+
+def test_post_import_sources_replaces_list_and_redirects(client):
+    import json
+
+    from app import config
+
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/sources/import",
+        files={"file": ("sources.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings/data?imported=1"
+    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["new"]
+
+
+def test_settings_data_page_shows_success_banner_after_import(client):
+    resp = client.get("/settings/data?imported=3")
+
+    assert resp.status_code == 200
+    assert "Imported 3 source(s)" in resp.text
+
+
+def test_post_import_sources_with_no_file_returns_400(client):
+    resp = client.post("/settings/data/sources/import", data={})
+
+    assert resp.status_code == 400
+    assert "Choose a file" in resp.text
+
+
+def test_post_import_sources_with_invalid_json_returns_400_and_leaves_sources(client):
+    from app import config
+
+    source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    config.add_source(client.app.state.sources_path, source)
+
+    resp = client.post(
+        "/settings/data/sources/import",
+        files={"file": ("bad.json", b"not json", "application/json")},
+    )
+
+    assert resp.status_code == 400
+    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
+
+
+def test_post_import_sources_with_unknown_type_returns_400_and_leaves_sources(client):
+    import json
+
+    from app import config
+
+    source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    config.add_source(client.app.state.sources_path, source)
+    payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "carrier_pigeon"}]}).encode()
+
+    resp = client.post(
+        "/settings/data/sources/import",
+        files={"file": ("bad.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 400
+    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
