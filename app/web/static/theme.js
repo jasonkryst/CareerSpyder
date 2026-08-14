@@ -1,25 +1,27 @@
 (function () {
-  var toggle = document.getElementById("theme-toggle");
-  if (!toggle) return;
+  var radios = document.querySelectorAll('input[name="theme"]');
+  if (!radios.length) return;
 
-  function currentTheme() {
-    return (
-      document.documentElement.getAttribute("data-theme") ||
-      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    );
+  function storedTheme() {
+    var stored = localStorage.getItem("theme");
+    return stored === "light" || stored === "dark" ? stored : "system";
   }
 
   function applyTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    toggle.setAttribute("aria-pressed", String(theme === "dark"));
-    toggle.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+    if (theme === "system") {
+      localStorage.removeItem("theme");
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      localStorage.setItem("theme", theme);
+      document.documentElement.setAttribute("data-theme", theme);
+    }
   }
 
-  applyTheme(currentTheme());
-
-  toggle.addEventListener("click", function () {
-    var next = currentTheme() === "dark" ? "light" : "dark";
-    localStorage.setItem("theme", next);
-    applyTheme(next);
+  var current = storedTheme();
+  radios.forEach(function (radio) {
+    radio.checked = radio.value === current;
+    radio.addEventListener("change", function () {
+      if (radio.checked) applyTheme(radio.value);
+    });
   });
 })();

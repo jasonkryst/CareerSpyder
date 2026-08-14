@@ -1,18 +1,29 @@
-def test_theme_toggle_switches_and_persists_across_reload(live_server, page):
-    page.goto(live_server + "/")
-    toggle = page.locator("#theme-toggle")
+import pytest
 
-    toggle.click()
-    first_theme = page.evaluate("document.documentElement.getAttribute('data-theme')")
-    assert first_theme in ("dark", "light")
-    expected_pressed = "true" if first_theme == "dark" else "false"
-    assert toggle.get_attribute("aria-pressed") == expected_pressed
 
-    toggle.click()
-    second_theme = page.evaluate("document.documentElement.getAttribute('data-theme')")
-    assert second_theme != first_theme
-    assert second_theme in ("dark", "light")
+@pytest.mark.parametrize("choice", ["dark", "light"])
+def test_preferences_theme_radio_applies_and_persists(live_server, page, choice):
+    page.goto(live_server + "/settings/preferences")
+
+    page.check(f'input[name="theme"][value="{choice}"]')
+    applied = page.evaluate("document.documentElement.getAttribute('data-theme')")
+    assert applied == choice
 
     page.reload()
-    persisted_theme = page.evaluate("document.documentElement.getAttribute('data-theme')")
-    assert persisted_theme == second_theme
+    persisted = page.evaluate("document.documentElement.getAttribute('data-theme')")
+    assert persisted == choice
+    assert page.is_checked(f'input[name="theme"][value="{choice}"]')
+
+
+def test_preferences_system_choice_clears_explicit_override(live_server, page):
+    page.goto(live_server + "/settings/preferences")
+
+    page.check('input[name="theme"][value="dark"]')
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+
+    page.check('input[name="theme"][value="system"]')
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+
+    page.reload()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+    assert page.is_checked('input[name="theme"][value="system"]')
