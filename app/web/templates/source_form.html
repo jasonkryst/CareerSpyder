@@ -15,10 +15,14 @@
   </label>
 
   <div id="fields-greenhouse" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>board_token: "acme"</code> &mdash; <a href="/guide#type-greenhouse">full reference</a></div>
     <label>Board token <input type="text" name="board_token" value="{{ source.board_token if source and source.type in ['greenhouse', 'lever'] else '' }}"></label>
   </div>
-  <div id="fields-lever" class="type-fields"></div>
+  <div id="fields-lever" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>board_token: "beta"</code> &mdash; <a href="/guide#type-lever">full reference</a></div>
+  </div>
   <div id="fields-generic_html" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>url: "https://customco.com/careers?q=backend+engineer"</code>, <code>selectors.job_card: ".job-listing"</code> &mdash; <a href="/guide#type-generic_html">full reference</a></div>
     <label>URL <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label>
     <label>Render JS <input type="checkbox" name="render_js" {% if source and source.type == 'generic_html' and source.render_js %}checked{% endif %}></label>
     <label>Job card selector <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label>
@@ -26,28 +30,38 @@
     <label>Link selector <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label>
     <label>Location selector <input type="text" name="selector_location" value="{{ source.selectors.location if source and source.type == 'generic_html' and source.selectors.location else '' }}"></label>
   </div>
-  <div id="fields-linkedin" class="type-fields"></div>
-  <div id="fields-indeed" class="type-fields"></div>
+  <div id="fields-linkedin" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>url: "https://www.linkedin.com/jobs/search/?keywords=backend+engineer&amp;f_WT=2"</code> &mdash; <a href="/guide#type-linkedin">full reference</a></div>
+  </div>
+  <div id="fields-indeed" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>url: "https://www.indeed.com/jobs?q=backend+engineer&amp;sc=0kf%3Aattr%28DSQF7%29%3B"</code> &mdash; <a href="/guide#type-indeed">full reference</a></div>
+  </div>
   <div id="fields-infor" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>url: "https://careers.example.com/go/All-Jobs/12345/"</code>, <code>max_pages: 3</code> &mdash; <a href="/guide#type-infor">full reference</a></div>
     <label>URL <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'infor' else 3 }}"></label>
   </div>
   <div id="fields-healthcaresource" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>site_id: "rcmc"</code> &mdash; <a href="/guide#type-healthcaresource">full reference</a></div>
     <label>Site ID <input type="text" name="site_id" value="{{ source.site_id if source and source.type == 'healthcaresource' else '' }}"></label>
   </div>
   <div id="fields-talentbrew" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>base_url: "https://jobs.nm.org"</code> &mdash; <a href="/guide#type-talentbrew">full reference</a></div>
     <label>Base URL <input type="text" name="base_url" value="{{ source.base_url if source and source.type == 'talentbrew' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'talentbrew' else 60 }}"></label>
   </div>
   <div id="fields-workday" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>career_site_url: "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"</code> &mdash; <a href="/guide#type-workday">full reference</a></div>
     <label>Career site URL <input type="text" name="career_site_url" value="{{ source.career_site_url if source and source.type == 'workday' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'workday' else 60 }}"></label>
   </div>
   <div id="fields-phenompeople" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>career_site_url: "https://jobs.ascension.org"</code>, <code>state: "Illinois"</code> &mdash; <a href="/guide#type-phenompeople">full reference</a></div>
     <label>Career site URL <input type="text" name="phenompeople_career_site_url" value="{{ source.career_site_url if source and source.type == 'phenompeople' else '' }}"></label>
     <label>State <input type="text" name="state" value="{{ source.state if source and source.type == 'phenompeople' and source.state else '' }}"></label>
   </div>
   <div id="fields-findly" class="type-fields">
+    <div class="hint"><strong>Example:</strong> <code>org_id: "2297"</code>, <code>career_site_url: "https://careers.aah.org"</code> &mdash; <a href="/guide#type-findly">full reference</a></div>
     <label>Org ID <input type="text" name="org_id" value="{{ source.org_id if source and source.type == 'findly' else '' }}"></label>
     <label>Career site URL <input type="text" name="findly_career_site_url" value="{{ source.career_site_url if source and source.type == 'findly' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'findly' else 20 }}"></label>
