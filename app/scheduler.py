@@ -52,6 +52,7 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC") -> None:
             os.environ.get("SMTP_PASSWORD", ""), settings["email_from"], email_to,
             d.subject, d.html_body,
         )
+        db.mark_emailed(conn, [j.key for j in jobs_to_send])
     except Exception:
         logger.exception("Failed to send digest email for run %s", summary.run_id)
 
