@@ -23,11 +23,14 @@ def _safe_href(url: str) -> str:
     return escape(url, quote=True)
 
 
-def build_digest(new_jobs: list[Job], failed_sources: list[str]) -> Digest | None:
+def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str = "new job") -> Digest | None:
     if not new_jobs and not failed_sources:
         return None
 
-    subject = f"CareerSpyder: {len(new_jobs)} new job(s)" if new_jobs else "CareerSpyder: run had failed sources"
+    subject = (
+        f"CareerSpyder: {len(new_jobs)} {job_label}(s)" if new_jobs
+        else "CareerSpyder: run had failed sources"
+    )
 
     parts: list[str] = []
     if new_jobs:
