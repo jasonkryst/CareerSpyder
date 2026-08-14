@@ -11,3 +11,10 @@ def test_history_lists_past_runs(client):
     assert resp.status_code == 200
     assert "3" in resp.text
     assert "Bad Co" in resp.text
+
+
+def test_history_table_has_scoped_headers_and_scroll_wrapper(client):
+    resp = client.get("/history")
+
+    assert 'scope="col"' in resp.text
+    assert 'class="table-scroll"' in resp.text

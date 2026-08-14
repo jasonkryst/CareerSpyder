@@ -41,3 +41,10 @@ def test_delete_source_removes_it(client):
     assert resp.status_code == 303
     with open(sources_path) as f:
         assert json.load(f)["sources"] == []
+
+
+def test_sources_table_has_scoped_headers_and_scroll_wrapper(client):
+    resp = client.get("/sources")
+
+    assert 'scope="col"' in resp.text
+    assert 'class="table-scroll"' in resp.text
