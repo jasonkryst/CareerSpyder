@@ -45,6 +45,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the platform's own facets, since the unfiltered listing was found to
   be personalized to the requester's own IP-geolocated location rather
   than a stable nationwide list.
+- `findly` source type, for employers on the Findly/Radancy career-site
+  platform (e.g. Advocate Health). Calls the platform's shared,
+  cross-tenant JSON API directly (no browser needed), paginating in
+  fixed pages of 500 up to a configurable `max_pages`, with an explicit
+  deterministic sort — a live smoke test found the API's default
+  ordering shifts across paginated requests, producing duplicate jobs
+  without one.
 
 ## [0.1.0] — 2026-08-11
 
