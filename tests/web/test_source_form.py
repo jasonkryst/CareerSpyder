@@ -255,6 +255,29 @@ def test_post_edit_unknown_source_returns_404(client):
     assert resp.status_code == 404
 
 
+def test_new_source_form_shows_hint_for_every_type(client):
+    resp = client.get("/sources/new")
+
+    assert 'board_token: "acme"' in resp.text
+    assert 'board_token: "beta"' in resp.text
+    assert 'selectors.job_card: ".job-listing"' in resp.text
+    assert "linkedin.com/jobs/search" in resp.text
+    assert "indeed.com/jobs" in resp.text
+    assert 'max_pages: 3' in resp.text
+    assert 'site_id: "rcmc"' in resp.text
+    assert 'base_url: "https://jobs.nm.org"' in resp.text
+    assert 'career_site_url: "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"' in resp.text
+    assert 'career_site_url: "https://jobs.ascension.org"' in resp.text
+    assert 'org_id: "2297"' in resp.text
+
+
+def test_source_form_hints_link_to_guide_anchors(client):
+    resp = client.get("/sources/new")
+
+    assert 'href="/guide#type-greenhouse"' in resp.text
+    assert 'href="/guide#type-findly"' in resp.text
+
+
 def test_edit_ignores_tampered_hidden_id_field(client):
     with open(client.app.state.sources_path, "w") as f:
         json.dump({"sources": [

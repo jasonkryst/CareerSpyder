@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Usage Guide</h1>
+
+<h2>Getting started</h2>
+<ol>
+  <li>Open the web UI and go to <a href="/sources">Sources</a>.</li>
+  <li>Click <strong>Add source</strong>, pick a <strong>Type</strong>, and fill in its fields
+    &mdash; see <a href="#source-types">Source types &amp; examples</a> below for example
+    values.</li>
+  <li>Click <strong>Test this source</strong> to preview the jobs it currently finds before
+    saving.</li>
+  <li>Click <strong>Save</strong>.</li>
+  <li>Go to the <a href="/">Dashboard</a> and click <strong>Run now</strong> to trigger an
+    immediate scrape.</li>
+  <li>Check <a href="/history">History</a> for the run's result, or wait for the digest email
+    if new jobs were found.</li>
+</ol>
+<p>After that, CareerSpyder scrapes automatically once a day at the configured hour &mdash; no
+  further action needed unless you're adding more sources or changing settings.</p>
+
+<h2>Web UI tour</h2>
+<div class="table-scroll">
+<table>
+  <tr><th scope="col">Page</th><th scope="col">Purpose</th></tr>
+  <tr><td><a href="/">Dashboard</a></td><td>Last run time and new-job count, plus a
+    <strong>Run now</strong> button.</td></tr>
+  <tr><td><a href="/history">History</a></td><td>Table of past runs &mdash; start/finish time,
+    new job count, failed source names.</td></tr>
+  <tr><td><a href="/sources">Sources</a></td><td>Table of configured sources with Edit/Delete
+    actions and an <strong>Add source</strong> button.</td></tr>
+  <tr><td><a href="/settings/email">Settings &rarr; Email</a></td><td>SMTP host/port/from
+    address (the password is a container env var, not editable here).</td></tr>
+  <tr><td><a href="/settings/data">Settings &rarr; Data</a></td><td>Clear the job dedup cache,
+    and export/import <code>sources.json</code>.</td></tr>
+  <tr><td><a href="/settings/preferences">Settings &rarr; Preferences</a></td><td>Theme, which
+    days to check for jobs, resend behavior, and digest recipients.</td></tr>
+</table>
+</div>
+
+<h2 id="source-types">Source types &amp; examples</h2>
+<p>Every source has a <strong>Type</strong> that determines which other fields are required.</p>
+
+<div class="card" id="type-greenhouse">
+<h3>greenhouse</h3>
+<p>Calls Greenhouse's public JSON board API directly. Requires the token from the ATS's board
+  URL (<code>boards.greenhouse.io/&lt;board_token&gt;</code>).</p>
+<p><strong>Example:</strong> <code>board_token: "acme"</code></p>
+</div>
+
+<div class="card" id="type-lever">
+<h3>lever</h3>
+<p>Calls Lever's public JSON board API directly. Same shape as <code>greenhouse</code>.</p>
+<p><strong>Example:</strong> <code>board_token: "beta"</code></p>
+</div>
+
+<div class="card" id="type-generic_html">
+<h3>generic_html</h3>
+<p>Fetches any careers page via plain HTTP (or a headless-Chromium render when the page needs
+  JavaScript) and extracts listings with CSS selectors you define.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>url: "https://customco.com/careers?q=backend+engineer"</code></li>
+  <li><code>render_js: false</code> (set <code>true</code> if the page needs JavaScript to
+    populate listings)</li>
+  <li><code>selectors.job_card: ".job-listing"</code></li>
+  <li><code>selectors.title: ".job-title"</code></li>
+  <li><code>selectors.link: "a.job-link"</code></li>
+  <li><code>selectors.location: ".job-location"</code> (optional)</li>
+</ul>
+</div>
+
+<div class="card" id="type-linkedin">
+<h3>linkedin</h3>
+<p>Best-effort, Playwright-based scraping of a public LinkedIn job search results page.
+  Fragile by nature (blocking, layout changes, CAPTCHAs); isolated so its breakage never
+  affects other sources.</p>
+<p><strong>Example:</strong>
+  <code>url: "https://www.linkedin.com/jobs/search/?keywords=backend+engineer&amp;f_WT=2"</code></p>
+</div>
+
+<div class="card" id="type-indeed">
+<h3>indeed</h3>
+<p>Best-effort, Playwright-based scraping of a public Indeed job search results page. Same
+  caveats as <code>linkedin</code>.</p>
+<p><strong>Example:</strong>
+  <code>url: "https://www.indeed.com/jobs?q=backend+engineer&amp;sc=0kf%3Aattr%28DSQF7%29%3B"</code></p>
+</div>
+
+<div class="card" id="type-infor">
+<h3>infor</h3>
+<p>For employers on Infor's Global HR / CandidateSelfService platform. There's no per-job link
+  on this platform, so the digest links to the listing page itself.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>url: "https://careers.example.com/go/All-Jobs/12345/"</code> (the full listing
+    page URL)</li>
+  <li><code>max_pages: 3</code> (default; bounds how many result pages are crawled per run)</li>
+</ul>
+</div>
+
+<div class="card" id="type-healthcaresource">
+<h3>healthcaresource</h3>
+<p>For employers on the HealthcareSource/symplr talent platform (e.g.
+  <code>pm.healthcaresource.com/CS/&lt;site_id&gt;</code>). Calls a directly-callable JSON API
+  &mdash; no browser needed.</p>
+<p><strong>Example:</strong> <code>site_id: "rcmc"</code></p>
+</div>
+
+<div class="card" id="type-talentbrew">
+<h3>talentbrew</h3>
+<p>For employers on Radancy's TalentBrew career-site platform (e.g. <code>jobs.nm.org</code>).
+  <code>base_url</code> is just the site's origin.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>base_url: "https://jobs.nm.org"</code></li>
+  <li><code>max_pages: 60</code> (default safety cap)</li>
+</ul>
+</div>
+
+<div class="card" id="type-workday">
+<h3>workday</h3>
+<p>For employers on Workday's recruiting platform &mdash; works identically for any Workday
+  tenant. No auth, no browser needed.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>career_site_url: "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"</code></li>
+  <li><code>max_pages: 60</code> (default)</li>
+</ul>
+</div>
+
+<div class="card" id="type-phenompeople">
+<h3>phenompeople</h3>
+<p>For employers on Phenom People's "CareerConnect" career-site platform (e.g.
+  <code>jobs.ascension.org</code>). No cookies, CSRF token, or tenant ID needed.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>career_site_url: "https://jobs.ascension.org"</code></li>
+  <li><code>state: "Illinois"</code> (optional; worth setting since unfiltered results are
+    personalized to the requester's IP-geolocated location)</li>
+</ul>
+</div>
+
+<div class="card" id="type-findly">
+<h3>findly</h3>
+<p>For employers on the Findly/Radancy career-site platform (e.g. Advocate Health at
+  <code>careers.aah.org</code>). Needs the numeric tenant ID (<code>org_id</code>), found in
+  the target site's <code>cws_opts</code> JS object.</p>
+<p><strong>Example:</strong></p>
+<ul>
+  <li><code>org_id: "2297"</code></li>
+  <li><code>career_site_url: "https://careers.aah.org"</code> (captured for documentation
+    only; the adapter doesn't read it)</li>
+  <li><code>max_pages: 20</code> (default)</li>
+</ul>
+</div>
+
+<p><code>include_keywords</code> / <code>exclude_keywords</code> are optional on every type
+  &mdash; case-insensitive title filters, matched against the job title only.</p>
+{% endblock %}

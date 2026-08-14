@@ -77,3 +77,18 @@ def test_static_assets_are_served(client):
     assert "prefers-color-scheme" in css.text
     assert js.status_code == 200
     assert "localStorage" in js.text
+
+
+def test_nav_includes_guide_link(client):
+    resp = client.get("/")
+
+    assert 'href="/guide"' in resp.text
+    assert ">Guide<" in resp.text
+
+
+def test_style_css_defines_hint_and_code_rules(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert ".hint {" in resp.text
+    assert "code {" in resp.text

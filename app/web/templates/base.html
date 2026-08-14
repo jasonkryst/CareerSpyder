@@ -35,6 +35,7 @@
       <a href="/history" {% if request.url.path == "/history" %}aria-current="page"{% endif %}>History</a>
       <a href="/sources" {% if request.url.path.startswith("/sources") %}aria-current="page"{% endif %}>Sources</a>
       <a href="/settings" {% if request.url.path.startswith("/settings") %}aria-current="page"{% endif %}>Settings</a>
+      <a href="/guide" {% if request.url.path == "/guide" %}aria-current="page"{% endif %}>Guide</a>
     </nav>
   </header>
   <main id="main">
