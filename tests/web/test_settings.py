@@ -55,6 +55,102 @@ def test_settings_preferences_page_shows_theme_radios(client):
     assert 'name="theme" value="system"' in resp.text
 
 
+def test_settings_preferences_page_shows_all_day_checkboxes(client):
+    resp = client.get("/settings/preferences")
+
+    assert resp.status_code == 200
+    for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        assert f'name="email_days" value="{day}"' in resp.text
+
+
+def test_settings_preferences_page_prechecks_stored_days(client):
+    from app import db
+    db.save_preferences(client.app.state.conn, "mon,wed,fri", False, "to@x.test")
+
+    resp = client.get("/settings/preferences")
+
+    assert 'value="mon" checked' in resp.text
+    assert 'value="wed" checked' in resp.text
+    assert 'value="tue" checked' not in resp.text
+
+
+def test_settings_preferences_page_shows_resend_checkbox(client):
+    resp = client.get("/settings/preferences")
+
+    assert 'name="resend_jobs"' in resp.text
+
+
+def test_settings_preferences_page_shows_stored_recipients(client):
+    from app import db
+    db.save_preferences(client.app.state.conn, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test,b@x.test")
+
+    resp = client.get("/settings/preferences")
+
+    assert 'value="a@x.test"' in resp.text
+    assert 'value="b@x.test"' in resp.text
+
+
+def test_settings_preferences_page_shows_a_blank_recipient_row_when_none_stored(client):
+    resp = client.get("/settings/preferences")
+
+    assert 'placeholder="name@example.com"' in resp.text
+    assert 'value="a@x.test"' not in resp.text
+
+
+def test_settings_preferences_page_wraps_sections_in_cards(client):
+    resp = client.get("/settings/preferences")
+
+    assert resp.text.count('class="card"') == 4
+
+
+def test_post_preferences_saves_days_resend_and_recipients(client):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon", "wed", "fri"],
+        "resend_jobs": "on",
+        "email_to": ["a@x.test", "b@x.test"],
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_days"] == "mon,wed,fri"
+    assert settings["resend_jobs"] is True
+    assert settings["email_to"] == "a@x.test,b@x.test"
+
+
+def test_post_preferences_unchecked_resend_is_stored_as_false(client):
+    client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["resend_jobs"] is False
+
+
+def test_post_preferences_drops_blank_recipient_rows(client):
+    client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test", "", "  "]})
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_to"] == "a@x.test"
+
+
+def test_post_preferences_rejects_file_upload_field(client):
+    resp = client.post(
+        "/settings/preferences",
+        data={"email_days": ["mon"]},
+        files={"email_to": ("evil.txt", b"not an email")},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_preferences_js_is_served(client):
+    resp = client.get("/static/preferences.js")
+
+    assert resp.status_code == 200
+
+
 def test_settings_tabs_include_preferences_link(client):
     resp = client.get("/settings/preferences")
 

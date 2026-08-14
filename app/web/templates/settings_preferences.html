@@ -2,6 +2,7 @@
 {% block content %}
 {% include "settings_tabs.html" %}
 <h1>Preferences</h1>
+
 <div class="card">
   <fieldset>
     <legend>Theme</legend>
@@ -10,4 +11,49 @@
     <label><input type="radio" name="theme" value="system"> Match system</label>
   </fieldset>
 </div>
+
+<form method="post" action="/settings/preferences">
+<div class="card">
+  <fieldset>
+    <legend>Check days</legend>
+    <label><input type="checkbox" name="email_days" value="mon" {% if "mon" in email_days_selected %}checked{% endif %}> Mon</label>
+    <label><input type="checkbox" name="email_days" value="tue" {% if "tue" in email_days_selected %}checked{% endif %}> Tue</label>
+    <label><input type="checkbox" name="email_days" value="wed" {% if "wed" in email_days_selected %}checked{% endif %}> Wed</label>
+    <label><input type="checkbox" name="email_days" value="thu" {% if "thu" in email_days_selected %}checked{% endif %}> Thu</label>
+    <label><input type="checkbox" name="email_days" value="fri" {% if "fri" in email_days_selected %}checked{% endif %}> Fri</label>
+    <label><input type="checkbox" name="email_days" value="sat" {% if "sat" in email_days_selected %}checked{% endif %}> Sat</label>
+    <label><input type="checkbox" name="email_days" value="sun" {% if "sun" in email_days_selected %}checked{% endif %}> Sun</label>
+  </fieldset>
+</div>
+
+<div class="card">
+  <fieldset>
+    <legend>Resend</legend>
+    <label><input type="checkbox" name="resend_jobs" {% if settings.resend_jobs %}checked{% endif %}> Keep sending a job in each digest until it's no longer listed</label>
+  </fieldset>
+</div>
+
+<div class="card">
+  <fieldset>
+    <legend>Recipients</legend>
+    <div id="email-recipients">
+      {% for email in email_to_list %}
+      <div class="recipient-row">
+        <input type="email" name="email_to" value="{{ email }}" placeholder="name@example.com">
+        <button type="button" class="remove-recipient">Remove</button>
+      </div>
+      {% endfor %}
+    </div>
+    <template id="email-recipient-template">
+      <div class="recipient-row">
+        <input type="email" name="email_to" placeholder="name@example.com">
+        <button type="button" class="remove-recipient">Remove</button>
+      </div>
+    </template>
+    <button type="button" id="add-recipient">Add another</button>
+  </fieldset>
+</div>
+
+<button type="submit" class="btn-primary">Save</button>
+</form>
 {% endblock %}

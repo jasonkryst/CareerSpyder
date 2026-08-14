@@ -18,6 +18,21 @@ def _str_field(form: dict, key: str) -> str:
     return value
 
 
+DAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def _str_list_field(form, key: str) -> list[str]:
+    values = form.getlist(key)
+    for value in values:
+        if not isinstance(value, str):
+            raise HTTPException(status_code=400, detail=f"{key} must be text fields")
+    return values
+
+
+def _split_emails(raw: str | None) -> list[str]:
+    return [addr.strip() for addr in (raw or "").split(",") if addr.strip()]
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_redirect():
     return RedirectResponse(url="/settings/email")
@@ -47,7 +62,24 @@ def show_settings_data(request: Request):
 
 @router.get("/settings/preferences", response_class=HTMLResponse)
 def show_settings_preferences(request: Request):
-    return templates.TemplateResponse(request, "settings_preferences.html", {})
+    settings = db.get_settings(request.app.state.conn)
+    email_days_selected = set((settings["email_days"] if settings else "").split(","))
+    email_to_list = _split_emails(settings["email_to"] if settings else "") or [""]
+    return templates.TemplateResponse(
+        request, "settings_preferences.html",
+        {"settings": settings, "email_days_selected": email_days_selected, "email_to_list": email_to_list},
+    )
+
+
+@router.post("/settings/preferences")
+async def save_preferences(request: Request):
+    form = await request.form()
+    selected_days = set(_str_list_field(form, "email_days")) & set(DAY_CODES)
+    email_days = ",".join(day for day in DAY_CODES if day in selected_days)
+    resend_jobs = "resend_jobs" in form
+    email_to = ",".join(addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip())
+    db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
+    return RedirectResponse(url="/settings/preferences", status_code=303)
 
 
 @router.post("/settings/data/clear-cache")
