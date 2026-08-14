@@ -15,12 +15,17 @@ def _str_field(form: dict, key: str) -> str:
 
 
 @router.get("/settings", response_class=HTMLResponse)
+def settings_redirect():
+    return RedirectResponse(url="/settings/email")
+
+
+@router.get("/settings/email", response_class=HTMLResponse)
 def show_settings(request: Request):
     settings = db.get_settings(request.app.state.conn)
-    return templates.TemplateResponse(request, "settings.html", {"settings": settings})
+    return templates.TemplateResponse(request, "settings_email.html", {"settings": settings})
 
 
-@router.post("/settings")
+@router.post("/settings/email")
 async def save_settings(request: Request):
     form = dict((await request.form()).items())
     db.save_settings(
@@ -28,4 +33,4 @@ async def save_settings(request: Request):
         _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
         _str_field(form, "email_from"), _str_field(form, "email_to"),
     )
-    return RedirectResponse(url="/settings", status_code=303)
+    return RedirectResponse(url="/settings/email", status_code=303)

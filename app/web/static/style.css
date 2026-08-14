@@ -95,12 +95,14 @@ nav[aria-label="Main"] {
   gap: 1rem;
 }
 
-nav[aria-label="Main"] a {
+nav[aria-label="Main"] a,
+nav[aria-label="Settings tabs"] a {
   color: var(--fg);
   text-decoration: none;
 }
 
-nav[aria-label="Main"] a[aria-current="page"] {
+nav[aria-label="Main"] a[aria-current="page"],
+nav[aria-label="Settings tabs"] a[aria-current="page"] {
   color: var(--accent);
   font-weight: 600;
   text-decoration: underline;
