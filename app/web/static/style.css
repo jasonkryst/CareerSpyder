@@ -333,6 +333,10 @@ tbody tr:hover {
   background: var(--bg-elevated);
 }
 
+tr.removed td {
+  color: var(--fg-muted);
+}
+
 .error {
   background: var(--error-bg);
   color: var(--error-fg);

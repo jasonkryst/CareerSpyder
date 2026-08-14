@@ -32,6 +32,7 @@
     </span>
     <nav aria-label="Main">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a>
+      <a href="/jobs" {% if request.url.path == "/jobs" %}aria-current="page"{% endif %}>Jobs</a>
       <a href="/history" {% if request.url.path == "/history" %}aria-current="page"{% endif %}>History</a>
       <a href="/sources" {% if request.url.path.startswith("/sources") %}aria-current="page"{% endif %}>Sources</a>
       <a href="/settings" {% if request.url.path.startswith("/settings") %}aria-current="page"{% endif %}>Settings</a>

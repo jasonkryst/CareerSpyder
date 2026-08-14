@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 from html import escape
-from urllib.parse import urlparse
 
 from app.models import Job
-
-_SAFE_URL_SCHEMES = {"http", "https"}
+from app.textutils import safe_url_scheme
 
 
 @dataclass
@@ -14,13 +12,7 @@ class Digest:
 
 
 def _safe_href(url: str) -> str:
-    try:
-        scheme = urlparse(url).scheme.lower()
-    except ValueError:
-        return "#"
-    if scheme and scheme not in _SAFE_URL_SCHEMES:
-        return "#"
-    return escape(url, quote=True)
+    return escape(safe_url_scheme(url), quote=True)
 
 
 def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str = "new job") -> Digest | None:

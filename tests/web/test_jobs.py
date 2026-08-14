@@ -1,0 +1,117 @@
+from datetime import UTC, datetime, timedelta
+
+from app import db
+from app.models import Job
+from app.web.routes_jobs import _age_days
+
+
+def make_job(key="k1", title="Engineer", url="https://x.test/1", company="Acme",
+             location="Remote", source_name="Acme Board", source_id="src-1", summary="A great role."):
+    return Job(key=key, title=title, url=url, company=company, location=location,
+               source_name=source_name, source_id=source_id, summary=summary)
+
+
+def test_age_days_uses_today_when_not_removed():
+    first_seen = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    assert _age_days(first_seen, None) == 5
+
+
+def test_age_days_uses_removed_at_when_present():
+    first_seen = datetime(2026, 1, 1, tzinfo=UTC).isoformat()
+    removed_at = datetime(2026, 1, 10, tzinfo=UTC).isoformat()
+    assert _age_days(first_seen, removed_at) == 9
+
+
+def test_jobs_page_empty_state(client):
+    resp = client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert "Jobs" in resp.text
+
+
+def test_jobs_page_lists_active_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job()], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert "Acme" in resp.text
+    assert "Acme Board" in resp.text
+    assert "Engineer" in resp.text
+    assert 'href="https://x.test/1"' in resp.text
+    assert "A great role." in resp.text
+    assert "Not sent" in resp.text
+
+
+def test_jobs_page_shows_removed_date_and_class_for_a_removed_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn))
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
+    removed_at = db.list_jobs(conn)[0]["removed_at"]
+    assert removed_at is not None
+
+    resp = client.get("/jobs")
+
+    assert removed_at in resp.text
+    assert 'class="removed"' in resp.text
+
+
+def test_jobs_page_shows_emailed_timestamp(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn))
+    db.mark_emailed(conn, ["k3"])
+    emailed_at = db.list_jobs(conn)[0]["emailed_at"]
+
+    resp = client.get("/jobs")
+
+    assert emailed_at in resp.text
+
+
+def test_jobs_page_second_page_shows_older_jobs(client):
+    conn = client.app.state.conn
+    jobs = [make_job(key=f"k{i}", title=f"Job {i}") for i in range(30)]
+    db.save_jobs(conn, jobs, db.start_run(conn))
+
+    page1 = client.get("/jobs?page=1")
+    page2 = client.get("/jobs?page=2")
+
+    assert "Page 1 of 2" in page1.text
+    assert "Page 2 of 2" in page2.text
+
+
+def test_jobs_page_invalid_page_param_clamps_instead_of_erroring(client):
+    resp = client.get("/jobs?page=not-a-number")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 1" in resp.text
+
+
+def test_jobs_page_negative_page_param_clamps_to_first_page(client):
+    resp = client.get("/jobs?page=-3")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 1" in resp.text
+
+
+def test_jobs_table_has_scoped_headers_and_scroll_wrapper(client):
+    resp = client.get("/jobs")
+
+    assert 'scope="col"' in resp.text
+    assert 'class="table-scroll"' in resp.text
+
+
+def test_jobs_page_neutralizes_a_javascript_url(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k4", url="javascript:alert(1)")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'href="javascript:alert(1)"' not in resp.text
+    assert 'href="#"' in resp.text
+
+
+def test_nav_includes_jobs_link(client):
+    resp = client.get("/jobs")
+
+    assert 'href="/jobs" aria-current="page"' in resp.text
