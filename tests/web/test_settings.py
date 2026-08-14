@@ -69,10 +69,22 @@ def test_settings_email_form_wrapped_in_card(client):
     assert 'class="card"' in resp.text
 
 
+def test_settings_email_has_no_br_tags(client):
+    resp = client.get("/settings/email")
+
+    assert "<br>" not in resp.text
+
+
 def test_settings_data_page_wraps_sections_in_cards(client):
     resp = client.get("/settings/data")
 
     assert resp.text.count('class="card"') == 2
+
+
+def test_settings_data_has_no_br_tags(client):
+    resp = client.get("/settings/data")
+
+    assert "<br>" not in resp.text
 
 
 def test_settings_data_page_shows_data_tab_controls(client):

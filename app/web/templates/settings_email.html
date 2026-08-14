@@ -5,11 +5,11 @@
 <p>SMTP password is set via the <code>SMTP_PASSWORD</code> environment variable and is not editable here.</p>
 <div class="card">
 <form method="post" action="/settings/email">
-  <label>SMTP host <input type="text" name="smtp_host" value="{{ settings.smtp_host }}"></label><br>
-  <label>SMTP port <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"></label><br>
-  <label>SMTP user <input type="text" name="smtp_user" value="{{ settings.smtp_user }}"></label><br>
-  <label>From address <input type="text" name="email_from" value="{{ settings.email_from }}"></label><br>
-  <label>To address <input type="text" name="email_to" value="{{ settings.email_to }}"></label><br>
+  <label>SMTP host <input type="text" name="smtp_host" value="{{ settings.smtp_host }}"></label>
+  <label>SMTP port <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"></label>
+  <label>SMTP user <input type="text" name="smtp_user" value="{{ settings.smtp_user }}"></label>
+  <label>From address <input type="text" name="email_from" value="{{ settings.email_from }}"></label>
+  <label>To address <input type="text" name="email_to" value="{{ settings.email_to }}"></label>
   <button type="submit" class="btn-primary">Save</button>
 </form>
 </div>

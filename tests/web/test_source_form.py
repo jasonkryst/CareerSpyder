@@ -13,6 +13,12 @@ def test_source_form_save_button_is_primary(client):
     assert 'class="btn-primary"' in resp.text
 
 
+def test_source_form_has_no_br_tags(client):
+    resp = client.get("/sources/new")
+
+    assert "<br>" not in resp.text
+
+
 def test_post_new_source_saves_and_redirects(client):
     resp = client.post("/sources/new", data={
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "acme",

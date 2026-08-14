@@ -221,7 +221,7 @@ button:hover {
   border-color: var(--accent);
 }
 
-input[type="text"], input[type="number"] {
+input[type="text"], input[type="number"], select {
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -231,9 +231,31 @@ input[type="text"], input[type="number"] {
   max-width: 28rem;
 }
 
+input[type="file"] {
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.5rem;
+}
+
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--accent);
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
 label {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
   margin-bottom: var(--space-3);
+}
+
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .card {
@@ -243,6 +265,12 @@ label {
   box-shadow: var(--shadow);
   padding: var(--space-5);
   margin-bottom: var(--space-5);
+}
+
+.type-fields {
+  border-left: 3px solid var(--border);
+  padding-left: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 fieldset {
