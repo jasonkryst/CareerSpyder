@@ -62,7 +62,10 @@ def test_fetch_sends_expected_request_url_and_params():
 
     url, params = calls[0]
     assert url == "https://jobsapi-internal.m-cloud.io/api/job"
-    assert params == {"Organization": "2297", "Limit": 500, "offset": 1}
+    assert params == {
+        "Organization": "2297", "Limit": 500, "offset": 1,
+        "sortfield": "open_date", "sortorder": "descending",
+    }
 
 
 def test_fetch_falls_back_to_source_company_when_company_name_blank():

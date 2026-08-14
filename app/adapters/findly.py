@@ -21,7 +21,10 @@ def fetch(source: FindlySource, http_get=requests.get) -> list[Job]:
         offset = page * _PAGE_SIZE + 1
         resp = http_get(
             _API_URL,
-            params={"Organization": source.org_id, "Limit": _PAGE_SIZE, "offset": offset},
+            params={
+                "Organization": source.org_id, "Limit": _PAGE_SIZE, "offset": offset,
+                "sortfield": "open_date", "sortorder": "descending",
+            },
             timeout=15,
         )
         resp.raise_for_status()
