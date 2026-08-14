@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from app.adapters import (
+    findly,
     generic_html,
     greenhouse,
     healthcaresource,
@@ -25,4 +26,5 @@ ADAPTERS: dict[str, Callable[..., list[Job]]] = {
     "talentbrew": talentbrew.fetch,
     "workday": workday.fetch,
     "phenompeople": phenompeople.fetch,
+    "findly": findly.fetch,
 }
