@@ -4,57 +4,59 @@
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 <form method="post" action="{{ action }}">
   {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
-  <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label><br>
-  <label>Company <input type="text" name="company" value="{{ source.company if source else '' }}"></label><br>
+  <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label>
+  <label>Company <input type="text" name="company" value="{{ source.company if source else '' }}"></label>
   <label>Type
     <select name="type" onchange="showFieldsFor(this.value)">
       {% for t in ["greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor", "healthcaresource", "talentbrew", "workday", "phenompeople", "findly"] %}
       <option value="{{ t }}" {% if source and source.type == t %}selected{% endif %}>{{ t }}</option>
       {% endfor %}
     </select>
-  </label><br>
+  </label>
 
   <div id="fields-greenhouse" class="type-fields">
     <label>Board token <input type="text" name="board_token" value="{{ source.board_token if source and source.type in ['greenhouse', 'lever'] else '' }}"></label>
   </div>
   <div id="fields-lever" class="type-fields"></div>
   <div id="fields-generic_html" class="type-fields">
-    <label>URL <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label><br>
-    <label>Render JS <input type="checkbox" name="render_js" {% if source and source.type == 'generic_html' and source.render_js %}checked{% endif %}></label><br>
-    <label>Job card selector <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label><br>
-    <label>Title selector <input type="text" name="selector_title" value="{{ source.selectors.title if source and source.type == 'generic_html' else '' }}"></label><br>
-    <label>Link selector <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label><br>
+    <label>URL <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label>
+    <label>Render JS <input type="checkbox" name="render_js" {% if source and source.type == 'generic_html' and source.render_js %}checked{% endif %}></label>
+    <label>Job card selector <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label>
+    <label>Title selector <input type="text" name="selector_title" value="{{ source.selectors.title if source and source.type == 'generic_html' else '' }}"></label>
+    <label>Link selector <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label>
     <label>Location selector <input type="text" name="selector_location" value="{{ source.selectors.location if source and source.type == 'generic_html' and source.selectors.location else '' }}"></label>
   </div>
   <div id="fields-linkedin" class="type-fields"></div>
   <div id="fields-indeed" class="type-fields"></div>
   <div id="fields-infor" class="type-fields">
-    <label>URL <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label><br>
+    <label>URL <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'infor' else 3 }}"></label>
   </div>
   <div id="fields-healthcaresource" class="type-fields">
     <label>Site ID <input type="text" name="site_id" value="{{ source.site_id if source and source.type == 'healthcaresource' else '' }}"></label>
   </div>
   <div id="fields-talentbrew" class="type-fields">
-    <label>Base URL <input type="text" name="base_url" value="{{ source.base_url if source and source.type == 'talentbrew' else '' }}"></label><br>
+    <label>Base URL <input type="text" name="base_url" value="{{ source.base_url if source and source.type == 'talentbrew' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'talentbrew' else 60 }}"></label>
   </div>
   <div id="fields-workday" class="type-fields">
-    <label>Career site URL <input type="text" name="career_site_url" value="{{ source.career_site_url if source and source.type == 'workday' else '' }}"></label><br>
+    <label>Career site URL <input type="text" name="career_site_url" value="{{ source.career_site_url if source and source.type == 'workday' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'workday' else 60 }}"></label>
   </div>
   <div id="fields-phenompeople" class="type-fields">
-    <label>Career site URL <input type="text" name="phenompeople_career_site_url" value="{{ source.career_site_url if source and source.type == 'phenompeople' else '' }}"></label><br>
+    <label>Career site URL <input type="text" name="phenompeople_career_site_url" value="{{ source.career_site_url if source and source.type == 'phenompeople' else '' }}"></label>
     <label>State <input type="text" name="state" value="{{ source.state if source and source.type == 'phenompeople' and source.state else '' }}"></label>
   </div>
   <div id="fields-findly" class="type-fields">
-    <label>Org ID <input type="text" name="org_id" value="{{ source.org_id if source and source.type == 'findly' else '' }}"></label><br>
-    <label>Career site URL <input type="text" name="findly_career_site_url" value="{{ source.career_site_url if source and source.type == 'findly' else '' }}"></label><br>
+    <label>Org ID <input type="text" name="org_id" value="{{ source.org_id if source and source.type == 'findly' else '' }}"></label>
+    <label>Career site URL <input type="text" name="findly_career_site_url" value="{{ source.career_site_url if source and source.type == 'findly' else '' }}"></label>
     <label>Max pages <input type="number" name="max_pages" value="{{ source.max_pages if source and source.type == 'findly' else 20 }}"></label>
   </div>
 
-  <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label><br>
-  <label>Exclude keywords (comma separated) <input type="text" name="exclude_keywords" value="{{ source.exclude_keywords | join(', ') if source else '' }}"></label><br>
+  <div class="card">
+  <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label>
+  <label>Exclude keywords (comma separated) <input type="text" name="exclude_keywords" value="{{ source.exclude_keywords | join(', ') if source else '' }}"></label>
+  </div>
 
   <button type="button" onclick="testSource()">Test this source</button>
   <div id="test-results"></div>
