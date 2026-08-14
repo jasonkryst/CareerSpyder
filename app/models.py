@@ -10,3 +10,5 @@ class Job:
     location: str | None = None
     posted_date: str | None = None
     source_name: str = ""
+    source_id: str | None = None
+    summary: str | None = None

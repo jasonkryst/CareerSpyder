@@ -2,9 +2,10 @@ from app import db
 from app.models import Job
 
 
-def make_job(key="k1", title="Engineer"):
+def make_job(key="k1", title="Engineer", source_id="s1", summary=None):
     return Job(key=key, title=title, url="https://x.test/1", company="Acme",
-               location="Remote", posted_date=None, source_name="Acme Board")
+               location="Remote", posted_date=None, source_name="Acme Board",
+               source_id=source_id, summary=summary)
 
 
 def test_new_job_then_seen_on_second_run(tmp_db_path):
@@ -170,3 +171,93 @@ def test_init_db_is_idempotent_on_an_already_migrated_database(tmp_db_path):
     conn = db.init_db(tmp_db_path)  # must not raise on the second call
 
     assert db.get_settings(conn) is None
+
+
+def test_init_db_adds_new_columns_to_an_existing_jobs_table(tmp_db_path):
+    import sqlite3
+
+    old_conn = sqlite3.connect(tmp_db_path)
+    old_conn.execute("""
+        CREATE TABLE jobs (
+            key TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            company TEXT,
+            location TEXT,
+            url TEXT NOT NULL,
+            posted_date TEXT,
+            source_name TEXT NOT NULL,
+            first_seen_run_id INTEGER,
+            first_seen_at TEXT NOT NULL
+        )
+    """)
+    old_conn.execute(
+        "INSERT INTO jobs (key, title, url, source_name, first_seen_at) VALUES (?,?,?,?,?)",
+        ("legacy:1", "Legacy Job", "https://x.test/1", "Legacy Source", "2026-01-01T00:00:00+00:00"),
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    conn = db.init_db(tmp_db_path)
+
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    assert {"source_id", "summary", "removed_at", "emailed_at"} <= columns
+    row = conn.execute("SELECT key, source_id, removed_at FROM jobs WHERE key = 'legacy:1'").fetchone()
+    assert row == ("legacy:1", None, None)
+
+
+def test_save_jobs_persists_source_id_and_summary(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    job = make_job(source_id="src-1", summary="A great role.")
+    run_id = db.start_run(conn)
+
+    db.save_jobs(conn, [job], run_id)
+
+    rows = db.list_jobs(conn)
+    assert rows[0]["source_id"] == "src-1"
+    assert rows[0]["summary"] == "A great role."
+    assert rows[0]["removed_at"] is None
+    assert rows[0]["emailed_at"] is None
+
+
+def test_list_jobs_orders_newest_first(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn))
+
+    rows = db.list_jobs(conn)
+
+    assert [r["key"] for r in rows] == ["k2", "k1"]
+
+
+def test_list_jobs_respects_limit_and_offset(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    for i in range(3):
+        db.save_jobs(conn, [make_job(key=f"k{i}")], db.start_run(conn))
+
+    page = db.list_jobs(conn, limit=1, offset=1)
+
+    assert len(page) == 1
+
+
+def test_count_jobs_returns_total(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+
+    assert db.count_jobs(conn) == 2
+
+
+def test_mark_emailed_sets_timestamp_for_given_keys_only(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+
+    db.mark_emailed(conn, ["k1"])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["emailed_at"] is not None
+    assert rows["k2"]["emailed_at"] is None
+
+
+def test_mark_emailed_with_empty_list_does_not_raise(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    db.mark_emailed(conn, [])  # should not raise

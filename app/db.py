@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS jobs (
     url TEXT NOT NULL,
     posted_date TEXT,
     source_name TEXT NOT NULL,
+    source_id TEXT,
+    summary TEXT,
     first_seen_run_id INTEGER,
-    first_seen_at TEXT NOT NULL
+    first_seen_at TEXT NOT NULL,
+    removed_at TEXT,
+    emailed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -48,12 +52,29 @@ def _add_column_if_missing(conn: sqlite3.Connection, ddl: str) -> None:
             raise
 
 
+_NEW_JOB_COLUMNS = {
+    "source_id": "TEXT",
+    "summary": "TEXT",
+    "removed_at": "TEXT",
+    "emailed_at": "TEXT",
+}
+
+
+def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    for column, col_type in _NEW_JOB_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} {col_type}")
+    conn.commit()
+
+
 def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     conn.commit()
+    _migrate_jobs_table(conn)
     return conn
 
 
@@ -73,10 +94,12 @@ def save_jobs(conn: sqlite3.Connection, jobs: list[Job], run_id: int) -> None:
     now = _now()
     conn.executemany(
         "INSERT OR IGNORE INTO jobs "
-        "(key, title, company, location, url, posted_date, source_name, first_seen_run_id, first_seen_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
+        "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
+        "first_seen_run_id, first_seen_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         [
-            (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name, run_id, now)
+            (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
+             j.source_id, j.summary, run_id, now)
             for j in jobs
         ],
     )
@@ -170,3 +193,34 @@ def seed_settings_if_empty(conn: sqlite3.Connection, smtp_host: str, smtp_port: 
             (smtp_host, smtp_port, smtp_user, email_from, email_to),
         )
         conn.commit()
+
+
+def list_jobs(conn: sqlite3.Connection, limit: int = 25, offset: int = 0) -> list[dict]:
+    rows = conn.execute(
+        "SELECT key, title, company, location, url, posted_date, source_name, source_id, "
+        "summary, first_seen_at, removed_at, emailed_at "
+        "FROM jobs ORDER BY first_seen_at DESC, rowid DESC LIMIT ? OFFSET ?",
+        (limit, offset),
+    ).fetchall()
+    return [
+        {
+            "key": r[0], "title": r[1], "company": r[2], "location": r[3], "url": r[4],
+            "posted_date": r[5], "source_name": r[6], "source_id": r[7], "summary": r[8],
+            "first_seen_at": r[9], "removed_at": r[10], "emailed_at": r[11],
+        }
+        for r in rows
+    ]
+
+
+def count_jobs(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()
+    return row[0]
+
+
+def mark_emailed(conn: sqlite3.Connection, keys: list[str]) -> None:
+    if not keys:
+        return
+    now = _now()
+    placeholders = ",".join("?" * len(keys))
+    conn.execute(f"UPDATE jobs SET emailed_at = ? WHERE key IN ({placeholders})", [now, *keys])
+    conn.commit()
