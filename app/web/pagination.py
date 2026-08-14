@@ -14,7 +14,7 @@ def paginate(total: int, page: object, page_size: int = 25) -> Pagination:
     total_pages = max(1, -(-total // page_size))  # ceil(total / page_size), floored at 1
 
     try:
-        page_num = int(page)  # type: ignore[arg-type]
+        page_num = int(page)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         page_num = 1
 
