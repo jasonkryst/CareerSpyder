@@ -139,6 +139,122 @@ def test_run_once_found_jobs_includes_already_known_jobs(tmp_db_path):
     assert [j.key for j in second.new_jobs] == []
 
 
+def test_run_once_sets_source_id_on_saved_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+
+    def fake_fetch(source):
+        return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+                     source_name=source.name, source_id=source.id)]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+
+    rows = db.list_jobs(conn)
+    assert rows[0]["source_id"] == "s1"
+
+
+def test_run_once_marks_a_job_removed_when_it_stops_appearing(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+    calls = []
+
+    def fake_fetch(source):
+        calls.append(1)
+        if len(calls) == 1:
+            return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+                         source_name=source.name, source_id=source.id)]
+        return []
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["removed_at"] is not None
+
+
+def test_run_once_reactivates_a_removed_job_that_reappears(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+    responses = [
+        [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+             source_name=source.name, source_id=source.id)],
+        [],
+        [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+             source_name=source.name, source_id=source.id)],
+    ]
+
+    def fake_fetch(source):
+        return responses.pop(0)
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["removed_at"] is None
+
+
+def test_run_once_does_not_mark_jobs_removed_for_a_source_that_failed_this_run(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+    calls = []
+
+    def fake_fetch(source):
+        calls.append(1)
+        if len(calls) == 1:
+            return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+                         source_name=source.name, source_id=source.id)]
+        raise RuntimeError("site is down")
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["removed_at"] is None
+
+
+def test_run_once_marks_jobs_removed_when_their_source_is_deleted_between_runs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+
+    def fake_fetch(source):
+        return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+                     source_name=source.name, source_id=source.id)]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [])  # source deleted from sources.json
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["removed_at"] is not None
+
+
+def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_it(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good",
+                               include_keywords=["engineer"])
+
+    def fake_fetch(source):
+        # Still present on the site every run -- only the keyword filter excludes it from the digest.
+        return [Job(key="gh:1", title="Sales Rep", url="https://x.test/1",
+                     source_name=source.name, source_id=source.id)]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        run_id = db.start_run(conn)
+        db.save_jobs(conn, [Job(key="gh:1", title="Sales Rep", url="https://x.test/1",
+                                 source_name=source.name, source_id="s1")], run_id)
+        db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+        orchestrator.run_once(conn, [source])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["removed_at"] is None
+
+
 def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
