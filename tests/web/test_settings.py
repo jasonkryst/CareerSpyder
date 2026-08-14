@@ -38,3 +38,13 @@ def test_post_settings_rejects_file_upload_field(client):
     )
 
     assert resp.status_code == 400
+
+
+def test_settings_data_page_shows_data_tab_controls(client):
+    resp = client.get("/settings/data")
+
+    assert resp.status_code == 200
+    assert 'action="/settings/data/clear-cache"' in resp.text
+    assert 'href="/settings/data/sources/export"' in resp.text
+    assert 'action="/settings/data/sources/import"' in resp.text
+    assert 'name="file"' in resp.text

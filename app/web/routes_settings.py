@@ -34,3 +34,8 @@ async def save_settings(request: Request):
         _str_field(form, "email_from"), _str_field(form, "email_to"),
     )
     return RedirectResponse(url="/settings/email", status_code=303)
+
+
+@router.get("/settings/data", response_class=HTMLResponse)
+def show_settings_data(request: Request):
+    return templates.TemplateResponse(request, "settings_data.html", {})
