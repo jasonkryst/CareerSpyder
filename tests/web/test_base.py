@@ -31,6 +31,18 @@ def test_theme_toggle_button_present(client):
     assert 'aria-pressed="false"' in resp.text
 
 
+def test_style_css_defines_modernized_tokens(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "--accent: #b3101f" in resp.text
+    assert "--radius" in resp.text
+    assert "--space-4" in resp.text
+    assert ".card {" in resp.text
+    assert ".btn-primary {" in resp.text
+    assert ".brand" in resp.text
+
+
 def test_static_assets_are_served(client):
     css = client.get("/static/style.css")
     js = client.get("/static/theme.js")
