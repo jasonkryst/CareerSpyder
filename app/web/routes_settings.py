@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from app import db
+from app import config, db
 from app.web.templating import templates
 
 router = APIRouter()
@@ -45,3 +45,13 @@ def show_settings_data(request: Request):
 def clear_cache(request: Request):
     db.clear_jobs(request.app.state.conn)
     return RedirectResponse(url="/settings/data?cleared=1", status_code=303)
+
+
+@router.get("/settings/data/sources/export")
+def export_sources(request: Request):
+    payload = config.export_sources_json(request.app.state.sources_path)
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="sources.json"'},
+    )

@@ -73,3 +73,19 @@ def test_settings_data_page_shows_success_banner_after_clear(client):
 
     assert resp.status_code == 200
     assert "Job cache cleared" in resp.text
+
+
+def test_get_export_sources_returns_current_sources_as_download(client):
+    import json
+
+    from app import config
+
+    source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    config.add_source(client.app.state.sources_path, source)
+
+    resp = client.get("/settings/data/sources/export")
+
+    assert resp.status_code == 200
+    assert "attachment" in resp.headers["content-disposition"]
+    assert "sources.json" in resp.headers["content-disposition"]
+    assert json.loads(resp.text) == {"sources": [source.model_dump()]}
