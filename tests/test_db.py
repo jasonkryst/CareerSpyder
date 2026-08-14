@@ -261,3 +261,68 @@ def test_mark_emailed_with_empty_list_does_not_raise(tmp_db_path):
     conn = db.init_db(tmp_db_path)
 
     db.mark_emailed(conn, [])  # should not raise
+
+
+def test_reconcile_jobs_marks_missing_job_removed_when_its_source_succeeded(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["removed_at"] is not None
+
+
+def test_reconcile_jobs_leaves_job_untouched_when_still_found(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    job = make_job(key="k1", source_id="s1")
+    db.save_jobs(conn, [job], db.start_run(conn))
+
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["removed_at"] is None
+
+
+def test_reconcile_jobs_reactivates_a_removed_job_that_reappears(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    job = make_job(key="k1", source_id="s1")
+    db.save_jobs(conn, [job], db.start_run(conn))
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+
+    assert db.list_jobs(conn)[0]["removed_at"] is None
+
+
+def test_reconcile_jobs_ignores_jobs_from_a_source_that_merely_failed_this_run(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+
+    # s1 is still configured but did not succeed this run (e.g. it raised) -- must not be touched.
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids=set(), found_jobs=[])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["removed_at"] is None
+
+
+def test_reconcile_jobs_marks_removed_when_its_source_is_deleted_from_config(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+
+    # s1 no longer appears in configured_source_ids at all -- deleted from sources.json.
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["removed_at"] is not None
+
+
+def test_reconcile_jobs_leaves_legacy_rows_with_no_source_id_untouched(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1", source_id=None)], db.start_run(conn))
+
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["removed_at"] is None

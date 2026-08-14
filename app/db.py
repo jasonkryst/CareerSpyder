@@ -224,3 +224,30 @@ def mark_emailed(conn: sqlite3.Connection, keys: list[str]) -> None:
     placeholders = ",".join("?" * len(keys))
     conn.execute(f"UPDATE jobs SET emailed_at = ? WHERE key IN ({placeholders})", [now, *keys])
     conn.commit()
+
+
+def reconcile_jobs(conn: sqlite3.Connection, configured_source_ids: set[str],
+                    succeeded_source_ids: set[str], found_jobs: list[Job]) -> None:
+    found_keys = {j.key for j in found_jobs}
+    now = _now()
+
+    active_rows = conn.execute(
+        "SELECT key, source_id FROM jobs WHERE removed_at IS NULL AND source_id IS NOT NULL"
+    ).fetchall()
+    deleted_source_ids = {sid for _, sid in active_rows if sid not in configured_source_ids}
+
+    remove_keys = [
+        key for key, sid in active_rows
+        if (sid in succeeded_source_ids and key not in found_keys) or sid in deleted_source_ids
+    ]
+    if remove_keys:
+        placeholders = ",".join("?" * len(remove_keys))
+        conn.execute(f"UPDATE jobs SET removed_at = ? WHERE key IN ({placeholders})", [now, *remove_keys])
+
+    removed_rows = conn.execute("SELECT key FROM jobs WHERE removed_at IS NOT NULL").fetchall()
+    reactivate_keys = [key for (key,) in removed_rows if key in found_keys]
+    if reactivate_keys:
+        placeholders = ",".join("?" * len(reactivate_keys))
+        conn.execute(f"UPDATE jobs SET removed_at = NULL WHERE key IN ({placeholders})", reactivate_keys)
+
+    conn.commit()
