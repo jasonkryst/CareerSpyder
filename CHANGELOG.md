@@ -7,6 +7,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Modernized the web UI's visual theme (red/white/black palette, card
+  layout, primary-button styling) and moved the Light/Dark theme toggle
+  out of the header into a new `/settings/preferences` tab, expanded to a
+  three-way Light/Dark/System choice.
 - `docker.yml`'s build/scan/smoke-test job now publishes the image to Docker
   Hub (`jasonkryst/careerspyder`, tagged `:latest` and with the
   `pyproject.toml` version) on every push to `master`, after the existing

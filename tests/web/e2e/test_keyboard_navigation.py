@@ -6,14 +6,14 @@ def test_tab_order_reaches_skip_link_first(live_server, page):
     assert page.evaluate("document.activeElement.className") == "skip-link"
 
 
-def test_tab_order_reaches_theme_toggle_after_skip_link_and_nav(live_server, page):
+def test_tab_order_reaches_run_now_button_after_skip_link_and_nav(live_server, page):
     page.goto(live_server + "/")
 
-    # skip-link, then the 4 nav links (Dashboard/History/Sources/Settings), then the toggle
+    # skip-link, then the 4 nav links (Dashboard/History/Sources/Settings), then Run now
     for _ in range(6):
         page.keyboard.press("Tab")
 
-    assert page.evaluate("document.activeElement.id") == "theme-toggle"
+    assert page.evaluate("document.activeElement.textContent.trim()") == "Run now"
 
 
 def test_settings_tabs_navigate_and_mark_current_tab(live_server, page):

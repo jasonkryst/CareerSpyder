@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "settings_tabs.html" %}
+<h1>Preferences</h1>
+<div class="card">
+  <fieldset>
+    <legend>Theme</legend>
+    <label><input type="radio" name="theme" value="light"> Light</label>
+    <label><input type="radio" name="theme" value="dark"> Dark</label>
+    <label><input type="radio" name="theme" value="system"> Match system</label>
+  </fieldset>
+</div>
+{% endblock %}

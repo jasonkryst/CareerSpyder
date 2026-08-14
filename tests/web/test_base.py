@@ -24,11 +24,39 @@ def test_nav_marks_current_page_with_aria_current(client):
     assert 'href="/" aria-current="page"' not in resp.text
 
 
-def test_theme_toggle_button_present(client):
+def test_theme_toggle_button_removed_from_header(client):
     resp = client.get("/")
 
-    assert 'id="theme-toggle"' in resp.text
-    assert 'aria-pressed="false"' in resp.text
+    assert 'id="theme-toggle"' not in resp.text
+
+
+def test_brand_wordmark_present_in_header(client):
+    resp = client.get("/")
+
+    assert 'class="brand"' in resp.text
+    assert "<svg" in resp.text
+    assert "CareerSpyder" in resp.text
+
+
+def test_theme_js_supports_three_way_choice(client):
+    resp = client.get("/static/theme.js")
+
+    assert resp.status_code == 200
+    assert "system" in resp.text
+    assert "removeItem" in resp.text
+
+
+def test_style_css_defines_modernized_tokens(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "--accent: #b3101f" in resp.text
+    assert "--radius" in resp.text
+    assert "--space-4" in resp.text
+    assert ".card {" in resp.text
+    assert ".btn-primary {" in resp.text
+    assert ".brand" in resp.text
+    assert "a {" in resp.text
 
 
 def test_static_assets_are_served(client):

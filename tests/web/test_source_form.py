@@ -7,6 +7,12 @@ def test_new_source_form_renders(client):
     assert "Add source" in resp.text
 
 
+def test_source_form_save_button_is_primary(client):
+    resp = client.get("/sources/new")
+
+    assert 'class="btn-primary"' in resp.text
+
+
 def test_post_new_source_saves_and_redirects(client):
     resp = client.post("/sources/new", data={
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "acme",

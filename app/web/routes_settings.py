@@ -45,6 +45,11 @@ def show_settings_data(request: Request):
     return templates.TemplateResponse(request, "settings_data.html", {})
 
 
+@router.get("/settings/preferences", response_class=HTMLResponse)
+def show_settings_preferences(request: Request):
+    return templates.TemplateResponse(request, "settings_preferences.html", {})
+
+
 @router.post("/settings/data/clear-cache")
 def clear_cache(request: Request):
     db.clear_jobs(request.app.state.conn)
