@@ -53,7 +53,7 @@ jobs:
 
       - name: Smoke test all pages
         run: |
-          for path in / /sources /history /settings; do
+          for path in / /sources /history /settings/email /settings/data; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080$path")
             if [ "$status" != "200" ]; then
               echo "GET $path returned $status, expected 200" >&2
