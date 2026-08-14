@@ -43,6 +43,13 @@ def test_delete_source_removes_it(client):
         assert json.load(f)["sources"] == []
 
 
+def test_sources_table_has_no_legacy_inline_attributes(client):
+    resp = client.get("/sources")
+
+    assert 'border="1"' not in resp.text
+    assert 'cellpadding="4"' not in resp.text
+
+
 def test_sources_table_has_scoped_headers_and_scroll_wrapper(client):
     resp = client.get("/sources")
 

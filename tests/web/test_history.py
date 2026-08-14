@@ -13,6 +13,13 @@ def test_history_lists_past_runs(client):
     assert "Bad Co" in resp.text
 
 
+def test_history_table_has_no_legacy_inline_attributes(client):
+    resp = client.get("/history")
+
+    assert 'border="1"' not in resp.text
+    assert 'cellpadding="4"' not in resp.text
+
+
 def test_history_table_has_scoped_headers_and_scroll_wrapper(client):
     resp = client.get("/history")
 
