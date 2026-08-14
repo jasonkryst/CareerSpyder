@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 
 from app.config import (
+    FindlySource,
     GenericHtmlSource,
     GreenhouseSource,
     HealthcareSource,
@@ -27,6 +28,7 @@ TYPE_MODELS: dict[str, type[BaseModel]] = {
     "talentbrew": TalentBrewSource,
     "workday": WorkdaySource,
     "phenompeople": PhenomPeopleSource,
+    "findly": FindlySource,
 }
 
 
@@ -86,6 +88,13 @@ def source_from_form(form: dict):
             common["career_site_url"] = _strip(form["phenompeople_career_site_url"])
         if form.get("state"):
             common["state"] = _strip(form["state"])
+    elif source_type == "findly":
+        if "org_id" in form:
+            common["org_id"] = _strip(form["org_id"])
+        if "findly_career_site_url" in form:
+            common["career_site_url"] = _strip(form["findly_career_site_url"])
+        if form.get("max_pages"):
+            common["max_pages"] = int(form["max_pages"])
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])
@@ -108,6 +117,8 @@ def echo_source(form: dict):
     career_site_url = (
         form.get("phenompeople_career_site_url", "")
         if form.get("type") == "phenompeople"
+        else form.get("findly_career_site_url", "")
+        if form.get("type") == "findly"
         else form.get("career_site_url", "")
     )
     return SimpleNamespace(
@@ -124,6 +135,7 @@ def echo_source(form: dict):
         base_url=form.get("base_url", ""),
         career_site_url=career_site_url,
         state=form.get("state", ""),
+        org_id=form.get("org_id", ""),
         include_keywords=_keywords(form.get("include_keywords", "")),
         exclude_keywords=_keywords(form.get("exclude_keywords", "")),
     )
