@@ -19,7 +19,7 @@ def test_settings_page_does_not_expose_password_field(client):
 def test_post_settings_saves_new_values(client):
     resp = client.post("/settings/email", data={
         "smtp_host": "smtp2.example.com", "smtp_port": "465",
-        "smtp_user": "user2", "email_from": "from2@x.test", "email_to": "to2@x.test",
+        "smtp_user": "user2", "email_from": "from2@x.test",
     }, follow_redirects=False)
 
     assert resp.status_code == 303
@@ -33,11 +33,17 @@ def test_post_settings_saves_new_values(client):
 def test_post_settings_rejects_file_upload_field(client):
     resp = client.post(
         "/settings/email",
-        data={"smtp_port": "465", "smtp_user": "user2", "email_from": "from2@x.test", "email_to": "to2@x.test"},
+        data={"smtp_port": "465", "smtp_user": "user2", "email_from": "from2@x.test"},
         files={"smtp_host": ("evil.txt", b"not a hostname")},
     )
 
     assert resp.status_code == 400
+
+
+def test_settings_email_page_has_no_recipient_field(client):
+    resp = client.get("/settings/email")
+
+    assert 'name="email_to"' not in resp.text
 
 
 def test_settings_preferences_page_shows_theme_radios(client):

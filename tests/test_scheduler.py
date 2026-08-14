@@ -7,7 +7,8 @@ from app.digest import Digest
 def test_run_and_notify_sends_email_when_digest_present(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     conn = db.init_db(tmp_db_path)
-    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test")
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test")
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
@@ -28,7 +29,8 @@ def test_run_and_notify_sends_email_when_digest_present(tmp_db_path, tmp_path, m
 def test_run_and_notify_skips_email_when_digest_is_none(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     conn = db.init_db(tmp_db_path)
-    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test")
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test")
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
@@ -45,7 +47,8 @@ def test_run_and_notify_skips_email_when_digest_is_none(tmp_db_path, tmp_path, m
 def test_run_and_notify_swallows_email_send_failures(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     conn = db.init_db(tmp_db_path)
-    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test")
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test")
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
@@ -60,7 +63,8 @@ def test_run_and_notify_swallows_email_send_failures(tmp_db_path, tmp_path, monk
 def test_run_and_notify_does_not_crash_when_smtp_password_unset(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.delenv("SMTP_PASSWORD", raising=False)
     conn = db.init_db(tmp_db_path)
-    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    db.save_settings(conn, "smtp.example.com", 587, "user", "from@x.test")
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test")
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 

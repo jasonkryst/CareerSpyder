@@ -40,9 +40,19 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _add_column_if_missing(conn: sqlite3.Connection, ddl: str) -> None:
+    try:
+        conn.execute(f"ALTER TABLE settings ADD COLUMN {ddl}")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc):
+            raise
+
+
 def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.executescript(SCHEMA)
+    _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
+    _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     return conn
 
@@ -115,25 +125,38 @@ def count_runs(conn: sqlite3.Connection) -> int:
 
 def get_settings(conn: sqlite3.Connection) -> dict | None:
     row = conn.execute(
-        "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to FROM settings WHERE id = 1"
+        "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs "
+        "FROM settings WHERE id = 1"
     ).fetchone()
     if row is None:
         return None
     return {
         "smtp_host": row[0], "smtp_port": row[1], "smtp_user": row[2],
         "email_from": row[3], "email_to": row[4],
+        "email_days": row[5], "resend_jobs": bool(row[6]),
     }
 
 
 def save_settings(conn: sqlite3.Connection, smtp_host: str, smtp_port: int, smtp_user: str,
-                   email_from: str, email_to: str) -> None:
+                   email_from: str) -> None:
     conn.execute(
-        "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
-        "VALUES (1, ?, ?, ?, ?, ?) "
+        "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from) "
+        "VALUES (1, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET "
         "smtp_host=excluded.smtp_host, smtp_port=excluded.smtp_port, smtp_user=excluded.smtp_user, "
-        "email_from=excluded.email_from, email_to=excluded.email_to",
-        (smtp_host, smtp_port, smtp_user, email_from, email_to),
+        "email_from=excluded.email_from",
+        (smtp_host, smtp_port, smtp_user, email_from),
+    )
+    conn.commit()
+
+
+def save_preferences(conn: sqlite3.Connection, email_days: str, resend_jobs: bool, email_to: str) -> None:
+    conn.execute(
+        "INSERT INTO settings (id, email_days, resend_jobs, email_to) "
+        "VALUES (1, ?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET "
+        "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, email_to=excluded.email_to",
+        (email_days, int(resend_jobs), email_to),
     )
     conn.commit()
 
@@ -141,4 +164,9 @@ def save_settings(conn: sqlite3.Connection, smtp_host: str, smtp_port: int, smtp
 def seed_settings_if_empty(conn: sqlite3.Connection, smtp_host: str, smtp_port: int, smtp_user: str,
                             email_from: str, email_to: str) -> None:
     if get_settings(conn) is None:
-        save_settings(conn, smtp_host, smtp_port, smtp_user, email_from, email_to)
+        conn.execute(
+            "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
+            "VALUES (1, ?, ?, ?, ?, ?)",
+            (smtp_host, smtp_port, smtp_user, email_from, email_to),
+        )
+        conn.commit()

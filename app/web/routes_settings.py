@@ -35,7 +35,7 @@ async def save_settings(request: Request):
     db.save_settings(
         request.app.state.conn,
         _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
-        _str_field(form, "email_from"), _str_field(form, "email_to"),
+        _str_field(form, "email_from"),
     )
     return RedirectResponse(url="/settings/email", status_code=303)
 
