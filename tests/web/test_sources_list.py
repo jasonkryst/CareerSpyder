@@ -48,3 +48,28 @@ def test_sources_table_has_scoped_headers_and_scroll_wrapper(client):
 
     assert 'scope="col"' in resp.text
     assert 'class="table-scroll"' in resp.text
+
+
+def test_sources_list_second_page_shows_remaining_sources(client):
+    sources_path = client.app.state.sources_path
+    sources = [
+        {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
+        for i in range(30)
+    ]
+    with open(sources_path, "w") as f:
+        json.dump({"sources": sources}, f)
+
+    page1 = client.get("/sources?page=1")
+    page2 = client.get("/sources?page=2")
+
+    assert "Page 1 of 2" in page1.text
+    assert "Source 0" in page1.text
+    assert "Source 0" not in page2.text
+    assert "Page 2 of 2" in page2.text
+
+
+def test_sources_list_invalid_page_param_clamps_instead_of_erroring(client):
+    resp = client.get("/sources?page=abc")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 1" in resp.text

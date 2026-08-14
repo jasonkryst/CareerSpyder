@@ -20,4 +20,9 @@
   {% endfor %}
 </table>
 </div>
+<nav aria-label="Pagination">
+  {% if pagination.has_prev %}<a href="/sources?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+  {% if pagination.has_next %}<a href="/sources?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+</nav>
 {% endblock %}
