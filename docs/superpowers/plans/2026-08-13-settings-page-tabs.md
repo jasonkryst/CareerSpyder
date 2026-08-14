@@ -801,6 +801,18 @@ async def import_sources(request: Request):
     return RedirectResponse(url=f"/settings/data?imported={len(sources)}", status_code=303)
 ```
 
+**Deviation found while implementing this step:** the snippet above imports
+`UploadFile` from `starlette.datastructures`, not `fastapi` as originally
+planned. `request.form()` (used here instead of FastAPI's `File()`/
+`UploadFile` dependency injection) returns Starlette's `UploadFile`, and
+`fastapi.UploadFile` does **not** subclass it — the two are siblings, not
+parent/child — so `isinstance(upload, UploadFile)` against the `fastapi`
+import silently always failed, and every import POST 400'd with "Choose a
+file to import." even when a file was attached. Caught by
+`test_post_import_sources_replaces_list_and_redirects` failing in Step 4
+below with an unexpected 400 instead of the expected 404-before-route-
+exists failure from Step 2.
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/web/test_settings.py -k import_sources -v`
