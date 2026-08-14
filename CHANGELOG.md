@@ -3,6 +3,18 @@
 All notable changes to CareerSpyder are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.6.0] — 2026-08-14
+
+### Added
+
+- Form layout and CSS polish: labels stack above their inputs (checkboxes
+  and radios stay inline), `select`/checkbox/radio/file inputs now match
+  the styled text inputs instead of rendering as unstyled browser
+  defaults, and the source form's per-type fields get a visual grouping
+  border so it's clear which fields apply to the selected source type.
+
 ## [0.5.0] — 2026-08-14
 
 ### Added
