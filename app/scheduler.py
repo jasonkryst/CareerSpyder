@@ -1,7 +1,6 @@
 import logging
 import os
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,7 +15,7 @@ _DAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 def _resolve_tz(tz: str):
     # "UTC" is special-cased the same way apscheduler.util.astimezone does,
     # so this never requires the optional `tzdata` package to be installed.
-    return dt_timezone.utc if tz == "UTC" else ZoneInfo(tz)
+    return UTC if tz == "UTC" else ZoneInfo(tz)
 
 
 def _today_code(tz: str) -> str:
