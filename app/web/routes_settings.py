@@ -39,3 +39,9 @@ async def save_settings(request: Request):
 @router.get("/settings/data", response_class=HTMLResponse)
 def show_settings_data(request: Request):
     return templates.TemplateResponse(request, "settings_data.html", {})
+
+
+@router.post("/settings/data/clear-cache")
+def clear_cache(request: Request):
+    db.clear_jobs(request.app.state.conn)
+    return RedirectResponse(url="/settings/data?cleared=1", status_code=303)

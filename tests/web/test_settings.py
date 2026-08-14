@@ -48,3 +48,28 @@ def test_settings_data_page_shows_data_tab_controls(client):
     assert 'href="/settings/data/sources/export"' in resp.text
     assert 'action="/settings/data/sources/import"' in resp.text
     assert 'name="file"' in resp.text
+
+
+def test_post_clear_cache_empties_jobs_and_redirects(client):
+    from app import db
+    from app.models import Job
+
+    conn = client.app.state.conn
+    job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="Acme")
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    assert db.get_new_jobs(conn, [job]) == []
+
+    resp = client.post("/settings/data/clear-cache", follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings/data?cleared=1"
+    assert db.get_new_jobs(conn, [job]) == [job]
+
+
+def test_settings_data_page_shows_success_banner_after_clear(client):
+    resp = client.get("/settings/data?cleared=1")
+
+    assert resp.status_code == 200
+    assert "Job cache cleared" in resp.text
