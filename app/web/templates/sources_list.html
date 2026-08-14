@@ -2,8 +2,9 @@
 {% block content %}
 <h1>Sources</h1>
 <a href="/sources/new">Add source</a>
+<div class="table-scroll">
 <table border="1" cellpadding="4">
-  <tr><th>Name</th><th>Type</th><th>Company</th><th></th><th></th></tr>
+  <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Company</th><th scope="col"></th><th scope="col"></th></tr>
   {% for s in sources %}
   <tr>
     <td>{{ s.name }}</td>
@@ -18,4 +19,10 @@
   </tr>
   {% endfor %}
 </table>
+</div>
+<nav aria-label="Pagination">
+  {% if pagination.has_prev %}<a href="/sources?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+  {% if pagination.has_next %}<a href="/sources?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+</nav>
 {% endblock %}

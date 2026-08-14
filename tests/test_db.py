@@ -32,6 +32,25 @@ def test_list_runs_returns_most_recent_first(tmp_db_path):
     assert runs[1]["failed_sources"] == ["Bad Co"]
 
 
+def test_list_runs_respects_offset(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    ids = [db.start_run(conn) for _ in range(3)]
+    for run_id in ids:
+        db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    page2 = db.list_runs(conn, limit=2, offset=2)
+
+    assert [r["id"] for r in page2] == [ids[0]]
+
+
+def test_count_runs_returns_total(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.start_run(conn)
+    db.start_run(conn)
+
+    assert db.count_runs(conn) == 2
+
+
 def test_settings_seed_only_when_empty(tmp_db_path):
     conn = db.init_db(tmp_db_path)
 

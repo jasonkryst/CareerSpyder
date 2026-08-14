@@ -5,16 +5,23 @@ from pydantic import ValidationError
 
 from app import config
 from app.adapters import ADAPTERS
+from app.web.pagination import paginate
 from app.web.source_form import echo_source, source_from_form
 from app.web.templating import templates
 
 router = APIRouter()
 
+PAGE_SIZE = 25
+
 
 @router.get("/sources", response_class=HTMLResponse)
-def list_sources(request: Request):
-    sources = config.load_sources(request.app.state.sources_path)
-    return templates.TemplateResponse(request, "sources_list.html", {"sources": sources})
+def list_sources(request: Request, page: str = "1"):
+    all_sources = config.load_sources(request.app.state.sources_path)
+    pagination = paginate(len(all_sources), page, PAGE_SIZE)
+    sources = all_sources[pagination.offset : pagination.offset + PAGE_SIZE]
+    return templates.TemplateResponse(
+        request, "sources_list.html", {"sources": sources, "pagination": pagination}
+    )
 
 
 @router.post("/sources/{source_id}/delete")

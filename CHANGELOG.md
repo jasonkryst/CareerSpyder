@@ -52,6 +52,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   deterministic sort — a live smoke test found the API's default
   ordering shifts across paginated requests, producing duplicate jobs
   without one.
+- Enhanced web UI (#12): responsive layout down to narrow/mobile viewports,
+  light/dark theme (follows `prefers-color-scheme` by default, with a
+  manual toggle that persists via `localStorage`), accessibility
+  improvements (skip-to-content link, semantic landmarks, scoped table
+  headers, visible focus outlines, `aria-current` on the active nav link),
+  server-side pagination on the `/history` and `/sources` tables (25 rows
+  per page via `?page=`), and a footer showing the app name and version.
 
 ## [0.1.0] — 2026-08-11
 

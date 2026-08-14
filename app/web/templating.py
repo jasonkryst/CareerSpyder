@@ -6,8 +6,11 @@ would otherwise break when the package is installed/run from a location
 other than the source checkout).
 """
 
+from importlib.metadata import version
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.globals["app_name"] = "CareerSpyder"
+templates.env.globals["app_version"] = version("careerspyder")

@@ -1,7 +1,9 @@
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app import db
 from app.scheduler import create_scheduler
@@ -39,6 +41,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CareerSpyder", lifespan=lifespan)
+app.mount(
+    "/static",
+    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    name="static",
+)
 app.include_router(dashboard_router)
 app.include_router(history_router)
 app.include_router(sources_router)

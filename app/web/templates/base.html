@@ -1,17 +1,36 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CareerSpyder</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem("theme");
+      if (stored === "dark" || stored === "light") {
+        document.documentElement.setAttribute("data-theme", stored);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js" defer></script>
 </head>
 <body>
-  <nav>
-    <a href="/">Dashboard</a> |
-    <a href="/history">History</a> |
-    <a href="/sources">Sources</a> |
-    <a href="/settings">Settings</a>
-  </nav>
-  <hr>
-  {% block content %}{% endblock %}
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header>
+    <nav aria-label="Main">
+      <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a>
+      <a href="/history" {% if request.url.path == "/history" %}aria-current="page"{% endif %}>History</a>
+      <a href="/sources" {% if request.url.path.startswith("/sources") %}aria-current="page"{% endif %}>Sources</a>
+      <a href="/settings" {% if request.url.path == "/settings" %}aria-current="page"{% endif %}>Settings</a>
+    </nav>
+    <button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+  </header>
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>{{ app_name }} v{{ app_version }}</p>
+  </footer>
 </body>
 </html>

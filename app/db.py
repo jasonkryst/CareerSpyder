@@ -88,11 +88,11 @@ def finish_run(conn: sqlite3.Connection, run_id: int, new_job_count: int, failed
     conn.commit()
 
 
-def list_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+def list_runs(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> list[dict]:
     rows = conn.execute(
         "SELECT id, started_at, finished_at, new_job_count, failed_sources "
-        "FROM runs ORDER BY id DESC LIMIT ?",
-        (limit,),
+        "FROM runs ORDER BY id DESC LIMIT ? OFFSET ?",
+        (limit, offset),
     ).fetchall()
     return [
         {
@@ -101,6 +101,11 @@ def list_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def count_runs(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+    return row[0]
 
 
 def get_settings(conn: sqlite3.Connection) -> dict | None:
