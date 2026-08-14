@@ -40,12 +40,14 @@ dependency and no separate frontend build.
   (add/edit/delete with a live "test this source" preview before saving),
   and settings — no SPA, no JS build step, full page reloads.
 - **Settings: Email, Data, and Preferences tabs** — `/settings/email` holds
-  the SMTP config (unchanged); `/settings/data` adds a job-cache clear
+  the SMTP transport config; `/settings/data` adds a job-cache clear
   (clearing it makes the next run re-report every currently known job as
   new, which can trigger a large digest email) and sources.json
   import/export (import replaces the entire source list; export downloads
   the current one); `/settings/preferences` holds the Light/Dark/System
-  theme choice, previously a header toggle.
+  theme choice plus which days to check for jobs, whether a still-listed
+  job is resent in every digest or only ever emailed once, and one or
+  more digest recipient addresses.
 - **No database migration story to manage** — a single SQLite file holds
   dedup state, run history, and settings; it's a bind-mounted volume so it
   survives redeploys.
@@ -77,10 +79,10 @@ service. There is one container, one process.
 |---|---|---|
 | Adapters | `app/adapters/*.py` | Fetch + normalize one source type into `Job` objects. Every adapter has the shape `fetch(source, **injectable_io) -> list[Job]`, so tests can inject fakes instead of hitting the network or a real browser. |
 | Orchestrator | `app/orchestrator.py` | Runs every configured source, applies keyword filters, dedupes across sources within a run, dedupes against SQLite, and records run history. Serializes concurrent runs with a lock so an overlapping "Run now" and daily cron can't double-report jobs. |
-| Dedup store | `app/db.py` | SQLite: `jobs` (seen-before keys), `runs` (history), `settings` (SMTP host/port/from/to — **not** the password, see [Secrets](#secrets)). |
+| Dedup store | `app/db.py` | SQLite: `jobs` (seen-before keys), `runs` (history), `settings` (SMTP host/port/from, recipient list, check days, resend flag — **not** the password, see [Secrets](#secrets)). |
 | Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company) and "sources that failed this run." Returns `None` (no email sent) when both are empty. All scraped text is HTML-escaped before landing in the email. |
 | Emailer | `app/emailer.py` | Sends the digest via SMTP (STARTTLS, 30s timeout). |
-| Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
+| Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Skips the scan and email entirely on days not selected in Preferences. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
 | Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/history`, `/sources`, `/settings`. |
 
 ## Quick start (Docker)
@@ -226,9 +228,9 @@ redeploys.
 | `/history` | Table of past runs — start/finish time, new job count, failed source names. |
 | `/sources` | Table of configured sources with Edit/Delete actions and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
-| `/settings/email` | SMTP host/port/from/recipient address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
+| `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
 | `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list). |
-| `/settings/preferences` | Light/Dark/System theme choice. Stored in `localStorage` only, same as the header toggle it replaces — no server-side preference storage. |
+| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, and one or more recipient addresses (server-stored). |
 
 There is no authentication in v1 — this is meant for a trusted home/private
 network only (see [ROADMAP.md](ROADMAP.md)).

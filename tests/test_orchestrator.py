@@ -123,6 +123,22 @@ def test_run_once_handles_unknown_source_type_without_aborting_run(tmp_db_path):
     assert runs[0]["finished_at"] is not None
 
 
+def test_run_once_found_jobs_includes_already_known_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+
+    def fake_fetch(source):
+        return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        first = orchestrator.run_once(conn, [source])
+        second = orchestrator.run_once(conn, [source])
+
+    assert [j.key for j in first.found_jobs] == ["gh:1"]
+    assert [j.key for j in second.found_jobs] == ["gh:1"]
+    assert [j.key for j in second.new_jobs] == []
+
+
 def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")

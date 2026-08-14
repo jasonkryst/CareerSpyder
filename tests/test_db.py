@@ -84,11 +84,89 @@ def test_settings_seed_only_when_empty(tmp_db_path):
 
 def test_save_settings_overwrites(tmp_db_path):
     conn = db.init_db(tmp_db_path)
-    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test", "t@x.test")
-    db.save_settings(conn, "b.example.com", 465, "u2", "f2@x.test", "t2@x.test")
+    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
+    db.save_settings(conn, "b.example.com", 465, "u2", "f2@x.test")
 
     settings = db.get_settings(conn)
-    assert settings == {
-        "smtp_host": "b.example.com", "smtp_port": 465, "smtp_user": "u2",
-        "email_from": "f2@x.test", "email_to": "t2@x.test",
-    }
+    assert settings["smtp_host"] == "b.example.com"
+    assert settings["smtp_port"] == 465
+    assert settings["smtp_user"] == "u2"
+    assert settings["email_from"] == "f2@x.test"
+
+
+def test_save_settings_does_not_touch_preference_columns(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon,wed,fri", True, "a@x.test,b@x.test")
+
+    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["email_days"] == "mon,wed,fri"
+    assert settings["resend_jobs"] is True
+    assert settings["email_to"] == "a@x.test,b@x.test"
+
+
+def test_save_preferences_overwrites(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test")
+    db.save_preferences(conn, "mon,wed,fri", True, "a@x.test,b@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["email_days"] == "mon,wed,fri"
+    assert settings["resend_jobs"] is True
+    assert settings["email_to"] == "a@x.test,b@x.test"
+
+
+def test_save_preferences_does_not_touch_smtp_columns(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
+
+    db.save_preferences(conn, "mon", False, "a@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["smtp_host"] == "a.example.com"
+    assert settings["smtp_port"] == 587
+    assert settings["smtp_user"] == "u1"
+    assert settings["email_from"] == "f@x.test"
+
+
+def test_get_settings_defaults_days_and_resend_after_seeding(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.seed_settings_if_empty(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
+    assert settings["resend_jobs"] is False
+    assert settings["email_to"] == "to@x.test"
+
+
+def test_init_db_adds_new_columns_to_a_pre_existing_database(tmp_db_path):
+    import sqlite3
+
+    conn = sqlite3.connect(tmp_db_path)
+    conn.execute(
+        "CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK (id = 1), "
+        "smtp_host TEXT, smtp_port INTEGER, smtp_user TEXT, email_from TEXT, email_to TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
+        "VALUES (1, 'old.example.com', 587, 'olduser', 'old@x.test', 'oldto@x.test')"
+    )
+    conn.commit()
+    conn.close()
+
+    conn = db.init_db(tmp_db_path)
+
+    settings = db.get_settings(conn)
+    assert settings["smtp_host"] == "old.example.com"
+    assert settings["email_to"] == "oldto@x.test"
+    assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
+    assert settings["resend_jobs"] is False
+
+
+def test_init_db_is_idempotent_on_an_already_migrated_database(tmp_db_path):
+    db.init_db(tmp_db_path)
+
+    conn = db.init_db(tmp_db_path)  # must not raise on the second call
+
+    assert db.get_settings(conn) is None

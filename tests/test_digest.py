@@ -50,6 +50,15 @@ def test_scraped_fields_are_html_escaped():
     assert "<img src=x onerror=alert(3)>" not in result.html_body
 
 
+def test_job_label_can_be_overridden_for_resend_digests():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], job_label="job")
+
+    assert "1 job(s)" in result.subject
+    assert "new job" not in result.subject
+
+
 def test_javascript_url_is_neutralized():
     jobs = [
         Job(key="1", title="Engineer", url="javascript:alert(1)", company="Acme", source_name="s"),

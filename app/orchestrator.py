@@ -21,6 +21,7 @@ _run_lock = threading.Lock()
 class RunSummary:
     run_id: int
     new_jobs: list[Job]
+    found_jobs: list[Job]
     failed_sources: list[str]
 
 
@@ -45,4 +46,6 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig]) -> RunSummar
         new_jobs = db.get_new_jobs(conn, deduped_jobs)
         db.save_jobs(conn, new_jobs, run_id)
         db.finish_run(conn, run_id, len(new_jobs), failed_sources)
-        return RunSummary(run_id=run_id, new_jobs=new_jobs, failed_sources=failed_sources)
+        return RunSummary(
+            run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs, failed_sources=failed_sources,
+        )

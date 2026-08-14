@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-14
+
+### Added
+
+- Preferences tab: choose which days of the week to check for jobs and
+  send a digest, choose whether a still-listed job is resent in every
+  digest or emailed once ever, and add multiple digest recipients. The
+  "To address" field moved from the Email tab to Preferences as part of
+  this; the Email tab now holds SMTP transport config only.
+
 ## [0.6.0] — 2026-08-14
 
 ### Added
