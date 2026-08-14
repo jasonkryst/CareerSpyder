@@ -59,6 +59,16 @@ def test_style_css_defines_modernized_tokens(client):
     assert "a {" in resp.text
 
 
+def test_style_css_defines_form_polish_rules(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "flex-direction: column" in resp.text
+    assert 'input[type="checkbox"]' in resp.text
+    assert "accent-color: var(--accent)" in resp.text
+    assert ".type-fields {" in resp.text
+
+
 def test_static_assets_are_served(client):
     css = client.get("/static/style.css")
     js = client.get("/static/theme.js")
