@@ -65,6 +65,7 @@ def test_fetch_parses_single_page_of_cards():
     assert jobs[0].company == "Rush University Medical Center"
     assert jobs[0].url == "https://rush.test/careers"
     assert jobs[0].source_name == "Rush (Infor)"
+    assert jobs[0].source_id == "s1"
     assert jobs[1].title == "Supply Chain MDM Analyst"
 
 

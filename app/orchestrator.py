@@ -29,6 +29,8 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig]) -> RunSummar
     with _run_lock:
         run_id = db.start_run(conn)
         all_jobs: list[Job] = []
+        all_raw_jobs: list[Job] = []
+        succeeded_source_ids: set[str] = set()
         failed_sources: list[str] = []
 
         for source in sources:
@@ -39,12 +41,19 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig]) -> RunSummar
                 logger.exception("Source %r failed", source.name)
                 failed_sources.append(source.name)
                 continue
+            succeeded_source_ids.add(source.id)
+            all_raw_jobs.extend(found)
             all_jobs.extend(apply_keyword_filters(found, source.include_keywords, source.exclude_keywords))
 
         deduped_jobs = list({j.key: j for j in all_jobs}.values())
+        deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
 
         new_jobs = db.get_new_jobs(conn, deduped_jobs)
         db.save_jobs(conn, new_jobs, run_id)
+
+        configured_source_ids = {s.id for s in sources}
+        db.reconcile_jobs(conn, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
+
         db.finish_run(conn, run_id, len(new_jobs), failed_sources)
         return RunSummary(
             run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs, failed_sources=failed_sources,

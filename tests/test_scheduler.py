@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from app import db, scheduler
 from app.digest import Digest
+from app.models import Job
 
 
 def _configure(conn, email_days="mon,tue,wed,thu,fri,sat,sun", resend_jobs=False, email_to="to@x.test"):
@@ -165,6 +166,73 @@ def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(tm
 
     mock_digest.assert_called_once_with(["job-a"], [], "job")
     mock_send.assert_called_once()
+
+
+def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    run_id = db.start_run(conn)
+    job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+    db.save_jobs(conn, [job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+
+    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+
+
+def test_run_and_notify_does_not_mark_emailed_when_send_fails(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    run_id = db.start_run(conn)
+    job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+    db.save_jobs(conn, [job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+         patch("app.scheduler.emailer.send_email", side_effect=RuntimeError("smtp exploded")):
+        scheduler.run_and_notify(conn, sources_path)  # must not raise
+
+    assert db.list_jobs(conn)[0]["emailed_at"] is None
+
+
+def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn, resend_jobs=True)
+    run_id = db.start_run(conn)
+    old_job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+    db.save_jobs(conn, [old_job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    # No new jobs this run, but resend is on -- the digest sends found_jobs, so
+    # mark_emailed must key off that, not summary.new_jobs (which is empty).
+    fake_summary = type("S", (), {
+        "new_jobs": [], "found_jobs": [old_job], "failed_sources": [], "run_id": run_id,
+    })()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+
+    assert db.list_jobs(conn)[0]["emailed_at"] is not None
 
 
 def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):

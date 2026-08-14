@@ -33,6 +33,10 @@ dependency and no separate frontend build.
   (Greenhouse/Lever) or a stable hash of company + title + link
   (HTML/LinkedIn/Indeed) so a job is only ever reported "new" once, even
   across container restarts.
+- **Job lifecycle tracking** — the `/jobs` page shows every job ever
+  found, when it was first seen, when it was marked removed (its source
+  scraped successfully without it, or the source was deleted), and
+  whether it was included in a digest email.
 - **Email digest** — sent only when a run finds at least one new job or at
   least one source failure; a clean run with nothing to report stays
   silent.
@@ -83,7 +87,7 @@ service. There is one container, one process.
 | Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company) and "sources that failed this run." Returns `None` (no email sent) when both are empty. All scraped text is HTML-escaped before landing in the email. |
 | Emailer | `app/emailer.py` | Sends the digest via SMTP (STARTTLS, 30s timeout). |
 | Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Skips the scan and email entirely on days not selected in Preferences. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
-| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/history`, `/sources`, `/settings`. |
+| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/jobs`, `/history`, `/sources`, `/settings`. |
 
 ## Quick start (Docker)
 
@@ -225,6 +229,7 @@ redeploys.
 | Page | Purpose |
 |---|---|
 | `/` (Dashboard) | Last run time and new-job count, plus a **Run now** button that triggers a scrape as a background task without blocking the page. |
+| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title, location, dates found/removed, age, emailed status, and a summary where available. |
 | `/history` | Table of past runs — start/finish time, new job count, failed source names. |
 | `/sources` | Table of configured sources with Edit/Delete actions and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
@@ -302,6 +307,7 @@ app/
   db.py               SQLite: jobs / runs / settings
   config.py           sources.json schema + CRUD (pydantic models)
   filters.py           include/exclude keyword filtering
+  textutils.py          HTML-to-plain-text summaries + safe-URL-scheme helper
   adapters/
     greenhouse.py, lever.py      ATS JSON API adapters
     generic_html.py               CSS-selector HTML adapter

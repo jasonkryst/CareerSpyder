@@ -48,6 +48,7 @@ def test_fetch_static_page_uses_http_get():
     assert jobs[0].url == "https://customco.test/jobs/1"
     assert jobs[0].location == "Remote"
     assert jobs[0].source_name == "Custom Co"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_render_js_uses_html_renderer_instead_of_http_get():

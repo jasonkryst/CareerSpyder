@@ -49,6 +49,7 @@ def test_fetch_maps_findly_records_to_job_objects():
     assert jobs[0].location == "Milwaukee, WI"
     assert jobs[0].posted_date == "2026-04-14T00:00:00Z"
     assert jobs[0].source_name == "Advocate Health (Findly)"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_sends_expected_request_url_and_params():

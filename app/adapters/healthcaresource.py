@@ -33,5 +33,6 @@ def fetch(source: HealthcareSource, http_post=requests.post) -> list[Job]:
             location=address.get("addressLocalityRegion"),
             posted_date=src.get("datePosted"),
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs

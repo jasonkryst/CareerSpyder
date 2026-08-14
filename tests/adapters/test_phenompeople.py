@@ -48,6 +48,7 @@ def test_fetch_maps_phenompeople_jobs_to_job_objects():
     assert jobs[0].location == "Bartlett, Illinois, 60103"
     assert jobs[0].posted_date == "2026-07-27T19:05:38.996+0000"
     assert jobs[0].source_name == "Ascension (PhenomPeople)"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_sends_expected_request_url_and_body_with_state():

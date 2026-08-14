@@ -52,6 +52,7 @@ def test_fetch_maps_healthcaresource_jobs_to_job_objects():
     assert jobs[0].location == "Yorkville, IL"
     assert jobs[0].posted_date == "2026-06-29T00:00:00Z"
     assert jobs[0].source_name == "Rush Copley (HealthcareSource)"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_sends_the_expected_search_request_body():

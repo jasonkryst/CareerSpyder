@@ -39,6 +39,7 @@ def fetch(source: FindlySource, http_get=requests.get) -> list[Job]:
                 location=_location(record),
                 posted_date=record.get("open_date"),
                 source_name=source.name,
+                source_id=source.id,
             ))
 
         if len(records) < _PAGE_SIZE:

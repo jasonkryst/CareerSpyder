@@ -25,5 +25,6 @@ def fetch(source: LinkedInSource, html_renderer=render_html) -> list[Job]:
             location=location_el.get_text(strip=True) if location_el else None,
             posted_date=None,
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs

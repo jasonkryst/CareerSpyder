@@ -60,6 +60,7 @@ def _parse_page(html: str, source: TalentBrewSource) -> list[Job]:
             location=location_el.get_text(strip=True) if location_el else None,
             posted_date=None,
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs
 

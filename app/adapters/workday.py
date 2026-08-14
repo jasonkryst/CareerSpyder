@@ -31,6 +31,7 @@ def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) ->
             location=posting.get("locationsText"),
             posted_date=posting.get("postedOn"),
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs
 

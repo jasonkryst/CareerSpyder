@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Jobs</h1>
+<div class="table-scroll">
+<table>
+  <tr>
+    <th scope="col">Company</th>
+    <th scope="col">Search name</th>
+    <th scope="col">Title</th>
+    <th scope="col">Location</th>
+    <th scope="col">Date found</th>
+    <th scope="col">Removed</th>
+    <th scope="col">Age (days)</th>
+    <th scope="col">Emailed</th>
+    <th scope="col">Summary</th>
+  </tr>
+  {% for job in jobs %}
+  <tr class="{{ "removed" if job.removed_at else "" }}">
+    <td>{{ job.company or "—" }}</td>
+    <td>{{ job.source_name }}</td>
+    <td><a href="{{ job.safe_url }}">{{ job.title }}</a></td>
+    <td>{{ job.location or "—" }}</td>
+    <td>{{ job.first_seen_at }}</td>
+    <td>{{ job.removed_at or "—" }}</td>
+    <td>{{ job.age_days }}</td>
+    <td>{{ job.emailed_at or "Not sent" }}</td>
+    <td>{{ job.summary or "—" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<nav aria-label="Pagination">
+  {% if pagination.has_prev %}<a href="/jobs?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+  {% if pagination.has_next %}<a href="/jobs?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+</nav>
+{% endblock %}

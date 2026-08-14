@@ -34,5 +34,6 @@ def fetch(source: PhenomPeopleSource, http_post=requests.post) -> list[Job]:
             location=hit.get("location"),
             posted_date=hit.get("postedDate"),
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs
