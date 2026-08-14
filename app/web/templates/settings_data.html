@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "settings_tabs.html" %}
+<h1>Data</h1>
+
+{% if request.query_params.get("cleared") %}
+<div class="success">Job cache cleared. The next run will re-report every currently known job as new.</div>
+{% endif %}
+{% if request.query_params.get("imported") %}
+<div class="success">Imported {{ request.query_params.get("imported") }} source(s).</div>
+{% endif %}
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<h2>Job cache</h2>
+<p>Clears CareerSpyder's record of jobs it has already seen. The next run
+will treat every currently known job as new and may send a large digest
+email as a result.</p>
+<form method="post" action="/settings/data/clear-cache">
+  <button type="submit">Clear job cache</button>
+</form>
+
+<h2>Sources</h2>
+<p><a href="/settings/data/sources/export">Export sources</a></p>
+<form method="post" action="/settings/data/sources/import" enctype="multipart/form-data">
+  <label>Import sources <input type="file" name="file" accept="application/json"></label><br>
+  <button type="submit">Import</button>
+</form>
+<p>Importing replaces the entire source list with the contents of the uploaded file.</p>
+{% endblock %}

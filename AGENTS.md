@@ -62,7 +62,10 @@ existing tests — don't casually relax them:
   every run and every `/sources` request — no rebuild or restart needed
   after an edit. Writes go through `app/config.py::save_sources`, which
   writes atomically (temp file + `os.replace`) — don't reintroduce a
-  direct `open(path, "w")`.
+  direct `open(path, "w")`. `/settings/data`'s import feature
+  (`app/config.py::import_sources_json`) is the one other write path;
+  it validates against the same `SourcesFile` model before calling
+  `save_sources`, so an invalid upload can't partially overwrite the file.
 - **One source failing must never abort the others.** The per-source
   `try/except` in `app/orchestrator.py::run_once` (including the
   `ADAPTERS[source.type]` lookup itself) is what guarantees this — keep

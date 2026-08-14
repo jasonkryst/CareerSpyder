@@ -95,12 +95,14 @@ nav[aria-label="Main"] {
   gap: 1rem;
 }
 
-nav[aria-label="Main"] a {
+nav[aria-label="Main"] a,
+nav[aria-label="Settings tabs"] a {
   color: var(--fg);
   text-decoration: none;
 }
 
-nav[aria-label="Main"] a[aria-current="page"] {
+nav[aria-label="Main"] a[aria-current="page"],
+nav[aria-label="Settings tabs"] a[aria-current="page"] {
   color: var(--accent);
   font-weight: 600;
   text-decoration: underline;
@@ -175,6 +177,15 @@ th {
 .error {
   background: var(--error-bg);
   color: var(--error-fg);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.success {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: 0.375rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
