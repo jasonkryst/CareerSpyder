@@ -19,6 +19,27 @@ def test_new_job_then_seen_on_second_run(tmp_db_path):
     assert db.get_new_jobs(conn, [job]) == []
 
 
+def test_clear_jobs_empties_the_table(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    job = make_job()
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    assert db.get_new_jobs(conn, [job]) == []
+
+    db.clear_jobs(conn)
+
+    assert db.get_new_jobs(conn, [job]) == [job]
+
+
+def test_clear_jobs_on_empty_table_does_not_raise(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    db.clear_jobs(conn)  # should not raise
+
+    assert db.get_new_jobs(conn, [make_job()]) == [make_job()]
+
+
 def test_list_runs_returns_most_recent_first(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     run1 = db.start_run(conn)

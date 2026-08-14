@@ -73,6 +73,11 @@ def save_jobs(conn: sqlite3.Connection, jobs: list[Job], run_id: int) -> None:
     conn.commit()
 
 
+def clear_jobs(conn: sqlite3.Connection) -> None:
+    conn.execute("DELETE FROM jobs")
+    conn.commit()
+
+
 def start_run(conn: sqlite3.Connection) -> int:
     cur = conn.execute("INSERT INTO runs (started_at) VALUES (?)", (_now(),))
     conn.commit()
