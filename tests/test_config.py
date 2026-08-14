@@ -110,6 +110,79 @@ def test_save_sources_is_atomic_and_leaves_no_tmp_file(tmp_path):
     assert [s.id for s in config.load_sources(str(path))] == ["s1"]
 
 
+def test_export_sources_json_round_trips_saved_sources(tmp_path):
+    path = tmp_path / "sources.json"
+    source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    config.save_sources(str(path), [source])
+
+    exported = json.loads(config.export_sources_json(str(path)))
+
+    assert exported == {"sources": [source.model_dump()]}
+
+
+def test_export_sources_json_on_missing_file_returns_empty_list(tmp_path):
+    path = tmp_path / "does-not-exist.json"
+
+    exported = json.loads(config.export_sources_json(str(path)))
+
+    assert exported == {"sources": []}
+
+
+def test_import_sources_json_replaces_existing_sources(tmp_path):
+    path = tmp_path / "sources.json"
+    write_sources(path, [{"id": "old", "name": "Old", "type": "greenhouse", "board_token": "old"}])
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+
+    result = config.import_sources_json(str(path), payload)
+
+    assert [s.id for s in result] == ["new"]
+    assert [s.id for s in config.load_sources(str(path))] == ["new"]
+
+
+def test_import_sources_json_rejects_invalid_json(tmp_path):
+    path = tmp_path / "sources.json"
+    write_sources(path, [{"id": "old", "name": "Old", "type": "greenhouse", "board_token": "old"}])
+
+    with pytest.raises(json.JSONDecodeError):
+        config.import_sources_json(str(path), b"not json")
+
+    assert [s.id for s in config.load_sources(str(path))] == ["old"]
+
+
+def test_import_sources_json_rejects_payload_missing_sources_key(tmp_path):
+    path = tmp_path / "sources.json"
+    write_sources(path, [{"id": "old", "name": "Old", "type": "greenhouse", "board_token": "old"}])
+
+    with pytest.raises(ValidationError):
+        config.import_sources_json(str(path), b'{"nope": []}')
+
+    assert [s.id for s in config.load_sources(str(path))] == ["old"]
+
+
+def test_import_sources_json_rejects_unknown_source_type(tmp_path):
+    path = tmp_path / "sources.json"
+    write_sources(path, [{"id": "old", "name": "Old", "type": "greenhouse", "board_token": "old"}])
+    payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "carrier_pigeon"}]}).encode()
+
+    with pytest.raises(ValidationError):
+        config.import_sources_json(str(path), payload)
+
+    assert [s.id for s in config.load_sources(str(path))] == ["old"]
+
+
+def test_import_sources_json_rejects_blank_required_field(tmp_path):
+    path = tmp_path / "sources.json"
+    write_sources(path, [{"id": "old", "name": "Old", "type": "greenhouse", "board_token": "old"}])
+    payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "greenhouse", "board_token": ""}]}).encode()
+
+    with pytest.raises(ValidationError):
+        config.import_sources_json(str(path), payload)
+
+    assert [s.id for s in config.load_sources(str(path))] == ["old"]
+
+
 def test_greenhouse_rejects_empty_board_token():
     with pytest.raises(ValidationError):
         config.GreenhouseSource(name="Acme", type="greenhouse", board_token="")

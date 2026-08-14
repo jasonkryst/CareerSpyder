@@ -114,6 +114,19 @@ def save_sources(path: str, sources: list) -> None:
     os.replace(tmp_path, path)
 
 
+def export_sources_json(path: str) -> str:
+    sources = load_sources(path)
+    payload = {"sources": [s.model_dump() for s in sources]}
+    return json.dumps(payload, indent=2)
+
+
+def import_sources_json(path: str, raw: bytes) -> list[SourceConfig]:
+    data = json.loads(raw)
+    sources = SourcesFile.model_validate(data).sources
+    save_sources(path, sources)
+    return sources
+
+
 def add_source(path: str, source) -> None:
     sources = load_sources(path)
     sources.append(source)
