@@ -59,6 +59,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   headers, visible focus outlines, `aria-current` on the active nav link),
   server-side pagination on the `/history` and `/sources` tables (25 rows
   per page via `?page=`), and a footer showing the app name and version.
+- Settings page Data tab (#14): `/settings/data` adds a job-cache clear
+  (empties the `jobs` dedup table so the next run re-reports every
+  currently known job as new) and sources.json import/export (export
+  downloads the current source list; import validates and replaces it
+  entirely, rejecting bad JSON or schema-invalid sources without touching
+  the file on disk). The existing SMTP settings form moved to
+  `/settings/email`; `/settings` now redirects there.
 
 ## [0.1.0] — 2026-08-11
 

@@ -39,6 +39,11 @@ dependency and no separate frontend build.
 - **Server-rendered web UI** — dashboard, run history, source management
   (add/edit/delete with a live "test this source" preview before saving),
   and settings — no SPA, no JS build step, full page reloads.
+- **Settings: Email and Data tabs** — `/settings/email` holds the SMTP
+  config (unchanged); `/settings/data` adds a job-cache clear (clearing it
+  makes the next run re-report every currently known job as new, which
+  can trigger a large digest email) and sources.json import/export (import
+  replaces the entire source list; export downloads the current one).
 - **No database migration story to manage** — a single SQLite file holds
   dedup state, run history, and settings; it's a bind-mounted volume so it
   survives redeploys.
@@ -219,7 +224,8 @@ redeploys.
 | `/history` | Table of past runs — start/finish time, new job count, failed source names. |
 | `/sources` | Table of configured sources with Edit/Delete actions and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
-| `/settings` | SMTP host/port/from/recipient address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
+| `/settings/email` | SMTP host/port/from/recipient address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
+| `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list). |
 
 There is no authentication in v1 — this is meant for a trusted home/private
 network only (see [ROADMAP.md](ROADMAP.md)).
