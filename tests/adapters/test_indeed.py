@@ -31,6 +31,7 @@ def test_fetch_parses_indeed_cards():
     assert jobs[0].location == "Remote"
     assert jobs[0].url == "https://indeed.test/rc/clk?jk=xyz"
     assert jobs[0].key == "indeed:https://indeed.test/rc/clk?jk=xyz"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_returns_empty_list_when_no_cards_match():

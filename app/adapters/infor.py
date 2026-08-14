@@ -38,6 +38,7 @@ def _parse_page(html: str, source: InforSource) -> list[Job]:
             location=location,
             posted_date=posted_date,
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs
 

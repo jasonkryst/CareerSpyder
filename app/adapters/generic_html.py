@@ -34,5 +34,6 @@ def fetch(source: GenericHtmlSource, http_get=requests.get, html_renderer=render
             location=location_el.get_text(strip=True) if location_el else None,
             posted_date=None,
             source_name=source.name,
+            source_id=source.id,
         ))
     return jobs

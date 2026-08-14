@@ -59,6 +59,7 @@ def test_fetch_maps_postings_to_job_objects():
     assert jobs[0].location == "Naperville, Illinois"
     assert jobs[0].posted_date == "Posted Today"
     assert jobs[0].source_name == "Duly (Workday)"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_falls_back_to_external_path_when_requisition_id_missing():

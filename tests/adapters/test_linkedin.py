@@ -32,6 +32,7 @@ def test_fetch_parses_linkedin_cards():
     assert jobs[0].location == "Remote"
     assert jobs[0].url == "https://linkedin.test/jobs/view/111"
     assert jobs[0].key == "linkedin:https://linkedin.test/jobs/view/111"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_returns_empty_list_when_no_cards_match():

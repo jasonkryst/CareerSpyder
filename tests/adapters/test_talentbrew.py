@@ -62,6 +62,7 @@ def test_fetch_maps_talentbrew_jobs_to_job_objects():
     assert jobs[0].location == "Warrenville, IL"
     assert jobs[0].posted_date is None
     assert jobs[0].source_name == "NM (TalentBrew)"
+    assert jobs[0].source_id == "s1"
 
 
 def test_fetch_uses_title_az_sort_deterministically():
