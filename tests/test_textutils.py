@@ -38,3 +38,22 @@ def test_safe_url_scheme_neutralizes_javascript_scheme():
 
 def test_safe_url_scheme_allows_schemeless_relative_url():
     assert safe_url_scheme("/careers/1") == "/careers/1"
+
+
+def test_safe_url_scheme_neutralizes_javascript_scheme_split_by_a_control_character():
+    # A raw vertical tab, form feed, or NBSP inside "javascript" makes urlparse
+    # fail to detect any scheme at all (unlike tab/CR/LF, which it already
+    # strips), letting the string through unchecked unless it's stripped first.
+    assert safe_url_scheme("java\x0bscript:alert(1)") == "#"
+    assert safe_url_scheme("java\x0cscript:alert(1)") == "#"
+    assert safe_url_scheme("java\xa0script:alert(1)") == "#"
+
+
+def test_safe_url_scheme_neutralizes_javascript_scheme_split_by_a_unicode_space():
+    assert safe_url_scheme("java script:alert(1)") == "#"
+    assert safe_url_scheme("java\u200bscript:alert(1)") == "#"
+
+
+def test_safe_url_scheme_does_not_mangle_a_normal_https_url_with_a_space_in_the_query():
+    url = "https://x.test/search?q=backend engineer"
+    assert safe_url_scheme(url) == url
