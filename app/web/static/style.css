@@ -184,6 +184,14 @@ footer {
   font-size: 0.875rem;
 }
 
+a {
+  color: var(--accent);
+}
+
+a:visited {
+  color: var(--accent);
+}
+
 button, input, select {
   font: inherit;
   color: inherit;

@@ -56,6 +56,7 @@ def test_style_css_defines_modernized_tokens(client):
     assert ".card {" in resp.text
     assert ".btn-primary {" in resp.text
     assert ".brand" in resp.text
+    assert "a {" in resp.text
 
 
 def test_static_assets_are_served(client):
