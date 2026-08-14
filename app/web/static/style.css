@@ -273,6 +273,24 @@ label:has(> input[type="radio"]) {
   margin-bottom: var(--space-4);
 }
 
+.hint {
+  background: var(--bg-elevated);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: 0.9375rem;
+}
+
+code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+}
+
 fieldset {
   border: none;
   padding: 0;
