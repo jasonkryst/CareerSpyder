@@ -100,13 +100,15 @@ explicit scale, added to `style.css`:
   for Delete — red is already carrying accent + error duty, and a red
   Delete button would visually compete with the primary-action red.
 - **Header**: a `.brand` mark added before the main nav — a small hand-authored
-  inline SVG logo (a magnifying-glass mark: circle + diagonal handle,
-  `stroke="currentColor"`, colored via `.brand svg { color: var(--accent) }`
-  so it follows the active theme automatically) followed by the
-  "CareerSpyder" wordmark in bold `--fg` text. Inline SVG, not an `<img>`
-  or external file — no new asset, no network fetch, nothing for
-  `pyproject.toml`'s package-data list to miss. Header bottom border
-  becomes `2px solid var(--accent)` instead of `--border`.
+  inline SVG logo combining a magnifying glass (circle + diagonal handle)
+  with bent, jointed spider legs radiating from the lens on the side
+  opposite the handle, `stroke="currentColor"`, colored via
+  `.brand svg { color: var(--accent) }` so it follows the active theme
+  automatically — a literal "spyder" mark. Followed by the "CareerSpyder"
+  wordmark in bold `--fg` text. Inline SVG, not an `<img>` or external
+  file — no new asset, no network fetch, nothing for `pyproject.toml`'s
+  package-data list to miss. Header bottom border becomes `2px solid
+  var(--accent)` instead of `--border`.
 - **Nav (main + settings tabs)**: active state changes from underlined
   text to a pill: `padding: var(--space-2) var(--space-3)`,
   `border-radius: var(--radius)`, active link gets `background:
