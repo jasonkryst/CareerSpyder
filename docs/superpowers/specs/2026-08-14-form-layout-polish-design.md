@@ -78,10 +78,10 @@ stated browser-support floor, and every current browser (Chrome/Edge/Safari/Fire
 
 ## Template changes
 
-- `source_form.html`, `settings_email.html`, `settings_preferences.html`:
-  remove every `<br>` between fields — spacing now comes entirely from
-  `label`'s `margin-bottom` once labels are stacked. (`settings_data.html`
-  already has no `<br>`-separated label sequence; unaffected.)
+- `source_form.html`, `settings_email.html`, `settings_data.html`: remove
+  every `<br>` between a `</label>` and what follows — spacing now comes
+  entirely from `label`'s `margin-bottom` once labels are stacked.
+  (`settings_preferences.html` already has no `<br>`; unaffected.)
 - `source_form.html`: add a `<div class="card">` around the two trailing
   keyword fields (Include/Exclude keywords), visually separating them
   from the per-type fields above — reusing the existing `.card` class
@@ -106,8 +106,8 @@ Extends existing files, no new ones:
   save/edit) is untouched.
 
 `tests/web/test_settings.py`:
-- `GET /settings/email` and `GET /settings/preferences` responses contain
-  no `<br>`.
+- `GET /settings/email` and `GET /settings/data` responses contain no
+  `<br>`.
 
 No e2e changes expected — the keyboard tab-order and theme-radio e2e
 tests exercise the same elements in the same DOM order (`<label>`
