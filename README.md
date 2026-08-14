@@ -323,6 +323,8 @@ docs/superpowers/
 
 ## Further reading
 
+- [docs/USAGE.md](docs/USAGE.md) — usage guide with example values for
+  every source type; also available in-app at `/guide`.
 - [CHANGELOG.md](CHANGELOG.md) — what's shipped so far.
 - [ROADMAP.md](ROADMAP.md) — known limitations and what's planned next.
 - [AGENTS.md](AGENTS.md) — conventions and commands for AI coding agents
