@@ -57,6 +57,24 @@ def test_settings_tabs_include_preferences_link(client):
     assert 'href="/settings/data"' in resp.text
 
 
+def test_settings_email_save_button_is_primary(client):
+    resp = client.get("/settings/email")
+
+    assert 'class="btn-primary"' in resp.text
+
+
+def test_settings_email_form_wrapped_in_card(client):
+    resp = client.get("/settings/email")
+
+    assert 'class="card"' in resp.text
+
+
+def test_settings_data_page_wraps_sections_in_cards(client):
+    resp = client.get("/settings/data")
+
+    assert resp.text.count('class="card"') == 2
+
+
 def test_settings_data_page_shows_data_tab_controls(client):
     resp = client.get("/settings/data")
 

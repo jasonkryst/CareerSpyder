@@ -13,6 +13,7 @@
 <div class="error">{{ error }}</div>
 {% endif %}
 
+<div class="card">
 <h2>Job cache</h2>
 <p>Clears CareerSpyder's record of jobs it has already seen. The next run
 will treat every currently known job as new and may send a large digest
@@ -20,7 +21,9 @@ email as a result.</p>
 <form method="post" action="/settings/data/clear-cache">
   <button type="submit">Clear job cache</button>
 </form>
+</div>
 
+<div class="card">
 <h2>Sources</h2>
 <p><a href="/settings/data/sources/export">Export sources</a></p>
 <form method="post" action="/settings/data/sources/import" enctype="multipart/form-data">
@@ -28,4 +31,5 @@ email as a result.</p>
   <button type="submit">Import</button>
 </form>
 <p>Importing replaces the entire source list with the contents of the uploaded file.</p>
+</div>
 {% endblock %}
