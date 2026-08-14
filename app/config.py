@@ -77,9 +77,16 @@ class PhenomPeopleSource(BaseSource):
     state: str | None = None
 
 
+class FindlySource(BaseSource):
+    type: Literal["findly"]
+    org_id: str = Field(min_length=1)
+    career_site_url: str = Field(min_length=1)
+    max_pages: int = 20
+
+
 SourceConfig = Annotated[
     GreenhouseSource | LeverSource | GenericHtmlSource | LinkedInSource | IndeedSource | InforSource
-    | HealthcareSource | TalentBrewSource | WorkdaySource | PhenomPeopleSource,
+    | HealthcareSource | TalentBrewSource | WorkdaySource | PhenomPeopleSource | FindlySource,
     Field(discriminator="type"),
 ]
 

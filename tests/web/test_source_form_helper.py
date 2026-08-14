@@ -136,3 +136,26 @@ def test_phenompeople_state_is_none_when_field_blank():
     }
     source = source_from_form(form)
     assert source.state is None
+
+
+def test_parses_findly_fields():
+    form = {
+        "type": "findly", "name": "Advocate Health (Findly)",
+        "org_id": "2297", "findly_career_site_url": "https://careers.aah.org",
+        "max_pages": "10", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.type == "findly"
+    assert source.org_id == "2297"
+    assert source.career_site_url == "https://careers.aah.org"
+    assert source.max_pages == 10
+
+
+def test_findly_max_pages_falls_back_to_default_when_field_blank():
+    form = {
+        "type": "findly", "name": "Advocate Health (Findly)",
+        "org_id": "2297", "findly_career_site_url": "https://careers.aah.org",
+        "max_pages": "", "include_keywords": "", "exclude_keywords": "",
+    }
+    source = source_from_form(form)
+    assert source.max_pages == 20

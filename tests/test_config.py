@@ -33,13 +33,17 @@ def test_load_sources_parses_each_type(tmp_path):
             "id": "s10", "name": "Ascension (PhenomPeople)", "type": "phenompeople",
             "career_site_url": "https://jobs.ascension.org", "state": "Illinois",
         },
+        {
+            "id": "s11", "name": "Advocate Health (Findly)", "type": "findly",
+            "org_id": "2297", "career_site_url": "https://careers.aah.org", "max_pages": 10,
+        },
     ])
 
     sources = config.load_sources(str(path))
 
     assert [s.type for s in sources] == [
         "greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor",
-        "healthcaresource", "talentbrew", "workday", "phenompeople",
+        "healthcaresource", "talentbrew", "workday", "phenompeople", "findly",
     ]
     assert sources[0].board_token == "acme"
     assert sources[2].selectors.job_card == ".job"
@@ -51,6 +55,9 @@ def test_load_sources_parses_each_type(tmp_path):
     assert sources[8].max_pages == 20
     assert sources[9].career_site_url == "https://jobs.ascension.org"
     assert sources[9].state == "Illinois"
+    assert sources[10].org_id == "2297"
+    assert sources[10].career_site_url == "https://careers.aah.org"
+    assert sources[10].max_pages == 10
 
 
 def test_add_update_delete_round_trip(tmp_path):
@@ -169,3 +176,24 @@ def test_phenompeople_state_defaults_to_none():
         name="Ascension", type="phenompeople", career_site_url="https://jobs.ascension.org",
     )
     assert source.state is None
+
+
+def test_findly_rejects_empty_org_id():
+    with pytest.raises(ValidationError):
+        config.FindlySource(
+            name="Advocate Health", type="findly", org_id="",
+            career_site_url="https://careers.aah.org",
+        )
+
+
+def test_findly_rejects_empty_career_site_url():
+    with pytest.raises(ValidationError):
+        config.FindlySource(name="Advocate Health", type="findly", org_id="2297", career_site_url="")
+
+
+def test_findly_max_pages_defaults_to_twenty():
+    source = config.FindlySource(
+        name="Advocate Health", type="findly", org_id="2297",
+        career_site_url="https://careers.aah.org",
+    )
+    assert source.max_pages == 20
