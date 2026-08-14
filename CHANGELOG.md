@@ -5,6 +5,38 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-14
+
+### Added
+
+- `/jobs` page (issue #28) listing every job CareerSpyder has ever found —
+  company, search name, linked title, location, date found, date removed
+  (if no longer found), age in days, whether/when it was included in a
+  digest email, and a summary (first 250 characters) where available.
+- Removal tracking: a job is marked removed when its source scrapes
+  successfully but no longer returns it, or when its source is deleted
+  from `sources.json` entirely. A removed job that reappears in a later
+  run is automatically reactivated. Reconciliation uses each source's
+  unfiltered results, so tightening `include_keywords`/`exclude_keywords`
+  can never make a still-live posting look removed.
+- Email tracking: a job's emailed timestamp is set only when the digest
+  email containing it actually sends successfully.
+- `summary` field for `greenhouse` and `lever` sources — both APIs
+  already return a job description (Greenhouse needs `content=true` on
+  the request; Lever returns it by default), truncated to 250 characters.
+  Other source types don't populate it, since that would require an
+  extra per-job HTTP request.
+
+### Security
+
+- Hardened `app/textutils.py::safe_url_scheme` (shared by the digest
+  email and the new `/jobs` page) against a scheme-detection bypass: a
+  control character or Unicode whitespace embedded inside a scheme name
+  (e.g. a raw vertical tab in `"java<TAB>script:alert(1)"`, written
+  mid-word) made the underlying URL parser fail to detect any scheme at
+  all, letting the raw string through the http(s)-only allowlist
+  unchecked.
+
 ## [0.7.0] — 2026-08-14
 
 ### Added

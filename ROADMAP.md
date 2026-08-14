@@ -50,11 +50,6 @@ later rather than fixed immediately.
   Playwright scraping of public search pages — fragile by nature (layout
   changes, blocking, CAPTCHAs). Replacing them with an official API or RSS
   source, where available, would be far lower-maintenance.
-- **Dashboard doesn't list the jobs it found (from review).** `/` shows
-  only a new-job count for the last run; the actual jobs are visible only
-  via email or by inference from `/history`. A jobs table (grouped by
-  company, like the digest) would make the dashboard useful without
-  waiting for an email.
 - **Multi-recipient digest email (from design spec + review).** `email_to`
   is a single address today. Comma-splitting it into multiple recipients
   is a small, low-risk addition if/when more than one person wants the

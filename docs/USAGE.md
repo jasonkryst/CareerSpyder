@@ -15,8 +15,9 @@ see [README.md](../README.md).
 4. Click **Save**.
 5. Go to the **Dashboard** and click **Run now** to trigger an immediate
    scrape.
-6. Check **History** for the run's result, or wait for the digest email
-   if new jobs were found.
+6. Check **History** for the run's result, the **Jobs** page for the
+   postings themselves, or wait for the digest email if new jobs were
+   found.
 
 After that, CareerSpyder scrapes automatically once a day at the
 configured hour — no further action needed unless you're adding more
@@ -27,6 +28,7 @@ sources or changing settings.
 | Page | Purpose |
 |---|---|
 | Dashboard (`/`) | Last run time and new-job count, plus a **Run now** button. |
+| Jobs (`/jobs`) | Every job ever found — company, search name, title/link, location, dates found/removed, age, emailed status, and a summary where available. |
 | History (`/history`) | Table of past runs — start/finish time, new job count, failed source names. |
 | Sources (`/sources`) | Table of configured sources with Edit/Delete actions and an **Add source** button. |
 | Settings → Email (`/settings/email`) | SMTP host/port/from address (the password is a container env var, not editable here). |
