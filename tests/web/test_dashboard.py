@@ -158,3 +158,85 @@ def test_dashboard_js_is_served(client):
 def test_history_routes_removed(client):
     assert client.get("/history").status_code == 404
     assert client.get("/history/rows").status_code == 404
+
+
+def test_dashboard_sort_by_new_job_count_orders_rows(client):
+    conn = client.app.state.conn
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=5, failed_sources=[])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/?sort=new_job_count&dir=asc")
+
+    assert resp.text.index('data-label="New jobs">1') < resp.text.index('data-label="New jobs">5')
+
+
+def test_dashboard_failures_filter_only_shows_failed_runs(client):
+    conn = client.app.state.conn
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/?failures=only")
+
+    assert "Bad Co" in resp.text
+    assert "Page 1 of 1" in resp.text
+
+
+def test_rows_endpoint_honors_sort_and_failures_params(client):
+    conn = client.app.state.conn
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/rows?failures=clean")
+
+    assert "Bad Co" not in resp.text
+
+
+def test_dashboard_invalid_sort_and_failures_do_not_error(client):
+    resp = client.get("/?sort=nonsense&failures=nonsense")
+    assert resp.status_code == 200
+
+
+def test_dashboard_pagination_link_preserves_active_filter(client):
+    conn = client.app.state.conn
+    for i in range(30):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/?failures=clean&page=1")
+
+    assert "failures=clean" in resp.text
+
+
+def test_dashboard_sort_headers_have_aria_sort_when_active(client):
+    resp = client.get("/?sort=new_job_count&dir=asc")
+    assert 'aria-sort="ascending"' in resp.text
+
+
+def test_dashboard_filter_form_preserves_active_sort_via_hidden_fields(client):
+    resp = client.get("/?sort=new_job_count&dir=asc")
+
+    assert '<input type="hidden" name="sort" value="new_job_count">' in resp.text
+    assert '<input type="hidden" name="dir" value="asc">' in resp.text
+
+
+def test_dashboard_clear_filters_link_shown_when_filter_active(client):
+    resp = client.get("/?failures=only")
+    assert 'href="/"' in resp.text
+    assert "Clear filters" in resp.text
+
+
+def test_dashboard_clear_filters_link_hidden_when_no_filter_active(client):
+    resp = client.get("/")
+    assert "Clear filters" not in resp.text
+
+
+def test_dashboard_js_uses_location_search_for_refresh(client):
+    resp = client.get("/static/dashboard.js")
+    assert "window.location.search" in resp.text
+    assert "data-page" not in resp.text

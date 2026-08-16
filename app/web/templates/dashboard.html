@@ -9,5 +9,18 @@
   <button type="button" id="refresh-history">Refresh</button>
   <span id="history-status" class="sr-only" aria-live="polite"></span>
 </div>
+<form method="get" action="/" class="filter-bar">
+  <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
+  <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
+  <label>Runs
+    <select name="failures">
+      <option value="">All</option>
+      <option value="only" {% if failures == "only" %}selected{% endif %}>Only runs with failed sources</option>
+      <option value="clean" {% if failures == "clean" %}selected{% endif %}>Only clean runs</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if failures %}<a href="/">Clear filters</a>{% endif %}
+</form>
 {% include "_history_rows.html" %}
 {% endblock %}

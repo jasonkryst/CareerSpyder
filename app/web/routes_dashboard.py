@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db
@@ -11,21 +11,33 @@ router = APIRouter()
 PAGE_SIZE = 25
 
 
-def _dashboard_context(request: Request, page: str) -> dict:
-    total = db.count_runs(request.app.state.conn)
+def _dashboard_context(request: Request, page: str, sort: str, direction: str, failures: str) -> dict:
+    failures_filter = failures or None
+    total = db.count_runs(request.app.state.conn, failures=failures_filter)
     pagination = paginate(total, page, PAGE_SIZE)
-    runs = db.list_runs(request.app.state.conn, limit=PAGE_SIZE, offset=pagination.offset)
-    return {"runs": runs, "pagination": pagination}
+    runs = db.list_runs(
+        request.app.state.conn, limit=PAGE_SIZE, offset=pagination.offset,
+        sort=sort, direction=direction, failures=failures_filter,
+    )
+    return {"runs": runs, "pagination": pagination, "failures": failures}
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, page: str = "1"):
-    return templates.TemplateResponse(request, "dashboard.html", _dashboard_context(request, page))
+def dashboard(
+    request: Request, page: str = "1", sort: str = "",
+    direction: str = Query("", alias="dir"), failures: str = "",
+):
+    context = _dashboard_context(request, page, sort, direction, failures)
+    return templates.TemplateResponse(request, "dashboard.html", context)
 
 
 @router.get("/rows", response_class=HTMLResponse)
-def dashboard_rows(request: Request, page: str = "1"):
-    return templates.TemplateResponse(request, "_history_rows.html", _dashboard_context(request, page))
+def dashboard_rows(
+    request: Request, page: str = "1", sort: str = "",
+    direction: str = Query("", alias="dir"), failures: str = "",
+):
+    context = _dashboard_context(request, page, sort, direction, failures)
+    return templates.TemplateResponse(request, "_history_rows.html", context)
 
 
 @router.post("/run-now")
