@@ -18,9 +18,9 @@ def test_base_layout_has_viewport_lang_and_skip_link(client):
 
 
 def test_nav_marks_current_page_with_aria_current(client):
-    resp = client.get("/history")
+    resp = client.get("/jobs")
 
-    assert 'href="/history" aria-current="page"' in resp.text
+    assert 'href="/jobs" aria-current="page"' in resp.text
     assert 'href="/" aria-current="page"' not in resp.text
 
 
@@ -123,3 +123,28 @@ def test_style_css_defines_card_table_breakpoint(client):
     assert resp.status_code == 200
     assert "@media (max-width: 40rem)" in resp.text
     assert "attr(data-label)" in resp.text
+
+
+def test_style_css_wraps_long_unbroken_text(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "overflow-wrap: anywhere" in resp.text
+
+
+def test_confirm_modal_markup_present_on_every_page(client):
+    resp = client.get("/")
+
+    assert 'id="confirm-modal"' in resp.text
+    assert 'id="confirm-modal-title"' in resp.text
+    assert 'id="confirm-modal-message"' in resp.text
+    assert 'id="confirm-modal-confirm"' in resp.text
+    assert 'id="confirm-modal-cancel"' in resp.text
+
+
+def test_confirm_modal_js_is_served(client):
+    resp = client.get("/static/confirm-modal.js")
+
+    assert resp.status_code == 200
+    assert "showModal" in resp.text
+    assert "data-confirm-message" in resp.text

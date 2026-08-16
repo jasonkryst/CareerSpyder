@@ -1,17 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>CareerSpyder</h1>
-<form method="post" action="/run-now">
-  <button type="submit" class="btn-primary">Run now</button>
-</form>
-<div class="card">
-{% if last_run %}
-  <p>Last run: {{ last_run.started_at }} — {{ last_run.new_job_count }} new job(s)</p>
-  {% if last_run.failed_sources %}
-    <p>Failed sources: {{ last_run.failed_sources | join(", ") }}</p>
-  {% endif %}
-{% else %}
-  <p>No runs yet.</p>
-{% endif %}
+<div class="history-toolbar">
+  <form method="post" action="/run-now" id="run-now-form">
+    <button type="submit" class="btn-primary">Run now</button>
+  </form>
+  <span id="run-now-status" class="sr-only" aria-live="polite"></span>
+  <button type="button" id="refresh-history">Refresh</button>
+  <span id="history-status" class="sr-only" aria-live="polite"></span>
 </div>
+{% include "_history_rows.html" %}
 {% endblock %}

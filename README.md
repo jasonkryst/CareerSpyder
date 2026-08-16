@@ -228,13 +228,12 @@ redeploys.
 
 | Page | Purpose |
 |---|---|
-| `/` (Dashboard) | Last run time and new-job count, plus a **Run now** button that triggers a scrape as a background task without blocking the page. |
+| `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing table of past runs — start/finish time, new job count, failed source names. |
 | `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title, location, dates found/removed, age, emailed status, and a summary where available. |
-| `/history` | Table of past runs — start/finish time, new job count, failed source names. |
-| `/sources` | Table of configured sources with Edit/Delete actions and an **Add source** button. |
+| `/sources` | Table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
-| `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation before doing so). |
+| `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation via a themed dialog before doing so). |
 | `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, and one or more recipient addresses (server-stored, validated client- and server-side). |
 
 There is no authentication in v1 — this is meant for a trusted home/private

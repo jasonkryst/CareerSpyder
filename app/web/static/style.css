@@ -214,6 +214,7 @@ main {
   max-width: 60rem;
   margin: 0 auto;
   padding: var(--space-5) var(--space-4);
+  overflow-wrap: break-word;
 }
 
 footer {
@@ -336,6 +337,7 @@ code {
   padding: 0.1rem 0.3rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.875em;
+  overflow-wrap: anywhere;
 }
 
 fieldset {
@@ -467,4 +469,26 @@ nav[aria-label="Pagination"] {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+dialog.modal {
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  max-width: 28rem;
+  width: calc(100% - var(--space-4) * 2);
+}
+
+dialog.modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+dialog.modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }

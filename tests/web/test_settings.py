@@ -382,7 +382,8 @@ def test_settings_data_import_form_has_confirm_guard(client):
     resp = client.get("/settings/data")
 
     assert 'id="import-form"' in resp.text
-    assert "confirm(" in resp.text
+    assert 'data-confirm-message="Importing will replace your entire source list. Continue?"' in resp.text
+    assert "confirm(" not in resp.text
 
 
 def test_post_preferences_rejects_malformed_email_and_does_not_save(client):

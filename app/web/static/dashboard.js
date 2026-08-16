@@ -2,7 +2,9 @@
   var container = document.getElementById("history-rows");
   var refreshButton = document.getElementById("refresh-history");
   var status = document.getElementById("history-status");
-  if (!container || !refreshButton) return;
+  var runForm = document.getElementById("run-now-form");
+  var runStatus = document.getElementById("run-now-status");
+  if (!container) return;
 
   var POLL_MS = 10000;
   var pollTimer = null;
@@ -17,7 +19,7 @@
 
   function refresh() {
     var page = container.getAttribute("data-page") || "1";
-    return fetch("/history/rows?page=" + encodeURIComponent(page))
+    return fetch("/rows?page=" + encodeURIComponent(page))
       .then(function (resp) { return resp.text(); })
       .then(function (html) {
         var wrapper = document.createElement("div");
@@ -39,6 +41,22 @@
     }
   }
 
-  refreshButton.addEventListener("click", refresh);
+  if (refreshButton) refreshButton.addEventListener("click", refresh);
+
+  if (runForm) {
+    runForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var button = runForm.querySelector("button[type=submit]");
+      if (button) button.disabled = true;
+      if (runStatus) runStatus.textContent = "Starting run…";
+      fetch(runForm.getAttribute("action"), { method: "POST" })
+        .then(refresh)
+        .then(function () {
+          if (runStatus) runStatus.textContent = "Run started";
+          if (button) button.disabled = false;
+        });
+    });
+  }
+
   managePolling();
 })();
