@@ -29,14 +29,19 @@ sources or changing settings.
 |---|---|
 | Dashboard (`/`) | Last run time and new-job count, plus a **Run now** button. |
 | Jobs (`/jobs`) | Every job ever found — company, search name, title/link, location, dates found/removed, age, emailed status, and a summary where available. |
-| History (`/history`) | Table of past runs — start/finish time, new job count, failed source names. |
+| History (`/history`) | Table of past runs — start/finish time, new job count, failed source names. A **Refresh** button re-fetches the latest rows, and the page auto-refreshes itself every 10 seconds while a run is still in progress. |
 | Sources (`/sources`) | Table of configured sources with Edit/Delete actions and an **Add source** button. |
 | Settings → Email (`/settings/email`) | SMTP host/port/from address (the password is a container env var, not editable here). |
-| Settings → Data (`/settings/data`) | Clear the job dedup cache, and export/import `sources.json`. |
-| Settings → Preferences (`/settings/preferences`) | Theme, which days to check for jobs, resend behavior, and digest recipients. |
+| Settings → Data (`/settings/data`) | Clear the job dedup cache, and export/import `sources.json`. Importing asks for confirmation before replacing the source list. |
+| Settings → Preferences (`/settings/preferences`) | Theme, which days to check for jobs, resend behavior, and digest recipients (validated email addresses). |
 
 This app also has an in-app copy of this page at `/guide`, one click from
 any page's nav bar.
+
+On narrow screens (phones, small tablets) the main menu collapses
+behind a menu button in the header, and tables switch from a
+horizontally-scrolling grid to a stacked card layout — tap the button
+to open the menu, and scroll normally to read table rows.
 
 ## Source types & examples
 

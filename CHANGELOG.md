@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-16
+
+### Added
+
+- Main navigation collapses into a hamburger menu below a `40rem`
+  viewport width; History, Jobs, and Sources tables switch to a
+  stacked card layout at the same breakpoint (issue #34).
+- Recipient email addresses (Preferences tab) are now validated both
+  in the browser (`required` + native `type="email"` checking) and on
+  the server — a malformed address is rejected with an inline error on
+  save, and silently dropped (rather than failing the whole import) if
+  present in an imported `preferences.email_to` list (issue #34).
+- Importing settings now asks for confirmation before replacing the
+  entire source list (issue #34).
+- The History page has a **Refresh** button and auto-polls every 10
+  seconds while any listed run is still in progress, stopping once it
+  finishes (issue #34).
+
+### Fixed
+
+- Recipient email inputs now pick up the app's dark-mode styling —
+  previously `input[type="email"]` was missing from the shared input
+  CSS rule and fell back to browser-default (light) styling (issue
+  #34).
+
 ## [0.9.0] — 2026-08-16
 
 ### Added
