@@ -3,12 +3,6 @@
 {% include "settings_tabs.html" %}
 <h1>Data</h1>
 
-{% if request.query_params.get("cleared") %}
-<div class="success">Job cache cleared. The next run will re-report every currently known job as new.</div>
-{% endif %}
-{% if request.query_params.get("imported") %}
-<div class="success">Imported {{ request.query_params.get("imported") }} source(s){% if request.query_params.get("preferences") %} and preferences{% endif %}.</div>
-{% endif %}
 {% if error %}
 <div class="error">{{ error }}</div>
 {% endif %}

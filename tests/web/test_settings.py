@@ -30,6 +30,19 @@ def test_post_settings_saves_new_values(client):
     assert settings["smtp_port"] == 465
 
 
+def test_post_settings_redirect_carries_saved_flash_message(client):
+    from urllib.parse import parse_qs, urlparse
+
+    resp = client.post("/settings/email", data={
+        "smtp_host": "smtp2.example.com", "smtp_port": "465",
+        "smtp_user": "user2", "email_from": "from2@x.test",
+    }, follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/email"
+    assert parse_qs(location.query)["flash"] == ["Email settings saved."]
+
+
 def test_post_settings_rejects_file_upload_field(client):
     resp = client.post(
         "/settings/email",
@@ -119,6 +132,20 @@ def test_post_preferences_saves_days_resend_and_recipients(client):
     assert settings["email_to"] == "a@x.test,b@x.test"
 
 
+def test_post_preferences_redirect_carries_saved_flash_message(client):
+    from urllib.parse import parse_qs, urlparse
+
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon", "wed", "fri"],
+        "resend_jobs": "on",
+        "email_to": ["a@x.test", "b@x.test"],
+    }, follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/preferences"
+    assert parse_qs(location.query)["flash"] == ["Preferences saved."]
+
+
 def test_post_preferences_unchecked_resend_is_stored_as_false(client):
     client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
 
@@ -200,6 +227,8 @@ def test_settings_data_page_shows_data_tab_controls(client):
 
 
 def test_post_clear_cache_empties_jobs_and_redirects(client):
+    from urllib.parse import parse_qs, urlparse
+
     from app import db
     from app.models import Job
 
@@ -213,14 +242,19 @@ def test_post_clear_cache_empties_jobs_and_redirects(client):
     resp = client.post("/settings/data/clear-cache", follow_redirects=False)
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings/data?cleared=1"
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/data"
+    assert parse_qs(location.query)["flash"] == [
+        "Job cache cleared. The next run will re-report every currently known job as new."
+    ]
     assert db.get_new_jobs(conn, [job]) == [job]
 
 
-def test_settings_data_page_shows_success_banner_after_clear(client):
-    resp = client.get("/settings/data?cleared=1")
+def test_post_clear_cache_shows_toast_after_redirect(client):
+    resp = client.post("/settings/data/clear-cache")
 
     assert resp.status_code == 200
+    assert 'class="toast" role="status"' in resp.text
     assert "Job cache cleared" in resp.text
 
 
@@ -248,6 +282,7 @@ def test_get_export_settings_returns_sources_and_preferences_as_download(client)
 
 def test_post_import_settings_replaces_sources_and_redirects(client):
     import json
+    from urllib.parse import parse_qs, urlparse
 
     from app import config
 
@@ -262,12 +297,15 @@ def test_post_import_settings_replaces_sources_and_redirects(client):
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings/data?imported=1"
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/data"
+    assert parse_qs(location.query)["flash"] == ["Imported 1 source(s)."]
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["new"]
 
 
 def test_post_import_settings_with_preferences_overwrites_stored_preferences(client):
     import json
+    from urllib.parse import parse_qs, urlparse
 
     from app import db
 
@@ -288,7 +326,9 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings/data?imported=0&preferences=1"
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/data"
+    assert parse_qs(location.query)["flash"] == ["Imported 0 source(s) and preferences."]
     settings = db.get_settings(client.app.state.conn)
     assert settings["email_days"] == "tue,thu"
     assert settings["resend_jobs"] is False
@@ -297,6 +337,7 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
 
 def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client):
     import json
+    from urllib.parse import parse_qs, urlparse
 
     from app import db
 
@@ -310,7 +351,9 @@ def test_post_import_settings_without_preferences_key_leaves_stored_preferences_
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings/data?imported=0"
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/data"
+    assert parse_qs(location.query)["flash"] == ["Imported 0 source(s)."]
     settings = db.get_settings(client.app.state.conn)
     assert settings["email_days"] == "mon"
     assert settings["resend_jobs"] is True
@@ -341,15 +384,38 @@ def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(
     assert settings["email_to"] == ""
 
 
-def test_settings_data_page_shows_success_banner_after_import_with_preferences(client):
-    resp = client.get("/settings/data?imported=3&preferences=1")
+def test_post_import_settings_with_preferences_shows_toast_after_redirect(client):
+    import json
+
+    payload = json.dumps({
+        "sources": [{"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+                    {"id": "s2", "name": "B", "type": "greenhouse", "board_token": "b"},
+                    {"id": "s3", "name": "C", "type": "greenhouse", "board_token": "c"}],
+        "preferences": {"email_days": ["mon"], "resend_jobs": False, "email_to": ["a@x.test"]},
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
 
     assert resp.status_code == 200
     assert "Imported 3 source(s) and preferences." in resp.text
 
 
-def test_settings_data_page_shows_success_banner_after_import_without_preferences(client):
-    resp = client.get("/settings/data?imported=3")
+def test_post_import_settings_without_preferences_shows_toast_after_redirect(client):
+    import json
+
+    payload = json.dumps({
+        "sources": [{"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+                    {"id": "s2", "name": "B", "type": "greenhouse", "board_token": "b"},
+                    {"id": "s3", "name": "C", "type": "greenhouse", "board_token": "c"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
 
     assert resp.status_code == 200
     assert "Imported 3 source(s)." in resp.text
@@ -375,6 +441,7 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
     )
 
     assert resp.status_code == 400
+    assert 'class="toast" role="status"' not in resp.text
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
 
 
@@ -393,6 +460,7 @@ def test_post_preferences_rejects_malformed_email_and_does_not_save(client):
 
     assert resp.status_code == 400
     assert "Invalid email address" in resp.text
+    assert 'class="toast" role="status"' not in resp.text
 
     from app import db
     settings = db.get_settings(client.app.state.conn)
