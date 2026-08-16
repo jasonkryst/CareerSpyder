@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
@@ -14,14 +14,32 @@ router = APIRouter()
 
 PAGE_SIZE = 25
 
+_SOURCE_SORT_KEYS = {
+    "name": lambda s: (s.name or "").lower(),
+    "type": lambda s: (s.type or "").lower(),
+    "company": lambda s: (s.company or "").lower(),
+}
+
 
 @router.get("/sources", response_class=HTMLResponse)
-def list_sources(request: Request, page: str = "1"):
+def list_sources(
+    request: Request, page: str = "1", sort: str = "",
+    direction: str = Query("", alias="dir"), source_type: str = Query("", alias="type"),
+):
     all_sources = config.load_sources(request.app.state.sources_path)
+    available_types = sorted({s.type for s in all_sources})
+    if source_type:
+        all_sources = [s for s in all_sources if s.type == source_type]
+    key_fn = _SOURCE_SORT_KEYS.get(sort)
+    if key_fn:
+        all_sources = sorted(all_sources, key=key_fn, reverse=(direction == "desc"))
     pagination = paginate(len(all_sources), page, PAGE_SIZE)
     sources = all_sources[pagination.offset : pagination.offset + PAGE_SIZE]
     return templates.TemplateResponse(
-        request, "sources_list.html", {"sources": sources, "pagination": pagination}
+        request, "sources_list.html", {
+            "sources": sources, "pagination": pagination,
+            "available_types": available_types, "filters": {"type": source_type},
+        },
     )
 
 

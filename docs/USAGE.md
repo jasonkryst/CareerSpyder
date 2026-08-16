@@ -27,9 +27,9 @@ sources or changing settings.
 
 | Page | Purpose |
 |---|---|
-| Dashboard (`/`) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated table of past runs — start/finish time, new job count, failed source names. A **Refresh** button re-fetches the latest rows, and the page auto-refreshes itself every 10 seconds while a run is still in progress. |
-| Jobs (`/jobs`) | Every job ever found — company, search name, title/link, location, dates found/removed, age, emailed status, and a summary where available. |
-| Sources (`/sources`) | Table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
+| Dashboard (`/`) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. A **Refresh** button re-fetches the latest rows, and the page auto-refreshes itself every 10 seconds while a run is still in progress. |
+| Jobs (`/jobs`) | Every job ever found — company, search name, title/link, location, dates found/removed, age, emailed status, and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, and removed/emailed status. |
+| Sources (`/sources`) | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | Settings → Email (`/settings/email`) | SMTP host/port/from address (the password is a container env var, not editable here). |
 | Settings → Data (`/settings/data`) | Clear the job dedup cache, and export/import `sources.json`. Importing asks for confirmation via a themed dialog before replacing the source list. |
 | Settings → Preferences (`/settings/preferences`) | Theme, which days to check for jobs, resend behavior, and digest recipients (validated email addresses). |

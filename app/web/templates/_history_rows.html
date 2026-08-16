@@ -1,8 +1,14 @@
-<div id="history-rows" data-page="{{ pagination.page }}">
+{% from "_sort_header.html" import sort_th %}
+<div id="history-rows">
 <div class="table-scroll">
 <table>
   <thead>
-  <tr><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">New jobs</th><th scope="col">Failed sources</th></tr>
+  <tr>
+    {{ sort_th(request, '/', 'started_at', 'Started') }}
+    {{ sort_th(request, '/', 'finished_at', 'Finished') }}
+    {{ sort_th(request, '/', 'new_job_count', 'New jobs') }}
+    <th scope="col">Failed sources</th>
+  </tr>
   </thead>
   <tbody>
   {% for run in runs %}
@@ -17,8 +23,8 @@
 </table>
 </div>
 <nav aria-label="Pagination">
-  {% if pagination.has_prev %}<a href="/?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  {% if pagination.has_prev %}<a href="{{ query_url(request, '/', page=pagination.page - 1) }}">Previous</a>{% endif %}
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
-  {% if pagination.has_next %}<a href="/?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+  {% if pagination.has_next %}<a href="{{ query_url(request, '/', page=pagination.page + 1) }}">Next</a>{% endif %}
 </nav>
 </div>

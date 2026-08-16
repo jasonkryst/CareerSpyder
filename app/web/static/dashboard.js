@@ -18,8 +18,7 @@
   }
 
   function refresh() {
-    var page = container.getAttribute("data-page") || "1";
-    return fetch("/rows?page=" + encodeURIComponent(page))
+    return fetch("/rows" + window.location.search)
       .then(function (resp) { return resp.text(); })
       .then(function (html) {
         var wrapper = document.createElement("div");

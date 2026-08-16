@@ -1,17 +1,47 @@
 {% extends "base.html" %}
+{% from "_sort_header.html" import sort_th %}
 {% block content %}
 <h1>Jobs</h1>
+<form method="get" action="/jobs" class="filter-bar">
+  <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
+  <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
+  <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+  <label>Search name
+    <select name="source">
+      <option value="">All sources</option>
+      {% for name in source_names %}
+      <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="removed">
+      <option value="">All</option>
+      <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
+      <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
+    </select>
+  </label>
+  <label>Emailed
+    <select name="emailed">
+      <option value="">All</option>
+      <option value="sent" {% if filters.emailed == "sent" %}selected{% endif %}>Emailed</option>
+      <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if filters.company or filters.source or filters.removed or filters.emailed %}<a href="/jobs">Clear filters</a>{% endif %}
+</form>
 <div class="table-scroll">
 <table>
   <thead>
   <tr>
-    <th scope="col">Company</th>
+    {{ sort_th(request, '/jobs', 'company', 'Company') }}
     <th scope="col">Search name</th>
-    <th scope="col">Title</th>
+    {{ sort_th(request, '/jobs', 'title', 'Title') }}
     <th scope="col">Location</th>
-    <th scope="col">Date found</th>
+    {{ sort_th(request, '/jobs', 'first_seen_at', 'Date found') }}
     <th scope="col">Removed</th>
-    <th scope="col">Age (days)</th>
+    {{ sort_th(request, '/jobs', 'age_days', 'Age (days)') }}
     <th scope="col">Emailed</th>
     <th scope="col">Summary</th>
   </tr>
@@ -34,8 +64,8 @@
 </table>
 </div>
 <nav aria-label="Pagination">
-  {% if pagination.has_prev %}<a href="/jobs?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  {% if pagination.has_prev %}<a href="{{ query_url(request, '/jobs', page=pagination.page - 1) }}">Previous</a>{% endif %}
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
-  {% if pagination.has_next %}<a href="/jobs?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+  {% if pagination.has_next %}<a href="{{ query_url(request, '/jobs', page=pagination.page + 1) }}">Next</a>{% endif %}
 </nav>
 {% endblock %}

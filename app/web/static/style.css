@@ -321,6 +321,23 @@ label:has(> input[type="radio"]) {
   margin-bottom: var(--space-4);
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+th a {
+  color: inherit;
+  text-decoration: none;
+}
+
+th a:hover {
+  text-decoration: underline;
+}
+
 .hint {
   background: var(--bg-elevated);
   border-left: 4px solid var(--accent);
