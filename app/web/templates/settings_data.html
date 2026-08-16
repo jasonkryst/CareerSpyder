@@ -26,7 +26,9 @@ email as a result.</p>
 <div class="card">
 <h2>Export/Import settings</h2>
 <p><a href="/settings/data/export">Export settings</a></p>
-<form method="post" action="/settings/data/import" enctype="multipart/form-data" id="import-form">
+<form method="post" action="/settings/data/import" enctype="multipart/form-data" id="import-form"
+      data-confirm-title="Import settings"
+      data-confirm-message="Importing will replace your entire source list. Continue?">
   <label>Import settings <input type="file" name="file" accept="application/json"></label>
   <button type="submit">Import</button>
 </form>
@@ -34,15 +36,4 @@ email as a result.</p>
 file. Preferences (check days, resend, recipients) are only replaced if the
 file includes a <code>preferences</code> section.</p>
 </div>
-<script>
-(function () {
-  var form = document.getElementById("import-form");
-  if (!form) return;
-  form.addEventListener("submit", function (event) {
-    if (!confirm("Importing will replace your entire source list. Continue?")) {
-      event.preventDefault();
-    }
-  });
-})();
-</script>
 {% endblock %}
