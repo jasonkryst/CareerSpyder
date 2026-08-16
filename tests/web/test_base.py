@@ -123,3 +123,10 @@ def test_style_css_defines_card_table_breakpoint(client):
     assert resp.status_code == 200
     assert "@media (max-width: 40rem)" in resp.text
     assert "attr(data-label)" in resp.text
+
+
+def test_style_css_wraps_long_unbroken_text(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "overflow-wrap: anywhere" in resp.text

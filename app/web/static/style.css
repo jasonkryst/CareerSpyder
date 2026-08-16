@@ -214,6 +214,7 @@ main {
   max-width: 60rem;
   margin: 0 auto;
   padding: var(--space-5) var(--space-4);
+  overflow-wrap: break-word;
 }
 
 footer {
@@ -336,6 +337,7 @@ code {
   padding: 0.1rem 0.3rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.875em;
+  overflow-wrap: anywhere;
 }
 
 fieldset {
