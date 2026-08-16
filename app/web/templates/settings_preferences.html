@@ -3,6 +3,10 @@
 {% include "settings_tabs.html" %}
 <h1>Preferences</h1>
 
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
 <div class="card">
   <fieldset>
     <legend>Theme</legend>
@@ -39,14 +43,14 @@
     <div id="email-recipients">
       {% for email in email_to_list %}
       <div class="recipient-row">
-        <input type="email" name="email_to" value="{{ email }}" placeholder="name@example.com">
+        <input type="email" name="email_to" value="{{ email }}" placeholder="name@example.com" required>
         <button type="button" class="remove-recipient">Remove</button>
       </div>
       {% endfor %}
     </div>
     <template id="email-recipient-template">
       <div class="recipient-row">
-        <input type="email" name="email_to" placeholder="name@example.com">
+        <input type="email" name="email_to" placeholder="name@example.com" required>
         <button type="button" class="remove-recipient">Remove</button>
       </div>
     </template>
