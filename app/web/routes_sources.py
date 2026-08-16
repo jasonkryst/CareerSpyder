@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 from app import config
 from app.adapters import ADAPTERS
 from app.textutils import safe_url_scheme
+from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.source_form import echo_source, source_from_form
 from app.web.templating import templates
@@ -49,7 +50,7 @@ def delete_source(request: Request, source_id: str):
         config.delete_source(request.app.state.sources_path, source_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Source not found")
-    return RedirectResponse(url="/sources", status_code=303)
+    return flash_redirect("/sources", "Source deleted.")
 
 
 @router.get("/sources/new", response_class=HTMLResponse)
@@ -70,7 +71,7 @@ async def create_source(request: Request):
             status_code=400,
         )
     config.add_source(request.app.state.sources_path, source)
-    return RedirectResponse(url="/sources", status_code=303)
+    return flash_redirect("/sources", "Source added.")
 
 
 @router.get("/sources/{source_id}/edit", response_class=HTMLResponse)
@@ -105,7 +106,7 @@ async def update_source(request: Request, source_id: str):
         config.update_source(request.app.state.sources_path, source_id, source)
     except KeyError:
         raise HTTPException(status_code=404, detail="Source not found")
-    return RedirectResponse(url="/sources", status_code=303)
+    return flash_redirect("/sources", "Source saved.")
 
 
 @router.post("/sources/test-preview")

@@ -28,11 +28,24 @@ def test_post_new_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/sources"
+    assert resp.headers["location"].startswith("/sources?flash=")
     with open(client.app.state.sources_path) as f:
         saved = json.load(f)["sources"]
     assert saved[0]["name"] == "Acme"
     assert saved[0]["board_token"] == "acme"
+
+
+def test_post_new_source_redirect_carries_added_flash_message(client):
+    from urllib.parse import parse_qs, urlparse
+
+    resp = client.post("/sources/new", data={
+        "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "acme",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/sources"
+    assert parse_qs(location.query)["flash"] == ["Source added."]
 
 
 def test_edit_form_prefills_existing_values(client):
@@ -220,6 +233,24 @@ def test_post_edit_updates_existing_source(client):
     assert saved[0]["id"] == "s1"
 
 
+def test_post_edit_redirect_carries_saved_flash_message(client):
+    from urllib.parse import parse_qs, urlparse
+
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        ]}, f)
+
+    resp = client.post("/sources/s1/edit", data={
+        "id": "s1", "type": "greenhouse", "name": "Acme Renamed", "board_token": "acme",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/sources"
+    assert parse_qs(location.query)["flash"] == ["Source saved."]
+
+
 def test_post_new_source_with_empty_board_token_shows_error_and_does_not_save(client):
     resp = client.post("/sources/new", data={
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "",
@@ -228,6 +259,7 @@ def test_post_new_source_with_empty_board_token_shows_error_and_does_not_save(cl
 
     assert resp.status_code == 400
     assert "Add source" in resp.text
+    assert 'class="toast" role="status"' not in resp.text
     with open(client.app.state.sources_path) as f:
         assert json.load(f)["sources"] == []
 
