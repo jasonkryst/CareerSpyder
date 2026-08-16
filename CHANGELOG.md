@@ -5,6 +5,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-08-16
+
+### Fixed
+
+- The source form had no visible URL field for `linkedin`/`indeed` sources
+  — the only URL input lived inside the (hidden, for those types)
+  `generic_html` fields panel, so there was no way to enter or edit one
+  (issue #35). URL, and separately `max_pages`, are now each a single
+  shared input revealed for every type that uses it.
+- `max_pages` silently reverted to a type's default on save. Each of
+  `infor`/`talentbrew`/`workday`/`findly` rendered its own `<input
+  name="max_pages">`; a browser submits every same-named field in the DOM
+  regardless of visibility, so on save the last one in document order
+  silently overwrote whichever type was actually selected (issue #36).
+  Consolidated to one shared field per the fix above.
+
+### Added
+
+- The "Test this source" preview on the source form now renders results
+  as a table (Title, URL) instead of a long bullet list, paginated at 25
+  rows per page (issue #37). Result URLs are scheme-sanitized
+  server-side before being linked, matching the existing `/jobs`-page
+  treatment of scraped URLs.
+
 ## [0.10.0] — 2026-08-16
 
 ### Added

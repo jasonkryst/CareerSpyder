@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app import config
 from app.adapters import ADAPTERS
+from app.textutils import safe_url_scheme
 from app.web.pagination import paginate
 from app.web.source_form import echo_source, source_from_form
 from app.web.templating import templates
@@ -103,4 +104,4 @@ async def test_source_preview(request: Request):
         jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
-    return {"jobs": [{"title": j.title, "url": j.url} for j in jobs]}
+    return {"jobs": [{"title": j.title, "url": safe_url_scheme(j.url)} for j in jobs]}

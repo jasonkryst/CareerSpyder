@@ -1,5 +1,7 @@
 import json
 
+from bs4 import BeautifulSoup
+
 
 def test_new_source_form_renders(client):
     resp = client.get("/sources/new")
@@ -299,3 +301,225 @@ def test_edit_ignores_tampered_hidden_id_field(client):
     assert s1["name"] == "Acme Renamed"
     s2 = next(s for s in saved if s["id"] == "s2")
     assert s2["name"] == "Beta"
+
+
+def test_post_new_linkedin_source_saves_and_redirects(client):
+    resp = client.post("/sources/new", data={
+        "type": "linkedin", "name": "Acme (LinkedIn)",
+        "url": "https://www.linkedin.com/jobs/search/?keywords=backend+engineer",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["type"] == "linkedin"
+    assert saved[0]["url"] == "https://www.linkedin.com/jobs/search/?keywords=backend+engineer"
+
+
+def test_post_new_linkedin_source_with_empty_url_shows_error_and_does_not_save(client):
+    resp = client.post("/sources/new", data={
+        "type": "linkedin", "name": "Acme (LinkedIn)", "url": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    with open(client.app.state.sources_path) as f:
+        assert json.load(f)["sources"] == []
+
+
+def test_post_new_indeed_source_saves_and_redirects(client):
+    resp = client.post("/sources/new", data={
+        "type": "indeed", "name": "Acme (Indeed)",
+        "url": "https://www.indeed.com/jobs?q=backend+engineer",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["type"] == "indeed"
+    assert saved[0]["url"] == "https://www.indeed.com/jobs?q=backend+engineer"
+
+
+def test_post_new_indeed_source_with_empty_url_shows_error_and_does_not_save(client):
+    resp = client.post("/sources/new", data={
+        "type": "indeed", "name": "Acme (Indeed)", "url": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    with open(client.app.state.sources_path) as f:
+        assert json.load(f)["sources"] == []
+
+
+def test_url_field_appears_exactly_once_in_source_form(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    assert len(soup.find_all("input", {"name": "url"})) == 1
+
+
+def test_url_field_shown_for_generic_html_linkedin_and_indeed(client):
+    """Regression for #35: the url input must live in a container that's
+    revealed for generic_html, linkedin, AND indeed, not just generic_html
+    — otherwise there is no way to enter a url when linkedin/indeed is
+    selected."""
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    url_input = soup.find("input", {"name": "url"})
+    container = url_input.find_parent(attrs={"data-types": True})
+    assert container is not None
+    assert set(container["data-types"].split()) == {"generic_html", "linkedin", "indeed"}
+
+
+def test_edit_form_prefills_url_for_linkedin_source(client):
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme (LinkedIn)", "type": "linkedin",
+             "url": "https://www.linkedin.com/jobs/search/?keywords=eng"},
+        ]}, f)
+
+    resp = client.get("/sources/s1/edit")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    url_input = soup.find("input", {"name": "url"})
+    assert url_input["value"] == "https://www.linkedin.com/jobs/search/?keywords=eng"
+
+
+def test_edit_form_prefills_url_for_indeed_source(client):
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme (Indeed)", "type": "indeed",
+             "url": "https://www.indeed.com/jobs?q=eng"},
+        ]}, f)
+
+    resp = client.get("/sources/s1/edit")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    url_input = soup.find("input", {"name": "url"})
+    assert url_input["value"] == "https://www.indeed.com/jobs?q=eng"
+
+
+def test_max_pages_field_appears_exactly_once_in_source_form(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    assert len(soup.find_all("input", {"name": "max_pages"})) == 1
+
+
+def test_max_pages_field_shown_for_infor_talentbrew_workday_and_findly(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    max_pages_input = soup.find("input", {"name": "max_pages"})
+    container = max_pages_input.find_parent(attrs={"data-types": True})
+    assert container is not None
+    assert set(container["data-types"].split()) == {"infor", "talentbrew", "workday", "findly"}
+
+
+def test_edit_form_prefills_max_pages_for_workday_source(client):
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Duly (Workday)", "type": "workday",
+             "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+             "max_pages": 45},
+        ]}, f)
+
+    resp = client.get("/sources/s1/edit")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    max_pages_input = soup.find("input", {"name": "max_pages"})
+    assert max_pages_input["value"] == "45"
+
+
+def _rendered_form_fields(html: str) -> dict:
+    """Extract name->value pairs the way a real browser's FormData would
+    when submitting this form: every input regardless of CSS visibility,
+    with unchecked checkboxes simply absent."""
+    soup = BeautifulSoup(html, "html.parser")
+    form = soup.find("form")
+    fields: dict[str, str] = {}
+    for inp in form.find_all("input"):
+        name = inp.get("name")
+        if not name:
+            continue
+        if inp.get("type") == "checkbox":
+            if inp.has_attr("checked"):
+                fields[name] = "on"
+            continue
+        fields[name] = inp.get("value", "")
+    select = form.find("select", {"name": "type"})
+    selected = select.find("option", selected=True) or select.find("option")
+    fields["type"] = selected["value"]
+    return fields
+
+
+def test_post_edit_resubmitting_rendered_workday_form_preserves_max_pages(client):
+    """Regression for #36: a browser submits every max_pages input in the
+    DOM (even hidden ones); if more than one shares that name, the wrong
+    (last-in-DOM) value silently overwrites the real one on save."""
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Duly (Workday)", "type": "workday",
+             "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+             "max_pages": 77},
+        ]}, f)
+
+    edit_page = client.get("/sources/s1/edit")
+    fields = _rendered_form_fields(edit_page.text)
+
+    resp = client.post("/sources/s1/edit", data=fields, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["max_pages"] == 77
+
+
+def test_post_edit_resubmitting_rendered_findly_form_preserves_max_pages(client):
+    with open(client.app.state.sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Advocate Health (Findly)", "type": "findly",
+             "org_id": "2297", "career_site_url": "https://careers.aah.org",
+             "max_pages": 33},
+        ]}, f)
+
+    edit_page = client.get("/sources/s1/edit")
+    fields = _rendered_form_fields(edit_page.text)
+
+    resp = client.post("/sources/s1/edit", data=fields, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with open(client.app.state.sources_path) as f:
+        saved = json.load(f)["sources"]
+    assert saved[0]["max_pages"] == 33
+
+
+def test_test_results_render_as_a_table_not_a_bullet_list(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    assert soup.find(id="test-results-body") is not None
+    thead = soup.find(id="test-results-wrap").find("thead")
+    headers = [th.get_text(strip=True) for th in thead.find_all("th")]
+    assert headers == ["Title", "URL"]
+    assert 'createElement("ul")' not in resp.text
+
+
+def test_test_results_have_pagination_controls(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    pagination = soup.find(id="test-results-pagination")
+    assert pagination is not None
+    assert pagination.find(id="test-results-prev") is not None
+    assert pagination.find(id="test-results-next") is not None
+    assert pagination.find(id="test-results-page-info") is not None
+
+
+def test_test_results_page_size_is_25(client):
+    resp = client.get("/sources/new")
+
+    assert "RESULTS_PAGE_SIZE = 25" in resp.text
