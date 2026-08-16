@@ -170,6 +170,46 @@ nav[aria-label="Settings tabs"] {
   margin-bottom: var(--space-5);
 }
 
+.nav-toggle {
+  display: none;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 40rem) {
+  .nav-toggle {
+    display: inline-block;
+  }
+
+  nav[aria-label="Main"] {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  nav[aria-label="Main"].open {
+    display: flex;
+  }
+}
+
 main {
   max-width: 60rem;
   margin: 0 auto;
