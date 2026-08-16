@@ -68,6 +68,29 @@ def test_jobs_page_shows_emailed_timestamp(client):
     assert emailed_at in resp.text
 
 
+def test_jobs_page_title_link_opens_in_new_tab_with_icon(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job()], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'target="_blank"' in resp.text
+    assert 'rel="noopener noreferrer"' in resp.text
+    assert "&#8599;" in resp.text
+    assert "(opens in new tab)" in resp.text
+
+
+def test_jobs_page_internal_nav_link_is_not_target_blank(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    nav_jobs_link = soup.select_one('nav[aria-label="Main"] a[href="/jobs"]')
+
+    assert nav_jobs_link is not None
+    assert nav_jobs_link.get("target") is None
+
+
 def test_jobs_page_second_page_shows_older_jobs(client):
     conn = client.app.state.conn
     jobs = [make_job(key=f"k{i}", title=f"Job {i}") for i in range(30)]
