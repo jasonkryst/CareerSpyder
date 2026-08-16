@@ -1,0 +1,5 @@
+{% macro sort_th(request, path, field, label) -%}
+{%- set active = request.query_params.get('sort', '') == field -%}
+{%- set desc = request.query_params.get('dir', '') == 'desc' -%}
+<th scope="col"{% if active %} aria-sort="{{ 'descending' if desc else 'ascending' }}"{% endif %}><a href="{{ sort_url(request, path, field) }}">{{ label }}{% if active %} {{ '▼' if desc else '▲' }}{% endif %}</a></th>
+{%- endmacro %}
