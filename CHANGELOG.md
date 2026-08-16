@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-16
+
+### Added
+
+- Settings export/import (Data tab) now also covers Preferences-tab
+  settings — check days, resend behavior, and digest recipients —
+  alongside the existing source list, in one `settings.json` file
+  (issue #29). `preferences` is optional in an uploaded file; if
+  absent, stored preferences are left untouched, so old sources-only
+  exports still import cleanly.
+
 ## [0.8.0] — 2026-08-14
 
 ### Added
