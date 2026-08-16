@@ -7,7 +7,7 @@
 <div class="success">Job cache cleared. The next run will re-report every currently known job as new.</div>
 {% endif %}
 {% if request.query_params.get("imported") %}
-<div class="success">Imported {{ request.query_params.get("imported") }} source(s).</div>
+<div class="success">Imported {{ request.query_params.get("imported") }} source(s){% if request.query_params.get("preferences") %} and preferences{% endif %}.</div>
 {% endif %}
 {% if error %}
 <div class="error">{{ error }}</div>
@@ -24,12 +24,14 @@ email as a result.</p>
 </div>
 
 <div class="card">
-<h2>Sources</h2>
-<p><a href="/settings/data/sources/export">Export sources</a></p>
-<form method="post" action="/settings/data/sources/import" enctype="multipart/form-data">
-  <label>Import sources <input type="file" name="file" accept="application/json"></label>
+<h2>Export/Import settings</h2>
+<p><a href="/settings/data/export">Export settings</a></p>
+<form method="post" action="/settings/data/import" enctype="multipart/form-data">
+  <label>Import settings <input type="file" name="file" accept="application/json"></label>
   <button type="submit">Import</button>
 </form>
-<p>Importing replaces the entire source list with the contents of the uploaded file.</p>
+<p>Importing replaces the entire source list with the contents of the uploaded
+file. Preferences (check days, resend, recipients) are only replaced if the
+file includes a <code>preferences</code> section.</p>
 </div>
 {% endblock %}
