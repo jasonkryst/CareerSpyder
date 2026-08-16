@@ -221,7 +221,7 @@ button:hover {
   border-color: var(--accent);
 }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="email"], input[type="number"], select {
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);

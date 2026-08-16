@@ -92,3 +92,10 @@ def test_style_css_defines_hint_and_code_rules(client):
     assert resp.status_code == 200
     assert ".hint {" in resp.text
     assert "code {" in resp.text
+
+
+def test_style_css_styles_email_inputs_like_text_inputs(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert 'input[type="text"], input[type="email"], input[type="number"], select {' in resp.text
