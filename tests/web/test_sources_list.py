@@ -93,3 +93,16 @@ def test_sources_table_cells_have_data_labels(client):
 
     for label in ("Name", "Type", "Company", "Edit", "Delete"):
         assert f'data-label="{label}"' in resp.text
+
+
+def test_delete_form_has_confirm_guard(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+        ]}, f)
+
+    resp = client.get("/sources")
+
+    assert 'data-confirm-title="Delete source"' in resp.text
+    assert "Delete &quot;Acme (Greenhouse)&quot;? This can't be undone." in resp.text

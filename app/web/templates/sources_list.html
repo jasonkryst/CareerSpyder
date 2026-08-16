@@ -15,7 +15,9 @@
     <td data-label="Company">{{ s.company or "" }}</td>
     <td data-label="Edit"><a href="/sources/{{ s.id }}/edit">Edit</a></td>
     <td data-label="Delete">
-      <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline">
+      <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline"
+            data-confirm-title="Delete source"
+            data-confirm-message="Delete &quot;{{ s.name }}&quot;? This can't be undone.">
         <button type="submit">Delete</button>
       </form>
     </td>

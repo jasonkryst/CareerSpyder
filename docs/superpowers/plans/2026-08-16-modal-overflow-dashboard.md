@@ -1326,29 +1326,40 @@ def test_dismissing_modal_keeps_the_source(live_server, page):
     page.click('button[type="submit"]')
     page.wait_for_url("**/sources")
 
-    page.click('form:has-text("Acme (Greenhouse)") button:has-text("Delete")')
+    page.click('tr:has-text("Acme (Greenhouse)") button:has-text("Delete")')
     page.wait_for_selector("#confirm-modal[open]")
     page.click("#confirm-modal-cancel")
 
     page.wait_for_timeout(300)
-    assert page.locator('text=Acme (Greenhouse)').count() == 1
+    assert page.locator('td[data-label="Name"]', has_text="Acme (Greenhouse)").count() == 1
 
 
 def test_confirming_modal_deletes_the_source(live_server, page):
     page.goto(live_server + "/sources/new")
-    page.fill('input[name="name"]', "Beta (Lever)")
-    page.select_option('select[name="type"]', "lever")
+    page.fill('input[name="name"]', "Beta (Greenhouse)")
+    page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "beta")
     page.click('button[type="submit"]')
     page.wait_for_url("**/sources")
 
-    page.click('form:has-text("Beta (Lever)") button:has-text("Delete")')
+    page.click('tr:has-text("Beta (Greenhouse)") button:has-text("Delete")')
     page.wait_for_selector("#confirm-modal[open]")
     page.click("#confirm-modal-confirm")
 
     page.wait_for_timeout(300)
-    assert page.locator('text=Beta (Lever)').count() == 0
+    assert page.locator('td[data-label="Name"]', has_text="Beta (Greenhouse)").count() == 0
 ```
+
+Note on deviation from the original plan text: `form:has-text(...)` doesn't
+match because the source name lives in a sibling `<td>`, not inside the
+delete `<form>` — use `tr:has-text(...)` instead. Also, the bare
+`text=...` locator matches the (hidden but still present) confirm-modal's
+message paragraph too, since it retains its last-set text after closing —
+scope to `td[data-label="Name"]` instead. And `lever` was swapped for a
+second `greenhouse` source: the source form only renders the shared
+`board_token` input inside the `greenhouse` `type-fields` block (see
+`app/web/templates/source_form.html`), so it's invisible when `lever` is
+selected — a pre-existing quirk, out of scope to fix here.
 
 - [ ] **Step 6: Run the e2e test**
 
