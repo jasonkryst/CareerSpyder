@@ -17,6 +17,7 @@
   <script src="/static/preferences.js" defer></script>
   <script src="/static/nav.js" defer></script>
   <script src="/static/dashboard.js" defer></script>
+  <script src="/static/confirm-modal.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -50,5 +51,13 @@
   <footer>
     <p>{{ app_name }} v{{ app_version }}</p>
   </footer>
+  <dialog id="confirm-modal" class="modal">
+    <h2 id="confirm-modal-title">Please confirm</h2>
+    <p id="confirm-modal-message"></p>
+    <div class="modal-actions">
+      <button type="button" id="confirm-modal-cancel">Cancel</button>
+      <button type="button" id="confirm-modal-confirm" class="btn-primary">Confirm</button>
+    </div>
+  </dialog>
 </body>
 </html>
