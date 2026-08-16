@@ -1,11 +1,32 @@
 {% extends "base.html" %}
+{% from "_sort_header.html" import sort_th %}
 {% block content %}
 <h1>Sources</h1>
 <a href="/sources/new">Add source</a>
+<form method="get" action="/sources" class="filter-bar">
+  <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
+  <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
+  <label>Type
+    <select name="type">
+      <option value="">All types</option>
+      {% for t in available_types %}
+      <option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if filters.type %}<a href="/sources">Clear filters</a>{% endif %}
+</form>
 <div class="table-scroll">
 <table>
   <thead>
-  <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Company</th><th scope="col">Edit</th><th scope="col">Delete</th></tr>
+  <tr>
+    {{ sort_th(request, '/sources', 'name', 'Name') }}
+    {{ sort_th(request, '/sources', 'type', 'Type') }}
+    {{ sort_th(request, '/sources', 'company', 'Company') }}
+    <th scope="col">Edit</th>
+    <th scope="col">Delete</th>
+  </tr>
   </thead>
   <tbody>
   {% for s in sources %}
@@ -27,8 +48,8 @@
 </table>
 </div>
 <nav aria-label="Pagination">
-  {% if pagination.has_prev %}<a href="/sources?page={{ pagination.page - 1 }}">Previous</a>{% endif %}
+  {% if pagination.has_prev %}<a href="{{ query_url(request, '/sources', page=pagination.page - 1) }}">Previous</a>{% endif %}
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
-  {% if pagination.has_next %}<a href="/sources?page={{ pagination.page + 1 }}">Next</a>{% endif %}
+  {% if pagination.has_next %}<a href="{{ query_url(request, '/sources', page=pagination.page + 1) }}">Next</a>{% endif %}
 </nav>
 {% endblock %}

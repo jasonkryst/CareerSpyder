@@ -106,3 +106,91 @@ def test_delete_form_has_confirm_guard(client):
 
     assert 'data-confirm-title="Delete source"' in resp.text
     assert "Delete &quot;Acme (Greenhouse)&quot;? This can't be undone." in resp.text
+
+
+def test_sources_list_sorts_by_name_ascending(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
+            {"id": "s2", "name": "Acme", "type": "greenhouse", "board_token": "a"},
+        ]}, f)
+
+    resp = client.get("/sources?sort=name&dir=asc")
+
+    assert resp.text.index("Acme") < resp.text.index("Zeta")
+
+
+def test_sources_list_sorts_by_name_descending(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "a"},
+            {"id": "s2", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
+        ]}, f)
+
+    resp = client.get("/sources?sort=name&dir=desc")
+
+    assert resp.text.index("Zeta") < resp.text.index("Acme")
+
+
+def test_sources_list_filters_by_type(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "A Source", "type": "greenhouse", "board_token": "a"},
+            {"id": "s2", "name": "B Source", "type": "lever", "board_token": "b"},
+        ]}, f)
+
+    resp = client.get("/sources?type=lever")
+
+    assert 'data-label="Name">B Source' in resp.text
+    assert 'data-label="Name">A Source' not in resp.text
+
+
+def test_sources_list_type_filter_options_only_include_present_types(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+        ]}, f)
+
+    resp = client.get("/sources")
+
+    assert '<option value="greenhouse"' in resp.text
+    assert '<option value="lever"' not in resp.text
+
+
+def test_sources_list_invalid_sort_does_not_error(client):
+    resp = client.get("/sources?sort=nonsense")
+    assert resp.status_code == 200
+
+
+def test_sources_list_second_page_still_shows_remaining_sources_unsorted(client):
+    sources_path = client.app.state.sources_path
+    sources = [
+        {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
+        for i in range(30)
+    ]
+    with open(sources_path, "w") as f:
+        json.dump({"sources": sources}, f)
+
+    page1 = client.get("/sources?page=1")
+
+    assert "Source 0" in page1.text
+
+
+def test_sources_list_sort_headers_have_aria_sort_when_active(client):
+    resp = client.get("/sources?sort=name&dir=asc")
+    assert 'aria-sort="ascending"' in resp.text
+
+
+def test_sources_list_clear_filters_link_shown_when_filter_active(client):
+    resp = client.get("/sources?type=greenhouse")
+    assert 'href="/sources"' in resp.text
+    assert "Clear filters" in resp.text
+
+
+def test_sources_list_clear_filters_link_hidden_when_no_filter_active(client):
+    resp = client.get("/sources")
+    assert "Clear filters" not in resp.text
