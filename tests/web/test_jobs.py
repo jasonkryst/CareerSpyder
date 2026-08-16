@@ -126,3 +126,87 @@ def test_jobs_table_cells_have_data_labels(client):
     for label in ("Company", "Search name", "Title", "Location", "Date found",
                   "Removed", "Age (days)", "Emailed", "Summary"):
         assert f'data-label="{label}"' in resp.text
+
+
+def test_jobs_page_sort_by_company_orders_rows(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="a", company="Zeta")], run_id)
+    db.save_jobs(conn, [make_job(key="b", company="Acme")], run_id)
+
+    resp = client.get("/jobs?sort=company&dir=asc")
+
+    assert resp.text.index("Acme") < resp.text.index("Zeta")
+
+
+def test_jobs_page_filters_by_company(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="a", company="Acme")], run_id)
+    db.save_jobs(conn, [make_job(key="b", company="Zeta")], run_id)
+
+    resp = client.get("/jobs?company=Acme")
+
+    assert "Acme" in resp.text
+    assert "Zeta" not in resp.text
+
+
+def test_jobs_page_filter_dropdown_lists_distinct_source_names(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", source_name="Acme Board")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert '<option value="Acme Board"' in resp.text
+
+
+def test_jobs_page_invalid_sort_does_not_error(client):
+    resp = client.get("/jobs?sort=nonsense")
+
+    assert resp.status_code == 200
+
+
+def test_jobs_page_empty_filter_matches_none_renders_empty_table(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", company="Acme")], db.start_run(conn))
+
+    resp = client.get("/jobs?company=NoSuchCompany")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 1" in resp.text
+    assert 'data-label="Company">Acme' not in resp.text
+
+
+def test_jobs_page_clear_filters_link_hidden_when_no_filter_active(client):
+    resp = client.get("/jobs")
+    assert "Clear filters" not in resp.text
+
+
+def test_jobs_page_clear_filters_link_shown_when_filter_active(client):
+    resp = client.get("/jobs?company=Acme")
+    assert 'href="/jobs"' in resp.text
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_page_sortable_headers_have_aria_sort_when_active(client):
+    resp = client.get("/jobs?sort=company&dir=asc")
+    assert 'aria-sort="ascending"' in resp.text
+
+
+def test_jobs_page_removed_and_emailed_filters_narrow_results(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a")], db.start_run(conn))
+    db.mark_emailed(conn, ["a"])
+
+    company_cell = 'data-label="Company">Acme'
+    assert company_cell in client.get("/jobs?emailed=sent").text
+    assert company_cell not in client.get("/jobs?emailed=not_sent").text
+    assert company_cell in client.get("/jobs?removed=active").text
+    assert company_cell not in client.get("/jobs?removed=removed").text
+
+
+def test_jobs_page_filter_form_preserves_active_sort_via_hidden_fields(client):
+    resp = client.get("/jobs?sort=company&dir=asc")
+
+    assert '<input type="hidden" name="sort" value="company">' in resp.text
+    assert '<input type="hidden" name="dir" value="asc">' in resp.text
