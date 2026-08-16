@@ -378,6 +378,13 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
 
 
+def test_settings_data_import_form_has_confirm_guard(client):
+    resp = client.get("/settings/data")
+
+    assert 'id="import-form"' in resp.text
+    assert "confirm(" in resp.text
+
+
 def test_post_preferences_rejects_malformed_email_and_does_not_save(client):
     resp = client.post("/settings/preferences", data={
         "email_days": ["mon"], "email_to": ["not-an-email"],
