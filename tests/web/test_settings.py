@@ -194,8 +194,8 @@ def test_settings_data_page_shows_data_tab_controls(client):
 
     assert resp.status_code == 200
     assert 'action="/settings/data/clear-cache"' in resp.text
-    assert 'href="/settings/data/sources/export"' in resp.text
-    assert 'action="/settings/data/sources/import"' in resp.text
+    assert 'href="/settings/data/export"' in resp.text
+    assert 'action="/settings/data/import"' in resp.text
     assert 'name="file"' in resp.text
 
 
@@ -224,7 +224,7 @@ def test_settings_data_page_shows_success_banner_after_clear(client):
     assert "Job cache cleared" in resp.text
 
 
-def test_get_export_sources_returns_current_sources_as_download(client):
+def test_get_export_settings_returns_sources_and_preferences_as_download(client):
     import json
 
     from app import config
@@ -232,15 +232,21 @@ def test_get_export_sources_returns_current_sources_as_download(client):
     source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
     config.add_source(client.app.state.sources_path, source)
 
-    resp = client.get("/settings/data/sources/export")
+    resp = client.get("/settings/data/export")
 
     assert resp.status_code == 200
     assert "attachment" in resp.headers["content-disposition"]
-    assert "sources.json" in resp.headers["content-disposition"]
-    assert json.loads(resp.text) == {"sources": [source.model_dump()]}
+    assert "settings.json" in resp.headers["content-disposition"]
+    body = json.loads(resp.text)
+    assert body["sources"] == [source.model_dump()]
+    assert body["preferences"] == {
+        "email_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+        "resend_jobs": False,
+        "email_to": ["to@x.test"],
+    }
 
 
-def test_post_import_sources_replaces_list_and_redirects(client):
+def test_post_import_settings_replaces_sources_and_redirects(client):
     import json
 
     from app import config
@@ -250,8 +256,8 @@ def test_post_import_sources_replaces_list_and_redirects(client):
     }).encode()
 
     resp = client.post(
-        "/settings/data/sources/import",
-        files={"file": ("sources.json", payload, "application/json")},
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
         follow_redirects=False,
     )
 
@@ -260,28 +266,111 @@ def test_post_import_sources_replaces_list_and_redirects(client):
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["new"]
 
 
-def test_settings_data_page_shows_success_banner_after_import(client):
+def test_post_import_settings_with_preferences_overwrites_stored_preferences(client):
+    import json
+
+    from app import db
+
+    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["tue", "thu"],
+            "resend_jobs": False,
+            "email_to": ["new@x.test"],
+        },
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings/data?imported=0&preferences=1"
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_days"] == "tue,thu"
+    assert settings["resend_jobs"] is False
+    assert settings["email_to"] == "new@x.test"
+
+
+def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client):
+    import json
+
+    from app import db
+
+    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    payload = json.dumps({"sources": []}).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings/data?imported=0"
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_days"] == "mon"
+    assert settings["resend_jobs"] is True
+    assert settings["email_to"] == "old@x.test"
+
+
+def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(client):
+    import json
+
+    from app import db
+
+    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {"email_days": "mon", "resend_jobs": "yes", "email_to": "not-a-list@x.test"},
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_days"] == ""
+    assert settings["resend_jobs"] is False
+    assert settings["email_to"] == ""
+
+
+def test_settings_data_page_shows_success_banner_after_import_with_preferences(client):
+    resp = client.get("/settings/data?imported=3&preferences=1")
+
+    assert resp.status_code == 200
+    assert "Imported 3 source(s) and preferences." in resp.text
+
+
+def test_settings_data_page_shows_success_banner_after_import_without_preferences(client):
     resp = client.get("/settings/data?imported=3")
 
     assert resp.status_code == 200
-    assert "Imported 3 source(s)" in resp.text
+    assert "Imported 3 source(s)." in resp.text
+    assert "and preferences" not in resp.text
 
 
-def test_post_import_sources_with_no_file_returns_400(client):
-    resp = client.post("/settings/data/sources/import", data={})
+def test_post_import_settings_with_no_file_returns_400(client):
+    resp = client.post("/settings/data/import", data={})
 
     assert resp.status_code == 400
     assert "Choose a file" in resp.text
 
 
-def test_post_import_sources_with_invalid_json_returns_400_and_leaves_sources(client):
+def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(client):
     from app import config
 
     source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
     config.add_source(client.app.state.sources_path, source)
 
     resp = client.post(
-        "/settings/data/sources/import",
+        "/settings/data/import",
         files={"file": ("bad.json", b"not json", "application/json")},
     )
 
@@ -289,7 +378,7 @@ def test_post_import_sources_with_invalid_json_returns_400_and_leaves_sources(cl
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
 
 
-def test_post_import_sources_with_unknown_type_returns_400_and_leaves_sources(client):
+def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_sources(client):
     import json
 
     from app import config
@@ -299,7 +388,7 @@ def test_post_import_sources_with_unknown_type_returns_400_and_leaves_sources(cl
     payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "carrier_pigeon"}]}).encode()
 
     resp = client.post(
-        "/settings/data/sources/import",
+        "/settings/data/import",
         files={"file": ("bad.json", payload, "application/json")},
     )
 
