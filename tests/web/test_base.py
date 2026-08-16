@@ -18,9 +18,9 @@ def test_base_layout_has_viewport_lang_and_skip_link(client):
 
 
 def test_nav_marks_current_page_with_aria_current(client):
-    resp = client.get("/history")
+    resp = client.get("/jobs")
 
-    assert 'href="/history" aria-current="page"' in resp.text
+    assert 'href="/jobs" aria-current="page"' in resp.text
     assert 'href="/" aria-current="page"' not in resp.text
 
 

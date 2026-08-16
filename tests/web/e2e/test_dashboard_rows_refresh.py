@@ -1,7 +1,7 @@
 def test_refresh_button_swaps_table_content(live_server, page):
-    page.goto(live_server + "/history")
+    page.goto(live_server + "/")
 
-    page.route("**/history/rows*", lambda route: route.fulfill(
+    page.route("**/rows*", lambda route: route.fulfill(
         status=200,
         content_type="text/html",
         body='<div id="history-rows" data-page="1"><div class="table-scroll"><table>'
@@ -17,9 +17,9 @@ def test_refresh_button_swaps_table_content(live_server, page):
 
 
 def test_status_region_announces_update_after_refresh(live_server, page):
-    page.goto(live_server + "/history")
+    page.goto(live_server + "/")
 
-    page.route("**/history/rows*", lambda route: route.fulfill(
+    page.route("**/rows*", lambda route: route.fulfill(
         status=200,
         content_type="text/html",
         body='<div id="history-rows" data-page="1"><div class="table-scroll"><table></table></div>'
@@ -47,8 +47,8 @@ def test_auto_poll_starts_while_in_progress_and_stops_once_finished(live_server,
                      '</table></div><nav aria-label="Pagination"><span>Page 1 of 1</span></nav></div>')
         route.fulfill(status=200, content_type="text/html", body=body)
 
-    page.route("**/history/rows*", handler)
-    page.goto(live_server + "/history")
+    page.route("**/rows*", handler)
+    page.goto(live_server + "/")
 
     page.click("#refresh-history")
     page.wait_for_function(
@@ -63,9 +63,9 @@ def test_auto_poll_starts_while_in_progress_and_stops_once_finished(live_server,
 
 
 def test_manual_refresh_works_when_nothing_is_in_progress(live_server, page):
-    page.goto(live_server + "/history")
+    page.goto(live_server + "/")
 
-    page.route("**/history/rows*", lambda route: route.fulfill(
+    page.route("**/rows*", lambda route: route.fulfill(
         status=200,
         content_type="text/html",
         body='<div id="history-rows" data-page="1"><div class="table-scroll"><table>'

@@ -7,15 +7,15 @@ def _seed_one_run(live_server, page):
     page.wait_for_url(live_server + "/")
 
     for _ in range(20):
-        page.goto(live_server + "/history")
+        page.goto(live_server + "/")
         if page.query_selector(".table-scroll td"):
             return
         time.sleep(0.25)
-    raise AssertionError("run did not appear in history in time")
+    raise AssertionError("run did not appear in the dashboard table in time")
 
 
-def test_history_table_is_grid_at_desktop_width(live_server, page):
-    page.goto(live_server + "/history")
+def test_dashboard_table_is_grid_at_desktop_width(live_server, page):
+    page.goto(live_server + "/")
 
     thead_display = page.eval_on_selector(
         '.table-scroll thead, .table-scroll tr:first-child',
@@ -24,11 +24,11 @@ def test_history_table_is_grid_at_desktop_width(live_server, page):
     assert thead_display != "none"
 
 
-def test_history_table_becomes_cards_at_narrow_width(live_server, page):
+def test_dashboard_table_becomes_cards_at_narrow_width(live_server, page):
     _seed_one_run(live_server, page)
 
     page.set_viewport_size({"width": 375, "height": 800})
-    page.goto(live_server + "/history")
+    page.goto(live_server + "/")
 
     label_content = page.eval_on_selector(
         '.table-scroll td',
@@ -37,9 +37,9 @@ def test_history_table_becomes_cards_at_narrow_width(live_server, page):
     assert label_content not in (None, "none", '""')
 
 
-def test_no_horizontal_overflow_on_history_at_narrow_viewport(live_server, page):
+def test_no_horizontal_overflow_on_dashboard_at_narrow_viewport(live_server, page):
     page.set_viewport_size({"width": 375, "height": 800})
-    page.goto(live_server + "/history")
+    page.goto(live_server + "/")
 
     scroll_width = page.evaluate("document.documentElement.scrollWidth")
     inner_width = page.evaluate("window.innerWidth")
