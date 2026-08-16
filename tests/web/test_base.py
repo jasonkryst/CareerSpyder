@@ -148,3 +148,11 @@ def test_confirm_modal_js_is_served(client):
     assert resp.status_code == 200
     assert "showModal" in resp.text
     assert "data-confirm-message" in resp.text
+
+
+def test_style_css_has_filter_bar_and_sort_link_rules(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert ".filter-bar" in resp.text
+    assert "th a" in resp.text
