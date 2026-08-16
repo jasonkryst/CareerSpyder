@@ -115,3 +115,10 @@ def test_history_page_includes_refresh_button_and_status_region(client):
     assert 'id="history-status"' in resp.text
     assert 'aria-live="polite"' in resp.text
     assert 'id="history-rows"' in resp.text
+
+
+def test_history_js_is_served(client):
+    resp = client.get("/static/history.js")
+
+    assert resp.status_code == 200
+    assert "history-rows" in resp.text
