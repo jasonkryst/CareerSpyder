@@ -469,6 +469,38 @@ tr.removed td {
   margin-bottom: var(--space-4);
 }
 
+.toast-container {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--success-bg);
+  color: var(--success-fg);
+  border-left: 4px solid var(--success-fg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-3) var(--space-4);
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
 nav[aria-label="Pagination"] {
   display: flex;
   gap: var(--space-4);

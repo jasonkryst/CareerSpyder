@@ -156,3 +156,39 @@ def test_style_css_has_filter_bar_and_sort_link_rules(client):
     assert resp.status_code == 200
     assert ".filter-bar" in resp.text
     assert "th a" in resp.text
+
+
+def test_base_template_renders_toast_when_flash_param_present(client):
+    resp = client.get("/jobs?flash=Test+message")
+
+    assert 'id="toast-container"' in resp.text
+    assert 'class="toast" role="status"' in resp.text
+    assert "Test message" in resp.text
+    assert 'class="toast-close"' in resp.text
+
+
+def test_base_template_renders_no_toast_without_flash_param(client):
+    resp = client.get("/jobs")
+
+    assert 'class="toast" role="status"' not in resp.text
+
+
+def test_base_template_renders_no_toast_with_empty_flash_param(client):
+    resp = client.get("/jobs?flash=")
+
+    assert 'class="toast" role="status"' not in resp.text
+
+
+def test_toast_js_is_served(client):
+    resp = client.get("/static/toast.js")
+
+    assert resp.status_code == 200
+    assert "toast-close" in resp.text
+    assert "replaceState" in resp.text
+
+
+def test_style_css_has_toast_rules(client):
+    resp = client.get("/static/style.css")
+
+    assert ".toast-container" in resp.text
+    assert ".toast {" in resp.text
