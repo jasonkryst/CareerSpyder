@@ -87,7 +87,7 @@ service. There is one container, one process.
 | Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company) and "sources that failed this run." Returns `None` (no email sent) when both are empty. All scraped text is HTML-escaped before landing in the email. |
 | Emailer | `app/emailer.py` | Sends the digest via SMTP (STARTTLS, 30s timeout). |
 | Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Skips the scan and email entirely on days not selected in Preferences. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
-| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/jobs`, `/history`, `/sources`, `/settings`. |
+| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/jobs`, `/sources`, `/settings`. |
 
 ## Quick start (Docker)
 
@@ -228,9 +228,9 @@ redeploys.
 
 | Page | Purpose |
 |---|---|
-| `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing table of past runs — start/finish time, new job count, failed source names. |
-| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title, location, dates found/removed, age, emailed status, and a summary where available. |
-| `/sources` | Table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
+| `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. |
+| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title, location, dates found/removed, age, emailed status, and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, and removed/emailed status. |
+| `/sources` | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
 | `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation via a themed dialog before doing so). |

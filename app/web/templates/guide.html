@@ -24,10 +24,15 @@
 <table>
   <tr><th scope="col">Page</th><th scope="col">Purpose</th></tr>
   <tr><td><a href="/">Dashboard</a></td><td>A <strong>Run now</strong> button (always
-    triggers an immediate scrape) at the top, plus a paginated, auto-refreshing table of
-    past runs &mdash; start/finish time, new job count, failed source names.</td></tr>
-  <tr><td><a href="/sources">Sources</a></td><td>Table of configured sources with Edit/Delete
-    actions and an <strong>Add source</strong> button.</td></tr>
+    triggers an immediate scrape) at the top, plus a paginated, auto-refreshing, sortable
+    table of past runs &mdash; start/finish time, new job count, failed source names
+    &mdash; filterable by whether a run had failed sources.</td></tr>
+  <tr><td><a href="/jobs">Jobs</a></td><td>Every job CareerSpyder has ever found &mdash;
+    sortable by company, title, date found, or age; filterable by company, source, and
+    removed/emailed status.</td></tr>
+  <tr><td><a href="/sources">Sources</a></td><td>Sortable (name/type/company) and
+    type-filterable table of configured sources with Edit/Delete actions and an
+    <strong>Add source</strong> button.</td></tr>
   <tr><td><a href="/settings/email">Settings &rarr; Email</a></td><td>SMTP host/port/from
     address (the password is a container env var, not editable here).</td></tr>
   <tr><td><a href="/settings/data">Settings &rarr; Data</a></td><td>Clear the job dedup cache,

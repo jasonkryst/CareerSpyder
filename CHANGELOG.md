@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-08-16
+
+### Added
+
+- Column sorting (click a column header to sort ascending/descending)
+  and light filters on the Jobs, Dashboard, and Sources tables — Jobs
+  filters by company, source, removed/emailed status; Dashboard filters
+  by whether a run had failed sources; Sources filters by type. All
+  server-side and encoded in the URL, so results are correct across
+  pagination and links are bookmarkable (issue #33).
+
 ## [0.12.0] — 2026-08-16
 
 ### Fixed
