@@ -5,6 +5,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-08-16
+
+### Fixed
+
+- "Run now" on the Dashboard silently did nothing on any day not
+  included in the configured "check days" (Preferences) — the same
+  day-of-week gate meant for the scheduled daily cron was incorrectly
+  applied to the manual button too. Run now now always triggers a scrape
+  regardless of the configured days (issue #42).
+- Long unbroken strings (e.g. source URLs) on the Guide page overflowed
+  their container instead of wrapping, widening the page past the
+  viewport (issue #41).
+
+### Added
+
+- The Dashboard now shows past run executions in a paginated,
+  auto-refreshing responsive table (reusing the former History page's
+  table), with the Run now button at the top; the separate History page
+  and nav link have been removed (issue #42).
+- A themed, reusable confirm-modal dialog replaces the native
+  `confirm()` popup previously used before importing settings, and now
+  also guards source deletion, which previously had no confirmation at
+  all (issue #40).
+
 ## [0.11.0] — 2026-08-16
 
 ### Fixed

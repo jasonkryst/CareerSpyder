@@ -54,12 +54,6 @@ later rather than fixed immediately.
   is a single address today. Comma-splitting it into multiple recipients
   is a small, low-risk addition if/when more than one person wants the
   digest.
-- **Richer frontend (from design spec).** v1 is deliberately
-  server-rendered, full-page-reload HTML with no SPA and no JS build step.
-  The History page now polls for in-progress-run updates (issue #34); a
-  similar live-updating indicator on the Dashboard's "Run now" button is
-  a reasonable next step if the current UX feels too static there too,
-  but isn't needed for the core job-digest use case.
 - **Digest subject line doesn't mention failures when jobs also exist
   (from review).** `app/digest.py` currently only reflects the new-job
   count in the subject when there are new jobs, even if the same run also
