@@ -195,13 +195,52 @@ def seed_settings_if_empty(conn: sqlite3.Connection, smtp_host: str, smtp_port: 
         conn.commit()
 
 
-def list_jobs(conn: sqlite3.Connection, limit: int = 25, offset: int = 0) -> list[dict]:
-    rows = conn.execute(
+_JOB_SORT_COLUMNS = {
+    "company": "company COLLATE NOCASE",
+    "title": "title COLLATE NOCASE",
+    "first_seen_at": "first_seen_at",
+    "age_days": "(julianday(COALESCE(removed_at, 'now')) - julianday(first_seen_at))",
+}
+
+
+def _job_filters_sql(
+    company: str | None, source_name: str | None, removed: str | None, emailed: str | None,
+) -> tuple[str, list]:
+    clauses = []
+    params: list = []
+    if company:
+        clauses.append("LOWER(company) LIKE ?")
+        params.append(f"%{company.lower()}%")
+    if source_name:
+        clauses.append("source_name = ?")
+        params.append(source_name)
+    if removed == "active":
+        clauses.append("removed_at IS NULL")
+    elif removed == "removed":
+        clauses.append("removed_at IS NOT NULL")
+    if emailed == "sent":
+        clauses.append("emailed_at IS NOT NULL")
+    elif emailed == "not_sent":
+        clauses.append("emailed_at IS NULL")
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    return where_sql, params
+
+
+def list_jobs(
+    conn: sqlite3.Connection, limit: int = 25, offset: int = 0, *,
+    sort: str = "", direction: str = "",
+    company: str | None = None, source_name: str | None = None,
+    removed: str | None = None, emailed: str | None = None,
+) -> list[dict]:
+    order_column = _JOB_SORT_COLUMNS.get(sort, "first_seen_at")
+    order_dir = "ASC" if direction == "asc" else "DESC"
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed)
+    query = (
         "SELECT key, title, company, location, url, posted_date, source_name, source_id, "
-        "summary, first_seen_at, removed_at, emailed_at "
-        "FROM jobs ORDER BY first_seen_at DESC, rowid DESC LIMIT ? OFFSET ?",
-        (limit, offset),
-    ).fetchall()
+        "summary, first_seen_at, removed_at, emailed_at FROM jobs "
+        f"{where_sql} ORDER BY {order_column} {order_dir}, rowid {order_dir} LIMIT ? OFFSET ?"
+    )
+    rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
             "key": r[0], "title": r[1], "company": r[2], "location": r[3], "url": r[4],
@@ -212,9 +251,21 @@ def list_jobs(conn: sqlite3.Connection, limit: int = 25, offset: int = 0) -> lis
     ]
 
 
-def count_jobs(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()
+def count_jobs(
+    conn: sqlite3.Connection, *,
+    company: str | None = None, source_name: str | None = None,
+    removed: str | None = None, emailed: str | None = None,
+) -> int:
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed)
+    row = conn.execute(f"SELECT COUNT(*) FROM jobs {where_sql}", params).fetchone()
     return row[0]
+
+
+def list_job_source_names(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT source_name FROM jobs ORDER BY source_name COLLATE NOCASE"
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 def mark_emailed(conn: sqlite3.Connection, keys: list[str]) -> None:
