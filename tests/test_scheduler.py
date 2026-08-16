@@ -114,6 +114,22 @@ def test_run_and_notify_skips_entire_run_when_no_days_selected(tmp_db_path, tmp_
     mock_send.assert_not_called()
 
 
+def test_run_and_notify_force_bypasses_day_gate(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn, email_days="")
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": []})()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
+         patch("app.scheduler.digest.build_digest", return_value=None):
+        scheduler.run_and_notify(conn, sources_path, force=True)
+
+    mock_run_once.assert_called_once()
+
+
 def test_run_and_notify_skips_email_when_no_recipients_configured(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     conn = db.init_db(tmp_db_path)

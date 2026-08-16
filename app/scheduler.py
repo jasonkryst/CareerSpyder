@@ -22,9 +22,9 @@ def _today_code(tz: str) -> str:
     return _DAY_CODES[datetime.now(_resolve_tz(tz)).weekday()]
 
 
-def run_and_notify(conn, sources_path: str, tz: str = "UTC") -> None:
+def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False) -> None:
     settings = db.get_settings(conn)
-    if settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
+    if not force and settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
         return
 
     sources = config.load_sources(sources_path)
