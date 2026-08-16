@@ -3,6 +3,7 @@
 <h1>Jobs</h1>
 <div class="table-scroll">
 <table>
+  <thead>
   <tr>
     <th scope="col">Company</th>
     <th scope="col">Search name</th>
@@ -14,6 +15,8 @@
     <th scope="col">Emailed</th>
     <th scope="col">Summary</th>
   </tr>
+  </thead>
+  <tbody>
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
     <td data-label="Company">{{ job.company or "—" }}</td>
@@ -27,6 +30,7 @@
     <td data-label="Summary">{{ job.summary or "—" }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 </div>
 <nav aria-label="Pagination">

@@ -1,7 +1,10 @@
 <div id="history-rows" data-page="{{ pagination.page }}">
 <div class="table-scroll">
 <table>
+  <thead>
   <tr><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">New jobs</th><th scope="col">Failed sources</th></tr>
+  </thead>
+  <tbody>
   {% for run in runs %}
   <tr>
     <td data-label="Started">{{ run.started_at }}</td>
@@ -10,6 +13,7 @@
     <td data-label="Failed sources">{{ run.failed_sources | join(", ") }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 </div>
 <nav aria-label="Pagination">
