@@ -75,6 +75,82 @@ def test_count_runs_returns_total(tmp_db_path):
     assert db.count_runs(conn) == 2
 
 
+def test_list_runs_sorts_by_new_job_count_ascending(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=5, failed_sources=[])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=1, failed_sources=[])
+
+    rows = db.list_runs(conn, sort="new_job_count", direction="asc")
+
+    assert [r["new_job_count"] for r in rows] == [1, 5]
+
+
+def test_list_runs_sorts_by_started_at_descending(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    r1 = db.start_run(conn)
+    r2 = db.start_run(conn)
+
+    rows = db.list_runs(conn, sort="started_at", direction="desc")
+
+    assert [r["id"] for r in rows] == [r2, r1]
+
+
+def test_list_runs_default_ordering_unchanged_with_no_new_kwargs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=1, failed_sources=[])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=2, failed_sources=[])
+
+    rows = db.list_runs(conn)
+
+    assert [r["id"] for r in rows] == [r2, r1]
+
+
+def test_list_runs_unrecognized_sort_falls_back_to_default(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.start_run(conn)
+
+    rows = db.list_runs(conn, sort="garbage")
+
+    assert len(rows) == 1
+
+
+def test_list_runs_filters_only_failures(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    r2 = db.start_run(conn)
+    db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
+
+    only = db.list_runs(conn, failures="only")
+    clean = db.list_runs(conn, failures="clean")
+
+    assert [r["id"] for r in only] == [r1]
+    assert [r["id"] for r in clean] == [r2]
+
+
+def test_list_runs_invalid_failures_value_returns_all(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.start_run(conn)
+    db.start_run(conn)
+
+    rows = db.list_runs(conn, failures="nonsense")
+
+    assert len(rows) == 2
+
+
+def test_count_runs_respects_failures_filter(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    r1 = db.start_run(conn)
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+
+    assert db.count_runs(conn, failures="only") == 1
+    assert db.count_runs(conn, failures="clean") == 0
+
+
 def test_settings_seed_only_when_empty(tmp_db_path):
     conn = db.init_db(tmp_db_path)
 

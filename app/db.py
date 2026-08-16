@@ -126,12 +126,33 @@ def finish_run(conn: sqlite3.Connection, run_id: int, new_job_count: int, failed
     conn.commit()
 
 
-def list_runs(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> list[dict]:
-    rows = conn.execute(
-        "SELECT id, started_at, finished_at, new_job_count, failed_sources "
-        "FROM runs ORDER BY id DESC LIMIT ? OFFSET ?",
-        (limit, offset),
-    ).fetchall()
+_RUN_SORT_COLUMNS = {
+    "started_at": "started_at",
+    "finished_at": "finished_at",
+    "new_job_count": "new_job_count",
+}
+
+
+def _run_filters_sql(failures: str | None) -> tuple[str, list]:
+    if failures == "only":
+        return "WHERE failed_sources != '[]'", []
+    if failures == "clean":
+        return "WHERE failed_sources = '[]'", []
+    return "", []
+
+
+def list_runs(
+    conn: sqlite3.Connection, limit: int = 50, offset: int = 0, *,
+    sort: str = "", direction: str = "", failures: str | None = None,
+) -> list[dict]:
+    order_column = _RUN_SORT_COLUMNS.get(sort, "id")
+    order_dir = "ASC" if direction == "asc" else "DESC"
+    where_sql, params = _run_filters_sql(failures)
+    query = (
+        "SELECT id, started_at, finished_at, new_job_count, failed_sources FROM runs "
+        f"{where_sql} ORDER BY {order_column} {order_dir}, id {order_dir} LIMIT ? OFFSET ?"
+    )
+    rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
@@ -141,8 +162,9 @@ def list_runs(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> lis
     ]
 
 
-def count_runs(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+def count_runs(conn: sqlite3.Connection, *, failures: str | None = None) -> int:
+    where_sql, params = _run_filters_sql(failures)
+    row = conn.execute(f"SELECT COUNT(*) FROM runs {where_sql}", params).fetchone()
     return row[0]
 
 
