@@ -377,6 +377,54 @@ tr.removed td {
   color: var(--fg-muted);
 }
 
+@media (max-width: 40rem) {
+  .table-scroll {
+    border: none;
+    overflow-x: visible;
+  }
+
+  .table-scroll table,
+  .table-scroll thead,
+  .table-scroll tbody,
+  .table-scroll th,
+  .table-scroll td,
+  .table-scroll tr {
+    display: block;
+    width: 100%;
+  }
+
+  .table-scroll thead {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .table-scroll tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-3);
+  }
+
+  .table-scroll td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-scroll tr td:last-child {
+    border-bottom: none;
+  }
+
+  .table-scroll td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    text-align: left;
+    color: var(--fg-muted);
+  }
+}
+
 .error {
   background: var(--error-bg);
   color: var(--error-fg);

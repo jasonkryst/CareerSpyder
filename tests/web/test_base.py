@@ -115,3 +115,11 @@ def test_nav_js_is_served(client):
 
     assert resp.status_code == 200
     assert "nav-toggle" in resp.text
+
+
+def test_style_css_defines_card_table_breakpoint(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "@media (max-width: 40rem)" in resp.text
+    assert "attr(data-label)" in resp.text

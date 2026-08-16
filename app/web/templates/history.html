@@ -6,10 +6,10 @@
   <tr><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">New jobs</th><th scope="col">Failed sources</th></tr>
   {% for run in runs %}
   <tr>
-    <td>{{ run.started_at }}</td>
-    <td>{{ run.finished_at or "in progress" }}</td>
-    <td>{{ run.new_job_count }}</td>
-    <td>{{ run.failed_sources | join(", ") }}</td>
+    <td data-label="Started">{{ run.started_at }}</td>
+    <td data-label="Finished">{{ run.finished_at or "in progress" }}</td>
+    <td data-label="New jobs">{{ run.new_job_count }}</td>
+    <td data-label="Failed sources">{{ run.failed_sources | join(", ") }}</td>
   </tr>
   {% endfor %}
 </table>

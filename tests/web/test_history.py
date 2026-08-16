@@ -52,3 +52,16 @@ def test_history_negative_page_param_clamps_to_first_page(client):
 
     assert resp.status_code == 200
     assert "Page 1 of 1" in resp.text
+
+
+def test_history_table_cells_have_data_labels(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=3, failed_sources=["Bad Co"])
+
+    resp = client.get("/history")
+
+    assert 'data-label="Started"' in resp.text
+    assert 'data-label="Finished"' in resp.text
+    assert 'data-label="New jobs"' in resp.text
+    assert 'data-label="Failed sources"' in resp.text

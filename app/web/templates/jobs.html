@@ -16,15 +16,15 @@
   </tr>
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
-    <td>{{ job.company or "—" }}</td>
-    <td>{{ job.source_name }}</td>
-    <td><a href="{{ job.safe_url }}">{{ job.title }}</a></td>
-    <td>{{ job.location or "—" }}</td>
-    <td>{{ job.first_seen_at }}</td>
-    <td>{{ job.removed_at or "—" }}</td>
-    <td>{{ job.age_days }}</td>
-    <td>{{ job.emailed_at or "Not sent" }}</td>
-    <td>{{ job.summary or "—" }}</td>
+    <td data-label="Company">{{ job.company or "—" }}</td>
+    <td data-label="Search name">{{ job.source_name }}</td>
+    <td data-label="Title"><a href="{{ job.safe_url }}">{{ job.title }}</a></td>
+    <td data-label="Location">{{ job.location or "—" }}</td>
+    <td data-label="Date found">{{ job.first_seen_at }}</td>
+    <td data-label="Removed">{{ job.removed_at or "—" }}</td>
+    <td data-label="Age (days)">{{ job.age_days }}</td>
+    <td data-label="Emailed">{{ job.emailed_at or "Not sent" }}</td>
+    <td data-label="Summary">{{ job.summary or "—" }}</td>
   </tr>
   {% endfor %}
 </table>

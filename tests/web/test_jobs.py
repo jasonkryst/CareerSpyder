@@ -115,3 +115,14 @@ def test_nav_includes_jobs_link(client):
     resp = client.get("/jobs")
 
     assert 'href="/jobs" aria-current="page"' in resp.text
+
+
+def test_jobs_table_cells_have_data_labels(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job()], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    for label in ("Company", "Search name", "Title", "Location", "Date found",
+                  "Removed", "Age (days)", "Emailed", "Summary"):
+        assert f'data-label="{label}"' in resp.text
