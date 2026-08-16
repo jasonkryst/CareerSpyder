@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -31,6 +32,13 @@ def _str_list_field(form, key: str) -> list[str]:
 
 def _split_emails(raw: str | None) -> list[str]:
     return [addr.strip() for addr in (raw or "").split(",") if addr.strip()]
+
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _is_valid_email(addr: str) -> bool:
+    return bool(EMAIL_RE.match(addr))
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -77,7 +85,23 @@ async def save_preferences(request: Request):
     selected_days = set(_str_list_field(form, "email_days")) & set(DAY_CODES)
     email_days = ",".join(day for day in DAY_CODES if day in selected_days)
     resend_jobs = "resend_jobs" in form
-    email_to = ",".join(addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip())
+    submitted_emails = [addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip()]
+
+    invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
+    if invalid:
+        settings = db.get_settings(request.app.state.conn)
+        return templates.TemplateResponse(
+            request, "settings_preferences.html",
+            {
+                "settings": settings,
+                "email_days_selected": selected_days,
+                "email_to_list": submitted_emails or [""],
+                "error": f"Invalid email address: {invalid[0]}",
+            },
+            status_code=400,
+        )
+
+    email_to = ",".join(submitted_emails)
     db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
     return RedirectResponse(url="/settings/preferences", status_code=303)
 
@@ -121,7 +145,10 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str] | None:
 
     raw_emails = preferences.get("email_to")
     emails = raw_emails if isinstance(raw_emails, list) else []
-    email_to = ",".join(addr.strip() for addr in emails if isinstance(addr, str) and addr.strip())
+    email_to = ",".join(
+        addr.strip() for addr in emails
+        if isinstance(addr, str) and addr.strip() and _is_valid_email(addr.strip())
+    )
 
     return email_days, resend_jobs, email_to
 

@@ -52,3 +52,73 @@ def test_history_negative_page_param_clamps_to_first_page(client):
 
     assert resp.status_code == 200
     assert "Page 1 of 1" in resp.text
+
+
+def test_history_table_cells_have_data_labels(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=3, failed_sources=["Bad Co"])
+
+    resp = client.get("/history")
+
+    assert 'data-label="Started"' in resp.text
+    assert 'data-label="Finished"' in resp.text
+    assert 'data-label="New jobs"' in resp.text
+    assert 'data-label="Failed sources"' in resp.text
+
+
+def test_history_rows_endpoint_returns_fragment_without_page_chrome(client):
+    resp = client.get("/history/rows")
+
+    assert resp.status_code == 200
+    assert 'id="history-rows"' in resp.text
+    assert 'aria-label="Main"' not in resp.text
+    assert "<html" not in resp.text
+
+
+def test_history_rows_endpoint_paginates_like_history_page(client):
+    conn = client.app.state.conn
+    for i in range(30):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=i, failed_sources=[])
+
+    page1 = client.get("/history/rows?page=1")
+    page2 = client.get("/history/rows?page=2")
+
+    assert "Page 1 of 2" in page1.text
+    assert "Page 2 of 2" in page2.text
+
+
+def test_history_rows_endpoint_invalid_page_param_clamps(client):
+    resp = client.get("/history/rows?page=not-a-number")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 1" in resp.text
+
+
+def test_history_rows_reflects_run_status_change(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+
+    in_progress = client.get("/history/rows")
+    assert 'data-label="Finished">in progress' in in_progress.text
+
+    db.finish_run(conn, run_id, new_job_count=2, failed_sources=[])
+    finished = client.get("/history/rows")
+    assert 'data-label="Finished">in progress' not in finished.text
+
+
+def test_history_page_includes_refresh_button_and_status_region(client):
+    resp = client.get("/history")
+
+    assert 'id="refresh-history"' in resp.text
+    assert 'id="history-status"' in resp.text
+    assert 'aria-live="polite"' in resp.text
+    assert 'id="history-rows"' in resp.text
+
+
+def test_history_js_is_served(client):
+    resp = client.get("/static/history.js")
+
+    assert resp.status_code == 200
+    assert "history-rows" in resp.text

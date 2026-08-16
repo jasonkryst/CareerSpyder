@@ -378,6 +378,80 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
 
 
+def test_settings_data_import_form_has_confirm_guard(client):
+    resp = client.get("/settings/data")
+
+    assert 'id="import-form"' in resp.text
+    assert "confirm(" in resp.text
+
+
+def test_post_preferences_rejects_malformed_email_and_does_not_save(client):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon"], "email_to": ["not-an-email"],
+    })
+
+    assert resp.status_code == 400
+    assert "Invalid email address" in resp.text
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings is None or settings["email_to"] != "not-an-email"
+
+
+def test_post_preferences_accepts_well_formed_emails(client):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon"], "email_to": ["good@x.test"],
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_to"] == "good@x.test"
+
+
+def test_post_preferences_invalid_email_preserves_submitted_days_and_addresses(client):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon", "wed"], "email_to": ["good@x.test", "not-an-email"],
+    })
+
+    assert resp.status_code == 400
+    assert 'value="good@x.test"' in resp.text
+    assert 'value="mon" checked' in resp.text
+    assert 'value="wed" checked' in resp.text
+
+
+def test_settings_preferences_recipient_inputs_are_required(client):
+    resp = client.get("/settings/preferences")
+
+    assert resp.text.count(" required") >= 2
+
+
+def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(client):
+    import json
+
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["mon"],
+            "resend_jobs": False,
+            "email_to": ["good@x.test", "not-an-email"],
+        },
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["email_to"] == "good@x.test"
+
+
 def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_sources(client):
     import json
 

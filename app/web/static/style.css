@@ -170,6 +170,46 @@ nav[aria-label="Settings tabs"] {
   margin-bottom: var(--space-5);
 }
 
+.nav-toggle {
+  display: none;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 40rem) {
+  .nav-toggle {
+    display: inline-block;
+  }
+
+  nav[aria-label="Main"] {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  nav[aria-label="Main"].open {
+    display: flex;
+  }
+}
+
 main {
   max-width: 60rem;
   margin: 0 auto;
@@ -221,7 +261,7 @@ button:hover {
   border-color: var(--accent);
 }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="email"], input[type="number"], select {
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -270,6 +310,13 @@ label:has(> input[type="radio"]) {
 .type-fields {
   border-left: 3px solid var(--border);
   padding-left: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
 
@@ -335,6 +382,54 @@ tbody tr:hover {
 
 tr.removed td {
   color: var(--fg-muted);
+}
+
+@media (max-width: 40rem) {
+  .table-scroll {
+    border: none;
+    overflow-x: visible;
+  }
+
+  .table-scroll table,
+  .table-scroll thead,
+  .table-scroll tbody,
+  .table-scroll th,
+  .table-scroll td,
+  .table-scroll tr {
+    display: block;
+    width: 100%;
+  }
+
+  .table-scroll thead {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .table-scroll tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-3);
+  }
+
+  .table-scroll td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-scroll tr td:last-child {
+    border-bottom: none;
+  }
+
+  .table-scroll td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    text-align: left;
+    color: var(--fg-muted);
+  }
 }
 
 .error {

@@ -80,3 +80,16 @@ def test_sources_list_invalid_page_param_clamps_instead_of_erroring(client):
 
     assert resp.status_code == 200
     assert "Page 1 of 1" in resp.text
+
+
+def test_sources_table_cells_have_data_labels(client):
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+        ]}, f)
+
+    resp = client.get("/sources")
+
+    for label in ("Name", "Type", "Company", "Edit", "Delete"):
+        assert f'data-label="{label}"' in resp.text

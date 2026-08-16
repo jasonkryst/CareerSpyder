@@ -92,3 +92,34 @@ def test_style_css_defines_hint_and_code_rules(client):
     assert resp.status_code == 200
     assert ".hint {" in resp.text
     assert "code {" in resp.text
+
+
+def test_style_css_styles_email_inputs_like_text_inputs(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert 'input[type="text"], input[type="email"], input[type="number"], select {' in resp.text
+
+
+def test_base_layout_includes_nav_toggle_button(client):
+    resp = client.get("/")
+
+    assert 'id="nav-toggle"' in resp.text
+    assert 'aria-controls="main-nav"' in resp.text
+    assert 'aria-expanded="false"' in resp.text
+    assert 'id="main-nav"' in resp.text
+
+
+def test_nav_js_is_served(client):
+    resp = client.get("/static/nav.js")
+
+    assert resp.status_code == 200
+    assert "nav-toggle" in resp.text
+
+
+def test_style_css_defines_card_table_breakpoint(client):
+    resp = client.get("/static/style.css")
+
+    assert resp.status_code == 200
+    assert "@media (max-width: 40rem)" in resp.text
+    assert "attr(data-label)" in resp.text

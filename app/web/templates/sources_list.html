@@ -4,20 +4,24 @@
 <a href="/sources/new">Add source</a>
 <div class="table-scroll">
 <table>
-  <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Company</th><th scope="col"></th><th scope="col"></th></tr>
+  <thead>
+  <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Company</th><th scope="col">Edit</th><th scope="col">Delete</th></tr>
+  </thead>
+  <tbody>
   {% for s in sources %}
   <tr>
-    <td>{{ s.name }}</td>
-    <td>{{ s.type }}</td>
-    <td>{{ s.company or "" }}</td>
-    <td><a href="/sources/{{ s.id }}/edit">Edit</a></td>
-    <td>
+    <td data-label="Name">{{ s.name }}</td>
+    <td data-label="Type">{{ s.type }}</td>
+    <td data-label="Company">{{ s.company or "" }}</td>
+    <td data-label="Edit"><a href="/sources/{{ s.id }}/edit">Edit</a></td>
+    <td data-label="Delete">
       <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline">
         <button type="submit">Delete</button>
       </form>
     </td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 </div>
 <nav aria-label="Pagination">
