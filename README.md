@@ -97,18 +97,11 @@ cd CareerSpyder
 docker build -t careerspyder:latest .
 ```
 
-Create a `.env` file (not committed — see `.gitignore`) with at least your
-SMTP password:
+Copy `.env.example` to `.env` (gitignored — never commit real credentials)
+and fill in at least your SMTP password:
 
-```env
-SMTP_PASSWORD=your-smtp-password
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=you@example.com
-EMAIL_FROM=you@example.com
-EMAIL_TO=you@example.com
-RUN_HOUR=8
-TZ=America/Chicago
+```bash
+cp .env.example .env
 ```
 
 Then:
