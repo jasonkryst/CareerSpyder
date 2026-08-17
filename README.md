@@ -232,7 +232,7 @@ toast confirmation in the top-right corner.
 | Page | Purpose |
 |---|---|
 | `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. |
-| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, and removed/emailed status. |
+| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, removed/emailed status, and status. |
 | `/sources` | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |

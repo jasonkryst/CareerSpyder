@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlparse
 
 from app import db
 from app.models import Job
@@ -233,3 +234,99 @@ def test_jobs_page_filter_form_preserves_active_sort_via_hidden_fields(client):
 
     assert '<input type="hidden" name="sort" value="company">' in resp.text
     assert '<input type="hidden" name="dir" value="asc">' in resp.text
+
+
+def test_post_job_status_sets_status_and_redirects_with_flash(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/jobs"
+    assert parse_qs(location.query)["flash"] == ["Marked as Applied."]
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["status"] == "applied"
+
+
+def test_post_job_status_clearing_redirects_with_cleared_message(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": ""}, follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert parse_qs(location.query)["flash"] == ["Status cleared."]
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["status"] is None
+
+
+def test_post_job_status_invalid_status_returns_400(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "bogus"})
+
+    assert resp.status_code == 400
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["status"] is None
+
+
+def test_post_job_status_unknown_key_returns_404(client):
+    resp = client.post("/jobs/status", data={"key": "does-not-exist", "status": "applied"})
+
+    assert resp.status_code == 404
+
+
+def test_jobs_page_shows_status_select_with_current_status_selected(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    select = soup.select_one('form[action="/jobs/status"] select[name="status"]')
+    assert select is not None
+    selected = select.select_one("option[selected]")
+    assert selected["value"] == "applied"
+
+
+def test_jobs_page_shows_status_history_entries(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+    db.set_job_status(conn, "k1", "rejected")
+
+    resp = client.get("/jobs")
+
+    assert "Applied" in resp.text
+    assert "Rejected" in resp.text
+    assert "<summary>History</summary>" in resp.text
+
+
+def test_jobs_page_hides_history_details_when_no_changes(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert "<summary>History</summary>" not in resp.text
+
+
+def test_jobs_page_status_filter_shows_only_matching_jobs(client):
+    conn = client.app.state.conn
+    db.save_jobs(
+        conn,
+        [make_job(key="k1", title="Applied Job"), make_job(key="k2", title="Other Job")],
+        db.start_run(conn),
+    )
+    db.set_job_status(conn, "k1", "applied")
+
+    resp = client.get("/jobs?status=applied")
+
+    assert "Applied Job" in resp.text
+    assert "Other Job" not in resp.text
