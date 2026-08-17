@@ -29,8 +29,17 @@
       <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
     </select>
   </label>
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      <option value="none" {% if filters.status == "none" %}selected{% endif %}>No status</option>
+      {% for value, label in statuses.items() %}
+      <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.removed or filters.emailed %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.source or filters.removed or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>
@@ -44,6 +53,7 @@
     <th scope="col">Removed</th>
     {{ sort_th(request, '/jobs', 'age_days', 'Age (days)') }}
     <th scope="col">Emailed</th>
+    <th scope="col">Status</th>
     <th scope="col">Summary</th>
   </tr>
   </thead>
@@ -58,6 +68,27 @@
     <td data-label="Removed">{{ job.removed_at or "—" }}</td>
     <td data-label="Age (days)">{{ job.age_days }}</td>
     <td data-label="Emailed">{{ job.emailed_at or "Not sent" }}</td>
+    <td data-label="Status">
+      <form method="post" action="/jobs/status" class="inline-status-form">
+        <input type="hidden" name="key" value="{{ job.key }}">
+        <select name="status" onchange="this.form.submit()" aria-label="Status for {{ job.title }}">
+          <option value="" {% if not job.status %}selected{% endif %}>&mdash;</option>
+          {% for value, label in statuses.items() %}
+          <option value="{{ value }}" {% if job.status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% if job.history %}
+      <details>
+        <summary>History</summary>
+        <ul class="status-history">
+          {% for entry in job.history %}
+          <li>{{ entry.status_label }} &mdash; {{ entry.changed_at }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </td>
     <td data-label="Summary">{{ job.summary or "—" }}</td>
   </tr>
   {% endfor %}

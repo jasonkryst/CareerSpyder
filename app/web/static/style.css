@@ -403,6 +403,18 @@ tr.removed td {
   color: var(--fg-muted);
 }
 
+.inline-status-form {
+  margin: 0;
+}
+
+.status-history {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+
 @media (max-width: 40rem) {
   .table-scroll {
     border: none;
