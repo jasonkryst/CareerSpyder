@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-08-17
+
+### Changed
+
+- Dates in the web UI (Jobs page found/removed/emailed/status-history
+  timestamps, Dashboard run start/finish times) now display in the
+  viewer's local timezone and locale instead of raw UTC. Formatting
+  happens client-side, so the underlying data stays UTC and a
+  JS-disabled browser still sees the original ISO timestamp. The digest
+  email is unchanged (still UTC) since email clients can't reliably run
+  JavaScript.
+
 ## [0.15.0] — 2026-08-16
 
 ### Added

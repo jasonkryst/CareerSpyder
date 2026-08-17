@@ -227,7 +227,8 @@ redeploys.
 ## Web UI
 
 Every save, update, or delete action across these pages shows a brief
-toast confirmation in the top-right corner.
+toast confirmation in the top-right corner. Dates are stored as UTC but
+displayed in your browser's local timezone.
 
 | Page | Purpose |
 |---|---|
