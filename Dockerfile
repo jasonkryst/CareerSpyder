@@ -15,16 +15,21 @@ RUN pip install --no-cache-dir .
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers
 RUN playwright install --with-deps chromium
 
-# Fixed UID/GID (not auto-assigned) so operators can `chown -R 1000:1000` the
-# host's ./config and ./data bind mounts to match — see README's Docker
-# section. Runs as non-root per ROADMAP's "Docker image hardening" item.
+# Fixed UID/GID (not auto-assigned): docker-entrypoint.sh chowns the
+# bind-mounted ./config and ./data to this uid/gid on every start (so
+# mismatched host ownership never breaks a deploy), then drops the actual
+# server process to it via setpriv. Runs as non-root per ROADMAP's "Docker
+# image hardening" item -- see README's Docker section.
 RUN groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --home-dir /app --no-create-home app \
     && mkdir -p /app/config /app/data \
     && chown -R app:app /app
-USER 1000:1000
+
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -q -O /dev/null http://localhost:8080/ || exit 1
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.web.main:app", "--host", "0.0.0.0", "--port", "8080"]

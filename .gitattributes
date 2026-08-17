@@ -1,0 +1,4 @@
+# Shell scripts run inside Linux containers -- force LF regardless of the
+# checking-out platform's core.autocrlf, so a Windows checkout can't silently
+# break the shebang (Docker's `#!/bin/sh` won't tolerate a CRLF line ending).
+*.sh text eol=lf

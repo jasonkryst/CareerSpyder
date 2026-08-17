@@ -90,6 +90,14 @@ existing tests — don't casually relax them:
   (`tests/web/e2e/conftest.py`) passes `bypass_csp=True` because
   Playwright's own `wait_for_function`/`expect` helpers use `eval()`
   internally — that's test-tooling only, not a CSP relaxation for users.
+- **The Dockerfile's image-level user is root; the server process isn't.**
+  `docker-entrypoint.sh` needs to run as root on every container start (to
+  `chown` the bind-mounted `./config`/`./data` regardless of host
+  ownership), then drops to uid 1000 via `setpriv` before exec'ing
+  uvicorn — so there's deliberately no `USER` instruction in the
+  Dockerfile. `docker exec`/`docker compose exec` therefore still default
+  to root; that's expected and doesn't mean the app is running as root —
+  check the real process with `docker compose top`, as `docker.yml` does.
 
 ## Code conventions
 

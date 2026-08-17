@@ -16,13 +16,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `pytest-cov` coverage reporting in CI (`ci.yml`'s `test` job), and ruff's
   bandit-derived `S` rule set enabled in `pyproject.toml` for security
   linting.
-- Docker image hardening: the container now runs as a fixed non-root
-  user (`1000:1000`), the `python:3.12-slim` base image is pinned by
-  digest, and a `HEALTHCHECK` was added. `docker.yml` now also lints the
-  `Dockerfile` with hadolint and asserts the running container isn't
-  root. `dependabot.yml` now tracks the base image via the `docker`
-  ecosystem. This closes ROADMAP's "Docker image hardening" item — see
-  README's Docker section for the host-directory ownership implication.
+- Docker image hardening: the server process now runs as a fixed
+  non-root user (`1000:1000`), the `python:3.12-slim` base image is
+  pinned by digest, and a `HEALTHCHECK` was added. A new
+  `docker-entrypoint.sh` runs as root only long enough to `chown` the
+  bind-mounted `./config`/`./data` to `1000:1000` on every start (so
+  mismatched host ownership never breaks a deploy — no manual `chown`
+  needed), then drops to the app user via `setpriv` before starting
+  uvicorn. `docker.yml` now also lints the `Dockerfile` with hadolint
+  and asserts the running server process isn't root (via `docker compose
+  top`, since the image's default exec user is still root for the
+  entrypoint's benefit). `dependabot.yml` now tracks the base image via
+  the `docker` ecosystem. Closes ROADMAP's "Docker image hardening" item.
 - `SECURITY.md` — vulnerability reporting and the project's documented
   security posture (trusted-network-only, no auth in v1).
 - A real end-to-end `run_and_notify` test (`tests/test_scheduler.py`)
