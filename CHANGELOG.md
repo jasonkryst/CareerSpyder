@@ -7,13 +7,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- `docker-compose.prod.yml` now bind-mounts `/app/config` and `/app/data`
-  from fixed absolute host paths (`/opt/careerspyder/config`,
-  `/opt/careerspyder/data`) instead of `./config`/`./data`. Relative paths
-  resolve against whatever directory `docker compose` happens to be run
-  from, which reset `state.db` on some redeploys. `docker-compose.yml`
-  (local dev/CI) is unaffected — it always runs from a known checkout
-  directory.
+- `docker-compose.prod.yml` now mounts `/app/config` and `/app/data` from
+  named Docker volumes (`careerspyder_config`, `careerspyder_data`) instead
+  of the relative bind mounts `./config`/`./data`. Relative paths resolve
+  against whatever directory `docker compose` happens to be run from, which
+  reset `state.db` on some redeploys; named volumes are keyed by name and
+  survive that. `docker-compose.yml` (local dev/CI) is unaffected — it
+  always runs from a known checkout directory.
 
 ## [0.17.0] — 2026-08-17
 

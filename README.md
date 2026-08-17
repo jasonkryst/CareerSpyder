@@ -295,20 +295,24 @@ Two compose files, for two different purposes:
   docker compose -f docker-compose.prod.yml up -d
   ```
 
-Both files bind-mount the same two paths for persistent state:
+Both files mount the same two paths for persistent state:
 
 - `/app/config` — `sources.json`.
 - `/app/data` — `state.db` (dedup store, run history, settings).
 
-`docker-compose.yml` mounts these from `./config` and `./data` (relative to
-the checkout) — fine for local dev and CI, which always run from a fresh,
-known directory. `docker-compose.prod.yml` mounts them from fixed absolute
-host paths (`/opt/careerspyder/config`, `/opt/careerspyder/data`) instead —
-a relative path there would be resolved against whatever directory you
-happen to run `docker compose` from, which is fragile for a manually
-managed deploy host. Create those two directories on the host once before
-the first `up -d`; the container's entrypoint (see below) takes care of
-their ownership.
+`docker-compose.yml` bind-mounts these from `./config` and `./data`
+(relative to the checkout) — fine for local dev and CI, which always run
+from a fresh, known directory. `docker-compose.prod.yml` uses named Docker
+volumes (`careerspyder_config`, `careerspyder_data`) instead — Docker keys
+these by name rather than host path, so they survive pulls and container
+recreation regardless of where or how `docker compose` is invoked, which
+matters for a manually managed deploy host. Docker creates them
+automatically on first `up -d`; no host directory setup needed. To inspect
+or back up the files directly, e.g.:
+```bash
+docker run --rm -v careerspyder_data:/data -v "$PWD":/backup alpine \
+  cp /data/state.db /backup/
+```
 
 Exposed port: `8080`.
 
