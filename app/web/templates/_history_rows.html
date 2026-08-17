@@ -13,8 +13,8 @@
   <tbody>
   {% for run in runs %}
   <tr>
-    <td data-label="Started">{{ run.started_at }}</td>
-    <td data-label="Finished">{{ run.finished_at or "in progress" }}</td>
+    <td data-label="Started"><time datetime="{{ run.started_at }}">{{ run.started_at }}</time></td>
+    <td data-label="Finished">{% if run.finished_at %}<time datetime="{{ run.finished_at }}">{{ run.finished_at }}</time>{% else %}in progress{% endif %}</td>
     <td data-label="New jobs">{{ run.new_job_count }}</td>
     <td data-label="Failed sources">{{ run.failed_sources | join(", ") }}</td>
   </tr>

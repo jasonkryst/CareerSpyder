@@ -330,3 +330,59 @@ def test_jobs_page_status_filter_shows_only_matching_jobs(client):
 
     assert "Applied Job" in resp.text
     assert "Other Job" not in resp.text
+
+
+def test_jobs_page_wraps_first_seen_at_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    first_seen_at = db.list_jobs(conn)[0]["first_seen_at"]
+
+    resp = client.get("/jobs")
+
+    assert f'<time datetime="{first_seen_at}">{first_seen_at}</time>' in resp.text
+
+
+def test_jobs_page_wraps_removed_at_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn))
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
+    removed_at = db.list_jobs(conn)[0]["removed_at"]
+
+    resp = client.get("/jobs")
+
+    assert f'<time datetime="{removed_at}">{removed_at}</time>' in resp.text
+
+
+def test_jobs_page_does_not_wrap_removed_dash_placeholder_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cell = soup.select_one('td[data-label="Removed"]')
+    assert cell.get_text(strip=True) == "—"
+    assert cell.find("time") is None
+
+
+def test_jobs_page_wraps_emailed_at_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn))
+    db.mark_emailed(conn, ["k3"])
+    emailed_at = db.list_jobs(conn)[0]["emailed_at"]
+
+    resp = client.get("/jobs")
+
+    assert f'<time datetime="{emailed_at}">{emailed_at}</time>' in resp.text
+
+
+def test_jobs_page_wraps_status_history_timestamp_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+    changed_at = db.get_job_status_history(conn, ["k1"])["k1"][0]["changed_at"]
+
+    resp = client.get("/jobs")
+
+    assert f'<time datetime="{changed_at}">{changed_at}</time>' in resp.text

@@ -26,6 +26,7 @@
         var next = wrapper.firstElementChild;
         container.replaceWith(next);
         container = next;
+        if (window.formatLocalDates) window.formatLocalDates(container);
         if (status) status.textContent = "Updated";
         managePolling();
       });

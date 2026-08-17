@@ -64,10 +64,10 @@
     <td data-label="Search name">{{ job.source_name }}</td>
     <td data-label="Title">{{ external_link(job.safe_url, job.title) }}</td>
     <td data-label="Location">{{ job.location or "—" }}</td>
-    <td data-label="Date found">{{ job.first_seen_at }}</td>
-    <td data-label="Removed">{{ job.removed_at or "—" }}</td>
+    <td data-label="Date found"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at }}</time></td>
+    <td data-label="Removed">{% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>{% else %}—{% endif %}</td>
     <td data-label="Age (days)">{{ job.age_days }}</td>
-    <td data-label="Emailed">{{ job.emailed_at or "Not sent" }}</td>
+    <td data-label="Emailed">{% if job.emailed_at %}<time datetime="{{ job.emailed_at }}">{{ job.emailed_at }}</time>{% else %}Not sent{% endif %}</td>
     <td data-label="Status">
       <form method="post" action="/jobs/status" class="inline-status-form">
         <input type="hidden" name="key" value="{{ job.key }}">
@@ -83,7 +83,7 @@
         <summary>History</summary>
         <ul class="status-history">
           {% for entry in job.history %}
-          <li>{{ entry.status_label }} &mdash; {{ entry.changed_at }}</li>
+          <li>{{ entry.status_label }} &mdash; <time datetime="{{ entry.changed_at }}">{{ entry.changed_at }}</time></li>
           {% endfor %}
         </ul>
       </details>

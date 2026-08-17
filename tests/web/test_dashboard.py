@@ -240,3 +240,44 @@ def test_dashboard_js_uses_location_search_for_refresh(client):
     resp = client.get("/static/dashboard.js")
     assert "window.location.search" in resp.text
     assert "data-page" not in resp.text
+
+
+def test_dashboard_wraps_started_at_in_a_time_element(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    started_at = db.list_runs(conn)[0]["started_at"]
+
+    resp = client.get("/")
+
+    assert f'<time datetime="{started_at}">{started_at}</time>' in resp.text
+
+
+def test_dashboard_wraps_finished_at_in_a_time_element(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+    finished_at = db.list_runs(conn)[0]["finished_at"]
+
+    resp = client.get("/")
+
+    assert f'<time datetime="{finished_at}">{finished_at}</time>' in resp.text
+
+
+def test_dashboard_does_not_wrap_in_progress_placeholder_in_a_time_element(client):
+    conn = client.app.state.conn
+    db.start_run(conn)
+
+    resp = client.get("/")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cell = soup.select_one('td[data-label="Finished"]')
+    assert cell.get_text(strip=True) == "in progress"
+    assert cell.find("time") is None
+
+
+def test_dates_js_is_served(client):
+    resp = client.get("/static/dates.js")
+
+    assert resp.status_code == 200
+    assert "time[datetime]" in resp.text
