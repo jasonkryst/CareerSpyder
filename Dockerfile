@@ -1,6 +1,11 @@
 FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Pinning the base image by digest (below) buys supply-chain reproducibility
+# but freezes whatever OS package versions shipped in that snapshot -- an
+# `apt-get upgrade` is needed on top of it to actually pick up Debian
+# security patches released since. Trivy's scan in docker.yml is what
+# would catch a future regression here.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     wget gnupg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
