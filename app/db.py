@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     emailed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS job_status_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_key TEXT NOT NULL,
+    status TEXT,
+    changed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at TEXT NOT NULL,
@@ -57,6 +64,7 @@ _NEW_JOB_COLUMNS = {
     "summary": "TEXT",
     "removed_at": "TEXT",
     "emailed_at": "TEXT",
+    "status": "TEXT",
 }
 
 
@@ -324,3 +332,30 @@ def reconcile_jobs(conn: sqlite3.Connection, configured_source_ids: set[str],
         conn.execute(f"UPDATE jobs SET removed_at = NULL WHERE key IN ({placeholders})", reactivate_keys)
 
     conn.commit()
+
+
+def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> None:
+    now = _now()
+    cur = conn.execute("UPDATE jobs SET status = ? WHERE key = ?", (status, key))
+    if cur.rowcount == 0:
+        raise KeyError(key)
+    conn.execute(
+        "INSERT INTO job_status_history (job_key, status, changed_at) VALUES (?, ?, ?)",
+        (key, status, now),
+    )
+    conn.commit()
+
+
+def get_job_status_history(conn: sqlite3.Connection, keys: list[str]) -> dict[str, list[dict]]:
+    if not keys:
+        return {}
+    placeholders = ",".join("?" * len(keys))
+    rows = conn.execute(
+        f"SELECT job_key, status, changed_at FROM job_status_history "
+        f"WHERE job_key IN ({placeholders}) ORDER BY changed_at DESC, id DESC",
+        keys,
+    ).fetchall()
+    history: dict[str, list[dict]] = {}
+    for job_key, status, changed_at in rows:
+        history.setdefault(job_key, []).append({"status": status, "changed_at": changed_at})
+    return history

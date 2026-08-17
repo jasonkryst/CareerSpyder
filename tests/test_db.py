@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app import db
 from app.models import Job
 
@@ -546,3 +548,95 @@ def test_list_job_source_names_empty_when_no_jobs(tmp_db_path):
     conn = db.init_db(tmp_db_path)
 
     assert db.list_job_source_names(conn) == []
+
+
+def test_init_db_creates_job_status_history_table(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    assert "job_status_history" in tables
+
+
+def test_set_job_status_updates_current_status(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.set_job_status(conn, "k1", "applied")
+
+    row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
+    assert row[0] == "applied"
+
+
+def test_set_job_status_records_a_history_entry(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.set_job_status(conn, "k1", "applied")
+
+    history = db.get_job_status_history(conn, ["k1"])
+    assert len(history["k1"]) == 1
+    assert history["k1"][0]["status"] == "applied"
+    assert history["k1"][0]["changed_at"] is not None
+
+
+def test_set_job_status_appends_rather_than_replacing_history(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.set_job_status(conn, "k1", "applied")
+    db.set_job_status(conn, "k1", "rejected")
+
+    history = db.get_job_status_history(conn, ["k1"])
+    assert [h["status"] for h in history["k1"]] == ["rejected", "applied"]
+    row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
+    assert row[0] == "rejected"
+
+
+def test_set_job_status_to_none_clears_current_status_and_is_recorded(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+
+    db.set_job_status(conn, "k1", None)
+
+    row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
+    assert row[0] is None
+    history = db.get_job_status_history(conn, ["k1"])
+    assert [h["status"] for h in history["k1"]] == [None, "applied"]
+
+
+def test_set_job_status_on_unknown_key_raises_key_error(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(KeyError):
+        db.set_job_status(conn, "does-not-exist", "applied")
+
+
+def test_get_job_status_history_omits_key_with_no_changes(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    history = db.get_job_status_history(conn, ["k1"])
+
+    assert history.get("k1", []) == []
+
+
+def test_get_job_status_history_with_empty_keys_list_returns_empty_dict(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    assert db.get_job_status_history(conn, []) == {}
+
+
+def test_get_job_status_history_groups_by_key_for_a_batch(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+    db.set_job_status(conn, "k2", "ignored")
+
+    history = db.get_job_status_history(conn, ["k1", "k2"])
+
+    assert set(history.keys()) == {"k1", "k2"}
+    assert history["k1"][0]["status"] == "applied"
+    assert history["k2"][0]["status"] == "ignored"
