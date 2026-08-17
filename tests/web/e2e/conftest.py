@@ -70,6 +70,10 @@ def browser():
 
 @pytest.fixture
 def page(browser):
-    p = browser.new_page()
+    # bypass_csp: the app's CSP (app/web/security_headers.py) blocks eval(),
+    # which Playwright's own wait_for_function/expect helpers use internally
+    # to run predicates in-page. Real browsers/users are unaffected -- this
+    # only disables CSP enforcement inside this test-only page.
+    p = browser.new_page(bypass_csp=True)
     yield p
     p.close()

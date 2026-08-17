@@ -11,6 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+          # DL3008: apt-get install without pinned versions -- pre-existing,
+          # and pinning would make CI brittle as Debian rotates package builds.
+          # DL3025: HEALTHCHECK CMD uses shell form deliberately, for `|| exit 1`.
+          ignore: DL3008,DL3025
+
       - name: Build image
         run: docker compose build
 
@@ -50,6 +60,21 @@ jobs:
           echo "App never became ready" >&2
           docker compose logs
           exit 1
+
+      - name: Verify the server process does not run as root
+        run: |
+          # docker-entrypoint.sh runs as root (to chown bind-mounted
+          # ./config/./data) then drops to uid 1000 via setpriv before
+          # exec'ing uvicorn -- so `exec whoami` would report root (the
+          # image's default user), not the real server process's user.
+          # `docker compose top` reports the actual host-visible UID instead.
+          uid=$(docker compose top careerspyder | awk 'NR==2 {print $3}')
+          echo "server process UID: $uid"
+          if [ "$uid" = "root" ] || [ "$uid" = "0" ]; then
+            echo "Server process is running as root" >&2
+            docker compose top careerspyder
+            exit 1
+          fi
 
       - name: Smoke test all pages
         run: |

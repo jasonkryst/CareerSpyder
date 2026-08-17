@@ -29,6 +29,8 @@ codebase and should be read before making non-trivial changes:
 pip install -e ".[dev]"      # install package + dev deps (pytest, httpx)
 pytest                        # run the full suite (no network, no browser)
 pytest tests/test_db.py -v    # run one file
+pytest --cov=app --cov-report=term-missing   # with coverage (CI runs this)
+ruff check app tests          # includes flake8-bandit ("S") security rules
 uvicorn app.web.main:app --reload --port 8080   # run the app locally
 
 docker build -t careerspyder:latest .
@@ -78,6 +80,24 @@ existing tests — don't casually relax them:
   URL schemes) since the digest is built as a raw HTML string, not
   rendered through Jinja2. Any new place that assembles HTML by hand needs
   the same treatment.
+- **Every response carries baseline security headers.** `app/web/main.py`
+  registers `SecurityHeadersMiddleware` (`app/web/security_headers.py`)
+  app-wide — don't add a second `FastAPI()`/router path that bypasses it.
+  Its CSP allows inline scripts/styles (the app has genuine inline
+  `<script>` blocks and no nonce plumbing) — that's a known, accepted
+  trade-off, not an oversight; don't silently tighten it without checking
+  `base.html`/`source_form.html` still work. The e2e `page` fixture
+  (`tests/web/e2e/conftest.py`) passes `bypass_csp=True` because
+  Playwright's own `wait_for_function`/`expect` helpers use `eval()`
+  internally — that's test-tooling only, not a CSP relaxation for users.
+- **The Dockerfile's image-level user is root; the server process isn't.**
+  `docker-entrypoint.sh` needs to run as root on every container start (to
+  `chown` the bind-mounted `./config`/`./data` regardless of host
+  ownership), then drops to uid 1000 via `setpriv` before exec'ing
+  uvicorn — so there's deliberately no `USER` instruction in the
+  Dockerfile. `docker exec`/`docker compose exec` therefore still default
+  to root; that's expected and doesn't mean the app is running as root —
+  check the real process with `docker compose top`, as `docker.yml` does.
 
 ## Code conventions
 
@@ -143,10 +163,19 @@ tests/
   test_db.py, test_config.py, test_filters.py, ...   # one per app/*.py module
   adapters/test_<type>.py                              # one per adapter
   web/test_<page>.py                                    # one per route group, using FastAPI's TestClient
+  web/e2e/test_<feature>.py                             # real Playwright browser against a live uvicorn server
 ```
 
-Run `pytest -q` before committing; it should stay fast (a couple seconds)
-since nothing touches the network or a real browser.
+`tests/web/e2e/` is the one deliberate exception to "no real browser" above:
+it drives an actual Chromium instance (via `tests/web/e2e/conftest.py`'s
+`live_server`/`browser`/`page` fixtures) against a real running instance of
+the app, for behavior that can only be observed client-side (JS-driven
+polling, keyboard nav, theme persistence). Everything outside that
+directory still must not touch the network or a real browser.
+
+Run `pytest -q` before committing. The non-e2e suite stays fast (a couple
+seconds); the full suite including `web/e2e/` takes roughly a minute
+because it launches real Chromium instances.
 
 ## Git workflow
 

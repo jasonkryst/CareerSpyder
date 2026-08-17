@@ -302,6 +302,13 @@ Both files use the same two bind-mounted volumes for persistent state:
 
 Exposed port: `8080`.
 
+The server itself runs as a fixed non-root user (uid/gid `1000:1000`), not
+root. No manual host setup is required for this: `docker-entrypoint.sh`
+runs once as root on every container start, `chown -R`s `./config` and
+`./data` to `1000:1000` regardless of their prior ownership on the host,
+then hands off to the app user via `setpriv` before starting uvicorn — so
+mismatched host directory ownership never breaks a deploy.
+
 ## Project structure
 
 ```

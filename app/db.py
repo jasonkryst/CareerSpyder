@@ -122,7 +122,8 @@ def clear_jobs(conn: sqlite3.Connection) -> None:
 def start_run(conn: sqlite3.Connection) -> int:
     cur = conn.execute("INSERT INTO runs (started_at) VALUES (?)", (_now(),))
     conn.commit()
-    assert cur.lastrowid is not None
+    if cur.lastrowid is None:
+        raise RuntimeError("INSERT INTO runs did not produce a rowid")
     return cur.lastrowid
 
 

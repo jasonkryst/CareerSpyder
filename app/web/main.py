@@ -12,6 +12,7 @@ from app.web.routes_guide import router as guide_router
 from app.web.routes_jobs import router as jobs_router
 from app.web.routes_settings import router as settings_router
 from app.web.routes_sources import router as sources_router
+from app.web.security_headers import SecurityHeadersMiddleware
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CareerSpyder", lifespan=lifespan)
+app.add_middleware(SecurityHeadersMiddleware)
 app.mount(
     "/static",
     StaticFiles(directory=str(Path(__file__).parent / "static")),
