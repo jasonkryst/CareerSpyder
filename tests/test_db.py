@@ -640,3 +640,33 @@ def test_get_job_status_history_groups_by_key_for_a_batch(tmp_db_path):
     assert set(history.keys()) == {"k1", "k2"}
     assert history["k1"][0]["status"] == "applied"
     assert history["k2"][0]["status"] == "ignored"
+
+
+def test_list_jobs_filters_by_status(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn))
+    db.set_job_status(conn, "a", "applied")
+
+    applied = db.list_jobs(conn, status="applied")
+    none_status = db.list_jobs(conn, status="none")
+
+    assert [r["key"] for r in applied] == ["a"]
+    assert [r["key"] for r in none_status] == ["b"]
+
+
+def test_count_jobs_respects_status_filter(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [_job("a")], db.start_run(conn))
+    db.set_job_status(conn, "a", "rejected")
+
+    assert db.count_jobs(conn, status="rejected") == 1
+    assert db.count_jobs(conn, status="applied") == 0
+
+
+def test_list_jobs_returns_status_field_defaulting_to_none(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [_job("a")], db.start_run(conn))
+
+    rows = db.list_jobs(conn)
+
+    assert rows[0]["status"] is None

@@ -235,6 +235,7 @@ _JOB_SORT_COLUMNS = {
 
 def _job_filters_sql(
     company: str | None, source_name: str | None, removed: str | None, emailed: str | None,
+    status: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
@@ -252,6 +253,11 @@ def _job_filters_sql(
         clauses.append("emailed_at IS NOT NULL")
     elif emailed == "not_sent":
         clauses.append("emailed_at IS NULL")
+    if status == "none":
+        clauses.append("status IS NULL")
+    elif status:
+        clauses.append("status = ?")
+        params.append(status)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -260,14 +266,14 @@ def list_jobs(
     conn: sqlite3.Connection, limit: int = 25, offset: int = 0, *,
     sort: str = "", direction: str = "",
     company: str | None = None, source_name: str | None = None,
-    removed: str | None = None, emailed: str | None = None,
+    removed: str | None = None, emailed: str | None = None, status: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status)
     query = (
         "SELECT key, title, company, location, url, posted_date, source_name, source_id, "
-        "summary, first_seen_at, removed_at, emailed_at FROM jobs "
+        "summary, first_seen_at, removed_at, emailed_at, status FROM jobs "
         f"{where_sql} ORDER BY {order_column} {order_dir}, rowid {order_dir} LIMIT ? OFFSET ?"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
@@ -275,7 +281,7 @@ def list_jobs(
         {
             "key": r[0], "title": r[1], "company": r[2], "location": r[3], "url": r[4],
             "posted_date": r[5], "source_name": r[6], "source_id": r[7], "summary": r[8],
-            "first_seen_at": r[9], "removed_at": r[10], "emailed_at": r[11],
+            "first_seen_at": r[9], "removed_at": r[10], "emailed_at": r[11], "status": r[12],
         }
         for r in rows
     ]
@@ -284,9 +290,9 @@ def list_jobs(
 def count_jobs(
     conn: sqlite3.Connection, *,
     company: str | None = None, source_name: str | None = None,
-    removed: str | None = None, emailed: str | None = None,
+    removed: str | None = None, emailed: str | None = None, status: str | None = None,
 ) -> int:
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status)
     row = conn.execute(f"SELECT COUNT(*) FROM jobs {where_sql}", params).fetchone()
     return row[0]
 
