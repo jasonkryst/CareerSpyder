@@ -34,9 +34,6 @@ later rather than fixed immediately.
   default misfire grace time means a restart or a busy process at
   `RUN_HOUR:00` silently skips that day. Consider a small grace window
   plus a "haven't run today yet" check at startup.
-- **Docker image hardening (from review).** No `HEALTHCHECK`, runs as
-  root, base image isn't digest-pinned. Worth doing before this runs
-  anywhere more exposed than a home lab.
 - **Very large aggregate job counts could hit SQLite's bound-parameter cap
   (from review).** `db.get_new_jobs` binds one SQL parameter per job
   checked; SQLite's default limit is 32,766. A single well-known ATS board
@@ -50,10 +47,6 @@ later rather than fixed immediately.
   Playwright scraping of public search pages — fragile by nature (layout
   changes, blocking, CAPTCHAs). Replacing them with an official API or RSS
   source, where available, would be far lower-maintenance.
-- **Multi-recipient digest email (from design spec + review).** `email_to`
-  is a single address today. Comma-splitting it into multiple recipients
-  is a small, low-risk addition if/when more than one person wants the
-  digest.
 - **Digest subject line doesn't mention failures when jobs also exist
   (from review).** `app/digest.py` currently only reflects the new-job
   count in the subject when there are new jobs, even if the same run also
@@ -68,8 +61,3 @@ later rather than fixed immediately.
 - **No settings-survives-a-restart test (from review).** `/settings`
   writes are covered unit-wise, but nothing simulates a container restart
   to confirm persisted settings actually reload correctly.
-- **Scheduler test still mocks the orchestrator and digest builder (from
-  review).** `tests/test_scheduler.py` verifies wiring, but nothing
-  exercises the real orchestrator → digest → "skip email when nothing to
-  report" path as one integration test with real objects (only mocked
-  adapters, per the project's no-live-network testing constraint).

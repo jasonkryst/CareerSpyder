@@ -1,6 +1,7 @@
+import json
 from unittest.mock import patch
 
-from app import db, scheduler
+from app import db, orchestrator, scheduler
 from app.digest import Digest
 from app.models import Job
 
@@ -248,6 +249,47 @@ def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(tmp_db_pat
          patch("app.scheduler.emailer.send_email"):
         scheduler.run_and_notify(conn, sources_path)
 
+    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+
+
+def test_run_and_notify_end_to_end_stays_silent_on_clean_run(tmp_db_path, tmp_path, monkeypatch):
+    # Real orchestrator + real digest builder, only the network boundary
+    # (adapter fetch, email send) is faked. Covers the "no new jobs, no
+    # failures -> no email" path with real objects, not the fully-mocked
+    # wiring the other tests in this file use.
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [])
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ]}))
+
+    with patch("app.scheduler.emailer.send_email") as mock_send:
+        scheduler.run_and_notify(conn, sources_path)
+
+    mock_send.assert_not_called()
+
+
+def test_run_and_notify_end_to_end_sends_real_digest_for_a_new_job(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    job = Job(key="gh:1", title="<Engineer>", url="https://acme.test/1", company="Acme", source_name="Acme")
+    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ]}))
+
+    with patch("app.scheduler.emailer.send_email") as mock_send:
+        scheduler.run_and_notify(conn, sources_path)
+
+    mock_send.assert_called_once()
+    html_body = mock_send.call_args[0][7]
+    assert "&lt;Engineer&gt;" in html_body  # real digest builder escapes it
+    assert "<Engineer>" not in html_body
     assert db.list_jobs(conn)[0]["emailed_at"] is not None
 
 

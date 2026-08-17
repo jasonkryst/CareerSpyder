@@ -35,7 +35,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: playwright install --with-deps chromium
-      - run: pytest -q
+      - run: pytest -q --cov=app --cov-report=term-missing
 
   dependency-audit:
     runs-on: ubuntu-latest

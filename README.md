@@ -302,6 +302,12 @@ Both files use the same two bind-mounted volumes for persistent state:
 
 Exposed port: `8080`.
 
+The container runs as a fixed non-root user (uid/gid `1000:1000`), not
+root. If `./config` or `./data` are owned by a different user on the host,
+the container won't be able to write `sources.json` or `state.db` — run
+`chown -R 1000:1000 config data` on the host once before first start (or
+match an existing uid-1000 user's ownership).
+
 ## Project structure
 
 ```
