@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 from app import config, db
+from app.web.flash import flash_redirect
 from app.web.templating import templates
 
 router = APIRouter()
@@ -60,7 +61,7 @@ async def save_settings(request: Request):
         _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
         _str_field(form, "email_from"),
     )
-    return RedirectResponse(url="/settings/email", status_code=303)
+    return flash_redirect("/settings/email", "Email settings saved.")
 
 
 @router.get("/settings/data", response_class=HTMLResponse)
@@ -103,13 +104,16 @@ async def save_preferences(request: Request):
 
     email_to = ",".join(submitted_emails)
     db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
-    return RedirectResponse(url="/settings/preferences", status_code=303)
+    return flash_redirect("/settings/preferences", "Preferences saved.")
 
 
 @router.post("/settings/data/clear-cache")
 def clear_cache(request: Request):
     db.clear_jobs(request.app.state.conn)
-    return RedirectResponse(url="/settings/data?cleared=1", status_code=303)
+    return flash_redirect(
+        "/settings/data",
+        "Job cache cleared. The next run will re-report every currently known job as new.",
+    )
 
 
 DEFAULT_PREFERENCES = {"email_days": [], "resend_jobs": False, "email_to": []}
@@ -184,7 +188,7 @@ async def import_settings(request: Request):
         email_days, resend_jobs, email_to = parsed_preferences
         db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
 
-    redirect_url = f"/settings/data?imported={len(sources)}"
+    redirect_message = f"Imported {len(sources)} source(s)."
     if parsed_preferences is not None:
-        redirect_url += "&preferences=1"
-    return RedirectResponse(url=redirect_url, status_code=303)
+        redirect_message = f"Imported {len(sources)} source(s) and preferences."
+    return flash_redirect("/settings/data", redirect_message)

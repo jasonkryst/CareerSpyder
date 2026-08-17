@@ -43,6 +43,22 @@ def test_delete_source_removes_it(client):
         assert json.load(f)["sources"] == []
 
 
+def test_delete_source_redirect_carries_deleted_flash_message(client):
+    from urllib.parse import parse_qs, urlparse
+
+    sources_path = client.app.state.sources_path
+    with open(sources_path, "w") as f:
+        json.dump({"sources": [
+            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+        ]}, f)
+
+    resp = client.post("/sources/s1/delete", follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/sources"
+    assert parse_qs(location.query)["flash"] == ["Source deleted."]
+
+
 def test_sources_table_has_no_legacy_inline_attributes(client):
     resp = client.get("/sources")
 

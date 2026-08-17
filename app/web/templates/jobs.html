@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_sort_header.html" import sort_th %}
+{% from "_external_link.html" import external_link %}
 {% block content %}
 <h1>Jobs</h1>
 <form method="get" action="/jobs" class="filter-bar">
@@ -51,7 +52,7 @@
   <tr class="{{ "removed" if job.removed_at else "" }}">
     <td data-label="Company">{{ job.company or "—" }}</td>
     <td data-label="Search name">{{ job.source_name }}</td>
-    <td data-label="Title"><a href="{{ job.safe_url }}">{{ job.title }}</a></td>
+    <td data-label="Title">{{ external_link(job.safe_url, job.title) }}</td>
     <td data-label="Location">{{ job.location or "—" }}</td>
     <td data-label="Date found">{{ job.first_seen_at }}</td>
     <td data-label="Removed">{{ job.removed_at or "—" }}</td>

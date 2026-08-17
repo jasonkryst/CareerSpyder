@@ -11,7 +11,7 @@ def test_confirming_modal_allows_import_to_proceed(live_server, page):
     page.click('#import-form button[type="submit"]')
     page.wait_for_selector("#confirm-modal[open]")
     page.click("#confirm-modal-confirm")
-    page.wait_for_url("**/settings/data?imported=0")
+    page.wait_for_url("**/settings/data?flash=*")
 
 
 def test_dismissing_modal_cancels_import(live_server, page):

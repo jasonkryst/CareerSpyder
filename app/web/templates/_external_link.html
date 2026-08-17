@@ -1,0 +1,3 @@
+{% macro external_link(url, label) -%}
+<a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }} <span aria-hidden="true">&#8599;</span><span class="sr-only"> (opens in new tab)</span></a>
+{%- endmacro %}

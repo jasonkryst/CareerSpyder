@@ -18,6 +18,7 @@
   <script src="/static/nav.js" defer></script>
   <script src="/static/dashboard.js" defer></script>
   <script src="/static/confirm-modal.js" defer></script>
+  <script src="/static/toast.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -51,6 +52,14 @@
   <footer>
     <p>{{ app_name }} v{{ app_version }}</p>
   </footer>
+  <div id="toast-container" aria-live="polite" aria-atomic="true">
+    {% if request.query_params.get("flash") %}
+    <div class="toast" role="status">
+      {{ request.query_params.get("flash") }}
+      <button type="button" class="toast-close" aria-label="Dismiss">&times;</button>
+    </div>
+    {% endif %}
+  </div>
   <dialog id="confirm-modal" class="modal">
     <h2 id="confirm-modal-title">Please confirm</h2>
     <p id="confirm-modal-message"></p>

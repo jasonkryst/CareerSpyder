@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-08-16
+
+### Added
+
+- A toast confirmation appears after every save, update, or delete
+  action (adding/editing/deleting a source, saving email or preference
+  settings, clearing the job cache, importing settings) — auto-dismisses
+  after a few seconds or can be closed manually (issue #45).
+- Job posting links on the Jobs page now open in a new tab and show a
+  `↗` icon indicating they leave the app (issue #46).
+
 ## [0.13.0] — 2026-08-16
 
 ### Added
