@@ -1,4 +1,4 @@
-FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 
 # Pinning the base image by digest (below) buys supply-chain reproducibility
 # but freezes whatever OS package versions shipped in that snapshot -- an
@@ -13,7 +13,12 @@ WORKDIR /app
 
 COPY pyproject.toml .
 COPY app app
-RUN pip install --no-cache-dir .
+# Uninstalling pip after use drops its vendored copies of msgpack/setuptools
+# from the image -- pip itself isn't needed once deps are installed, and its
+# bundled versions of those two lag behind upstream security fixes (Trivy
+# flags them via pip's SBOM, which older pip releases didn't ship).
+RUN pip install --no-cache-dir . \
+    && python -m pip uninstall -y pip
 
 # Keep Chromium's download inside /app (not the default $HOME/.cache) so a
 # single chown below covers it too, once the process drops to a non-root user.
