@@ -1,16 +1,18 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app import db
 from app.textutils import safe_url_scheme
+from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.templating import templates
 
 router = APIRouter()
 
 PAGE_SIZE = 25
+STATUSES = {"applied": "Applied", "ignored": "Ignored", "accepted": "Accepted", "rejected": "Rejected"}
 
 
 def _age_days(first_seen_at: str, removed_at: str | None) -> int:
@@ -43,3 +45,18 @@ def jobs(
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "filters": {"company": company, "source": source, "removed": removed, "emailed": emailed},
     })
+
+
+@router.post("/jobs/status")
+async def update_job_status(request: Request):
+    form = dict((await request.form()).items())
+    key = form.get("key", "")
+    status = form.get("status", "") or None
+    if status is not None and status not in STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    try:
+        db.set_job_status(request.app.state.conn, key, status)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    message = f"Marked as {STATUSES[status]}." if status else "Status cleared."
+    return flash_redirect("/jobs", message)
