@@ -295,10 +295,20 @@ Two compose files, for two different purposes:
   docker compose -f docker-compose.prod.yml up -d
   ```
 
-Both files use the same two bind-mounted volumes for persistent state:
+Both files bind-mount the same two paths for persistent state:
 
-- `./config` → `/app/config` — `sources.json`.
-- `./data` → `/app/data` — `state.db` (dedup store, run history, settings).
+- `/app/config` — `sources.json`.
+- `/app/data` — `state.db` (dedup store, run history, settings).
+
+`docker-compose.yml` mounts these from `./config` and `./data` (relative to
+the checkout) — fine for local dev and CI, which always run from a fresh,
+known directory. `docker-compose.prod.yml` mounts them from fixed absolute
+host paths (`/opt/careerspyder/config`, `/opt/careerspyder/data`) instead —
+a relative path there would be resolved against whatever directory you
+happen to run `docker compose` from, which is fragile for a manually
+managed deploy host. Create those two directories on the host once before
+the first `up -d`; the container's entrypoint (see below) takes care of
+their ownership.
 
 Exposed port: `8080`.
 
