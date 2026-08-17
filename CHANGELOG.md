@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-08-16
+
+### Added
+
+- Job status tracking on the Jobs page — mark a job as Applied, Ignored,
+  Accepted, or Rejected (or clear it back to no status) from an inline
+  dropdown per row. Every change is timestamped and kept in a per-job
+  history, viewable via an expandable "History" section on each row. A
+  new Status filter narrows the table to a given status or to jobs with
+  no status set (issue #48).
+
 ## [0.14.0] — 2026-08-16
 
 ### Added
