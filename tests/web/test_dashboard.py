@@ -244,7 +244,7 @@ def test_dashboard_js_uses_location_search_for_refresh(client):
 
 def test_dashboard_wraps_started_at_in_a_time_element(client):
     conn = client.app.state.conn
-    run_id = db.start_run(conn)
+    db.start_run(conn)
     started_at = db.list_runs(conn)[0]["started_at"]
 
     resp = client.get("/")
