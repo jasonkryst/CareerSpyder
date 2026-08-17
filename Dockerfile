@@ -13,7 +13,12 @@ WORKDIR /app
 
 COPY pyproject.toml .
 COPY app app
-RUN pip install --no-cache-dir .
+# Uninstalling pip after use drops its vendored copies of msgpack/setuptools
+# from the image -- pip itself isn't needed once deps are installed, and its
+# bundled versions of those two lag behind upstream security fixes (Trivy
+# flags them via pip's SBOM, which older pip releases didn't ship).
+RUN pip install --no-cache-dir . \
+    && python -m pip uninstall -y pip
 
 # Keep Chromium's download inside /app (not the default $HOME/.cache) so a
 # single chown below covers it too, once the process drops to a non-root user.
