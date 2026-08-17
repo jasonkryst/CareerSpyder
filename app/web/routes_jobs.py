@@ -21,6 +21,11 @@ def _age_days(first_seen_at: str, removed_at: str | None) -> int:
     return (end - start).days
 
 
+def _form_str(form: dict, key: str) -> str:
+    value = form.get(key, "")
+    return value if isinstance(value, str) else ""
+
+
 @router.get("/jobs", response_class=HTMLResponse)
 def jobs(
     request: Request, page: str = "1", sort: str = "",
@@ -57,8 +62,8 @@ def jobs(
 @router.post("/jobs/status")
 async def update_job_status(request: Request):
     form = dict((await request.form()).items())
-    key = form.get("key", "")
-    status = form.get("status", "") or None
+    key = _form_str(form, "key")
+    status = _form_str(form, "status") or None
     if status is not None and status not in STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
     try:
