@@ -16,5 +16,9 @@ services:
       CAREERSPYDER_DB_PATH: /app/data/state.db
       CAREERSPYDER_SOURCES_PATH: /app/config/sources.json
     volumes:
-      - /opt/careerspyder/config:/app/config
-      - /opt/careerspyder/data:/app/data
+      - careerspyder_config:/app/config
+      - careerspyder_data:/app/data
+
+volumes:
+  careerspyder_config:
+  careerspyder_data:
