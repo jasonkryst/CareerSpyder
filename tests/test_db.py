@@ -781,3 +781,110 @@ def test_list_jobs_returns_status_field_defaulting_to_none(tmp_db_path):
     rows = db.list_jobs(conn)
 
     assert rows[0]["status"] is None
+
+
+def test_list_job_locations_returns_distinct_resolved_display_names(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, display_name, status) VALUES "
+        "('Chicago, IL', 'Chicago, IL', 'resolved'), "
+        "('Chicago, Illinois', 'Chicago, IL', 'resolved'), "
+        "('Nowhere', NULL, 'failed')"
+    )
+    conn.commit()
+
+    assert db.list_job_locations(conn) == ["Chicago, IL"]
+
+
+def test_list_jobs_location_filter_matches_by_resolved_display_name(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Austin, TX"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_jobs(conn, location="Chicago, IL")
+
+    assert [r["key"] for r in rows] == ["a"]
+    assert rows[0]["location"] == "Chicago, IL"
+
+
+def test_list_jobs_unresolved_location_sentinel_matches_pending_and_failed(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Remote"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_jobs(conn, location="__unresolved__")
+
+    assert [r["key"] for r in rows] == ["b"]
+    assert rows[0]["location"] == "Remote"
+
+
+def test_count_jobs_location_filter_matches_list_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    assert db.count_jobs(conn, location="Chicago, IL") == 1
+    assert db.count_jobs(conn, location="Austin, TX") == 0
+
+
+def test_list_mappable_jobs_returns_only_resolved_locations(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Remote"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_mappable_jobs(conn)
+
+    assert [r["key"] for r in rows] == ["a"]
+    assert rows[0] == {
+        "key": "a", "title": "A", "company": "Acme", "url": "https://x.test/a",
+        "display_name": "Chicago, IL", "lat": 41.8, "lng": -87.6,
+    }
+
+
+def test_list_mappable_jobs_applies_the_same_filters_as_list_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Zeta", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_mappable_jobs(conn, company="Acme")
+
+    assert [r["key"] for r in rows] == ["a"]
