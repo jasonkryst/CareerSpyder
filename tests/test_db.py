@@ -32,6 +32,53 @@ def test_init_db_creates_geocoded_locations_table_and_enables_fk_pragma(tmp_db_p
     assert any(fk[2] == "geocoded_locations" and fk[3] == "location" for fk in fks)
 
 
+def test_init_db_migrates_a_legacy_jobs_table_to_add_the_location_fk(tmp_db_path):
+    import sqlite3
+
+    legacy_conn = sqlite3.connect(tmp_db_path)
+    legacy_conn.execute(
+        "CREATE TABLE jobs (key TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, "
+        "location TEXT, url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, "
+        "source_id TEXT, summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
+        "removed_at TEXT, emailed_at TEXT)"
+    )
+    legacy_conn.execute(
+        "INSERT INTO jobs (key, title, company, location, url, source_name, first_seen_at) "
+        "VALUES ('k1', 'Engineer', 'Acme', 'Chicago, IL', 'https://x.test/1', 'Acme Board', "
+        "'2026-01-01T00:00:00+00:00')"
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    conn = db.init_db(tmp_db_path)
+
+    rows = db.list_jobs(conn)
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k1"
+    assert rows[0]["location"] == "Chicago, IL"
+
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    assert any(fk[2] == "geocoded_locations" for fk in fks)
+
+    stub = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert stub == ("pending",)
+
+
+def test_fk_enforcement_rejects_a_job_location_with_no_geocoded_locations_row(tmp_db_path):
+    import sqlite3
+
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location) "
+            "VALUES ('k1', 'Engineer', 'https://x.test/1', 'Acme Board', "
+            "'2026-01-01T00:00:00+00:00', 'Nowhere, XX')"
+        )
+
+
 def test_new_job_then_seen_on_second_run(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     job = make_job()

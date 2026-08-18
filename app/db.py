@@ -91,6 +91,38 @@ def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_JOBS_REBUILD_COLUMNS = (
+    "key TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, location TEXT, "
+    "url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, source_id TEXT, "
+    "summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
+    "removed_at TEXT, emailed_at TEXT, status TEXT, "
+    "FOREIGN KEY (location) REFERENCES geocoded_locations(location)"
+)
+
+
+def _migrate_jobs_location_fk(conn: sqlite3.Connection) -> None:
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    if any(fk[2] == "geocoded_locations" for fk in fks):
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        "INSERT OR IGNORE INTO geocoded_locations (location, status) "
+        "SELECT DISTINCT location, 'pending' FROM jobs WHERE location IS NOT NULL"
+    )
+    conn.execute(f"CREATE TABLE jobs_new ({_JOBS_REBUILD_COLUMNS})")
+    conn.execute(
+        "INSERT INTO jobs_new (key, title, company, location, url, posted_date, source_name, "
+        "source_id, summary, first_seen_run_id, first_seen_at, removed_at, emailed_at, status) "
+        "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary, "
+        "first_seen_run_id, first_seen_at, removed_at, emailed_at, status FROM jobs"
+    )
+    conn.execute("DROP TABLE jobs")
+    conn.execute("ALTER TABLE jobs_new RENAME TO jobs")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
@@ -99,6 +131,7 @@ def init_db(path: str) -> sqlite3.Connection:
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     _migrate_jobs_table(conn)
+    _migrate_jobs_location_fk(conn)
     return conn
 
 
