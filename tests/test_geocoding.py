@@ -1,6 +1,9 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from app.geocoding.base import GeocodeResult
+from app.geocoding.factory import get_geocoder
 from app.geocoding.nominatim import NominatimGeocoder
 
 
@@ -69,3 +72,19 @@ def test_nominatim_geocode_returns_none_on_request_exception():
         result = NominatimGeocoder().geocode("Chicago, IL")
 
     assert result is None
+
+
+def test_get_geocoder_defaults_to_nominatim(monkeypatch):
+    monkeypatch.delenv("GEOCODER_PROVIDER", raising=False)
+    assert isinstance(get_geocoder(), NominatimGeocoder)
+
+
+def test_get_geocoder_reads_provider_from_env(monkeypatch):
+    monkeypatch.setenv("GEOCODER_PROVIDER", "nominatim")
+    assert isinstance(get_geocoder(), NominatimGeocoder)
+
+
+def test_get_geocoder_raises_on_unknown_provider(monkeypatch):
+    monkeypatch.setenv("GEOCODER_PROVIDER", "not-a-real-provider")
+    with pytest.raises(ValueError, match="not-a-real-provider"):
+        get_geocoder()
