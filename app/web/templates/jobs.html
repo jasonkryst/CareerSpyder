@@ -2,7 +2,10 @@
 {% from "_sort_header.html" import sort_th %}
 {% from "_external_link.html" import external_link %}
 {% block content %}
-<h1>Jobs</h1>
+<div class="page-header">
+  <h1>Jobs</h1>
+  <a href="{{ query_url(request, '/jobs/map') }}" class="btn">Map view</a>
+</div>
 <form method="get" action="/jobs" class="filter-bar">
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
@@ -50,7 +53,6 @@
   <button type="submit">Filter</button>
   {% if filters.company or filters.source or filters.location or filters.removed or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
-<p><a href="{{ query_url(request, '/jobs/map') }}">Map view</a></p>
 <div class="table-scroll">
 <table>
   <thead>
