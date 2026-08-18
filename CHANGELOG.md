@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Job location map (`/jobs/map`, linked from the Jobs page): background geocoding of job
+  locations via a swappable provider (Nominatim/OpenStreetMap by default, no API key), a
+  cache of resolved coordinates, and a Leaflet-based map with clustered markers and a
+  per-location job list popup. The Jobs table also gains a Location filter and cleaner
+  location display, deduping scraped location text variants into one normalized name
+  (issue #49).
+
 ### Fixed
 
 - `docker-compose.prod.yml` now mounts `/app/config` and `/app/data` from
