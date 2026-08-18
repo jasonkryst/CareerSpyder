@@ -79,6 +79,50 @@ def test_fk_enforcement_rejects_a_job_location_with_no_geocoded_locations_row(tm
         )
 
 
+def test_save_jobs_creates_a_pending_geocoded_locations_stub_for_a_new_location(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+
+    row = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("pending",)
+
+
+def test_save_jobs_reuses_an_existing_geocoded_locations_row_for_a_repeated_location(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8, lng = -87.6 "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    db.save_jobs(conn, [Job(key="k2", title="Sales", url="https://x.test/2",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+
+    row = conn.execute(
+        "SELECT status, lat FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("resolved", 41.8)
+
+
+def test_save_jobs_with_no_location_does_not_touch_geocoded_locations(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board")], run_id)
+
+    count = conn.execute("SELECT COUNT(*) FROM geocoded_locations").fetchone()[0]
+    assert count == 0
+
+
 def test_new_job_then_seen_on_second_run(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     job = make_job()

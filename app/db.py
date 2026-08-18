@@ -149,6 +149,12 @@ def save_jobs(conn: sqlite3.Connection, jobs: list[Job], run_id: int) -> None:
     if not jobs:
         return
     now = _now()
+    locations = {j.location for j in jobs if j.location}
+    if locations:
+        conn.executemany(
+            "INSERT OR IGNORE INTO geocoded_locations (location, status) VALUES (?, 'pending')",
+            [(loc,) for loc in locations],
+        )
     conn.executemany(
         "INSERT OR IGNORE INTO jobs "
         "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
