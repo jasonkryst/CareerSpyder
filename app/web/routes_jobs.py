@@ -31,11 +31,13 @@ def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
     company: str = "", source: str = "", removed: str = "", emailed: str = "", status: str = "",
+    location: str = "",
 ):
     conn = request.app.state.conn
     filters = {
         "company": company or None, "source_name": source or None,
         "removed": removed or None, "emailed": emailed or None, "status": status or None,
+        "location": location or None,
     }
     total = db.count_jobs(conn, **filters)
     pagination = paginate(total, page, PAGE_SIZE)
@@ -51,10 +53,13 @@ def jobs(
             for entry in history.get(row["key"], [])
         ]
     source_names = db.list_job_source_names(conn)
+    locations = db.list_job_locations(conn)
     return templates.TemplateResponse(request, "jobs.html", {
-        "jobs": rows, "pagination": pagination, "source_names": source_names, "statuses": STATUSES,
+        "jobs": rows, "pagination": pagination, "source_names": source_names, "locations": locations,
+        "statuses": STATUSES,
         "filters": {
-            "company": company, "source": source, "removed": removed, "emailed": emailed, "status": status,
+            "company": company, "source": source, "removed": removed, "emailed": emailed,
+            "status": status, "location": location,
         },
     })
 

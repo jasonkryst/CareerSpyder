@@ -184,6 +184,42 @@ def test_jobs_page_filter_dropdown_lists_distinct_source_names(client):
     assert '<option value="Acme Board"' in resp.text
 
 
+def test_jobs_page_filter_dropdown_lists_distinct_resolved_locations(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs")
+
+    assert '<option value="Chicago, IL"' in resp.text
+
+
+def test_jobs_page_location_filter_narrows_results(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id)
+    db.save_jobs(conn, [make_job(key="b", title="Austin Job", location="Austin, TX")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs?location=Chicago, IL")
+
+    assert "Chicago Job" in resp.text
+    assert "Austin Job" not in resp.text
+
+
+def test_jobs_page_location_filter_shown_in_clear_filters_check(client):
+    resp = client.get("/jobs?location=__unresolved__")
+    assert "Clear filters" in resp.text
+
+
 def test_jobs_page_invalid_sort_does_not_error(client):
     resp = client.get("/jobs?sort=nonsense")
 
