@@ -31,11 +31,13 @@ def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
     company: str = "", source: str = "", removed: str = "", emailed: str = "", status: str = "",
+    location: str = "",
 ):
     conn = request.app.state.conn
     filters = {
         "company": company or None, "source_name": source or None,
         "removed": removed or None, "emailed": emailed or None, "status": status or None,
+        "location": location or None,
     }
     total = db.count_jobs(conn, **filters)
     pagination = paginate(total, page, PAGE_SIZE)
@@ -51,12 +53,57 @@ def jobs(
             for entry in history.get(row["key"], [])
         ]
     source_names = db.list_job_source_names(conn)
+    locations = db.list_job_locations(conn)
     return templates.TemplateResponse(request, "jobs.html", {
-        "jobs": rows, "pagination": pagination, "source_names": source_names, "statuses": STATUSES,
+        "jobs": rows, "pagination": pagination, "source_names": source_names, "locations": locations,
+        "statuses": STATUSES,
         "filters": {
-            "company": company, "source": source, "removed": removed, "emailed": emailed, "status": status,
+            "company": company, "source": source, "removed": removed, "emailed": emailed,
+            "status": status, "location": location,
         },
     })
+
+
+@router.get("/jobs/map", response_class=HTMLResponse)
+def jobs_map(
+    request: Request,
+    company: str = "", source: str = "", location: str = "", removed: str = "",
+    emailed: str = "", status: str = "",
+):
+    conn = request.app.state.conn
+    source_names = db.list_job_source_names(conn)
+    locations = db.list_job_locations(conn)
+    return templates.TemplateResponse(request, "jobs_map.html", {
+        "source_names": source_names, "locations": locations,
+        "filters": {
+            "company": company, "source": source, "location": location,
+            "removed": removed, "emailed": emailed, "status": status,
+        },
+    })
+
+
+@router.get("/jobs/map/data")
+def jobs_map_data(
+    request: Request,
+    company: str = "", source: str = "", location: str = "", removed: str = "",
+    emailed: str = "", status: str = "",
+):
+    conn = request.app.state.conn
+    rows = db.list_mappable_jobs(
+        conn, company=company or None, source_name=source or None, location=location or None,
+        removed=removed or None, emailed=emailed or None, status=status or None,
+    )
+    grouped: dict[tuple, dict] = {}
+    for row in rows:
+        key = (row["lat"], row["lng"])
+        entry = grouped.setdefault(key, {
+            "lat": row["lat"], "lng": row["lng"], "display_name": row["display_name"], "jobs": [],
+        })
+        entry["jobs"].append({
+            "key": row["key"], "title": row["title"], "company": row["company"],
+            "url": safe_url_scheme(row["url"]),
+        })
+    return list(grouped.values())
 
 
 @router.post("/jobs/status")

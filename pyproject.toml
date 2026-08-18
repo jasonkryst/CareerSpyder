@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerspyder"
-version = "0.30.0"
+version = "0.31.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110",
@@ -35,7 +35,7 @@ include = ["app*"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"app.web" = ["templates/*.html", "static/*"]
+"app.web" = ["templates/*.html", "static/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

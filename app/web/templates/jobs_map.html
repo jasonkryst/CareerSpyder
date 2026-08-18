@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/leaflet.markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="/static/vendor/leaflet.markercluster/MarkerCluster.Default.css">
+<script src="/static/vendor/leaflet/leaflet.js" defer></script>
+<script src="/static/vendor/leaflet.markercluster/leaflet.markercluster.js" defer></script>
+<script src="/static/leaflet_renderer.js" defer></script>
+<script src="/static/map.js" defer></script>
+{% endblock %}
+{% block content %}
+<h1>Jobs Map</h1>
+<form method="get" action="/jobs/map" class="filter-bar">
+  <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+  <label>Search name
+    <select name="source">
+      <option value="">All sources</option>
+      {% for name in source_names %}
+      <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Location
+    <select name="location">
+      <option value="">All locations</option>
+      <option value="__unresolved__" {% if filters.location == "__unresolved__" %}selected{% endif %}>Other / Unresolved</option>
+      {% for name in locations %}
+      <option value="{{ name }}" {% if filters.location == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="removed">
+      <option value="">All</option>
+      <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
+      <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if filters.company or filters.source or filters.location or filters.removed or filters.emailed or filters.status %}<a href="/jobs/map">Clear filters</a>{% endif %}
+</form>
+<p><a href="{{ query_url(request, '/jobs') }}">Table view</a></p>
+<div id="map" data-jobs-url="{{ query_url(request, '/jobs/map/data') }}" style="height: 600px;"></div>
+{% endblock %}

@@ -5,6 +5,19 @@ from datetime import UTC, datetime
 from app.models import Job
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS geocoded_locations (
+    location TEXT PRIMARY KEY,
+    display_name TEXT,
+    city TEXT,
+    region TEXT,
+    country TEXT,
+    lat REAL,
+    lng REAL,
+    status TEXT NOT NULL,
+    provider TEXT,
+    resolved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     key TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -18,7 +31,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     first_seen_run_id INTEGER,
     first_seen_at TEXT NOT NULL,
     removed_at TEXT,
-    emailed_at TEXT
+    emailed_at TEXT,
+    status TEXT,
+    FOREIGN KEY (location) REFERENCES geocoded_locations(location)
 );
 
 CREATE TABLE IF NOT EXISTS job_status_history (
@@ -76,13 +91,47 @@ def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_JOBS_REBUILD_COLUMNS = (
+    "key TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, location TEXT, "
+    "url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, source_id TEXT, "
+    "summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
+    "removed_at TEXT, emailed_at TEXT, status TEXT, "
+    "FOREIGN KEY (location) REFERENCES geocoded_locations(location)"
+)
+
+
+def _migrate_jobs_location_fk(conn: sqlite3.Connection) -> None:
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    if any(fk[2] == "geocoded_locations" for fk in fks):
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        "INSERT OR IGNORE INTO geocoded_locations (location, status) "
+        "SELECT DISTINCT location, 'pending' FROM jobs WHERE location IS NOT NULL"
+    )
+    conn.execute(f"CREATE TABLE jobs_new ({_JOBS_REBUILD_COLUMNS})")
+    conn.execute(
+        "INSERT INTO jobs_new (key, title, company, location, url, posted_date, source_name, "
+        "source_id, summary, first_seen_run_id, first_seen_at, removed_at, emailed_at, status) "
+        "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary, "
+        "first_seen_run_id, first_seen_at, removed_at, emailed_at, status FROM jobs"
+    )
+    conn.execute("DROP TABLE jobs")
+    conn.execute("ALTER TABLE jobs_new RENAME TO jobs")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     _migrate_jobs_table(conn)
+    _migrate_jobs_location_fk(conn)
     return conn
 
 
@@ -100,6 +149,12 @@ def save_jobs(conn: sqlite3.Connection, jobs: list[Job], run_id: int) -> None:
     if not jobs:
         return
     now = _now()
+    locations = {j.location for j in jobs if j.location}
+    if locations:
+        conn.executemany(
+            "INSERT OR IGNORE INTO geocoded_locations (location, status) VALUES (?, 'pending')",
+            [(loc,) for loc in locations],
+        )
     conn.executemany(
         "INSERT OR IGNORE INTO jobs "
         "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
@@ -227,38 +282,43 @@ def seed_settings_if_empty(conn: sqlite3.Connection, smtp_host: str, smtp_port: 
 
 
 _JOB_SORT_COLUMNS = {
-    "company": "company COLLATE NOCASE",
-    "title": "title COLLATE NOCASE",
-    "first_seen_at": "first_seen_at",
-    "age_days": "(julianday(COALESCE(removed_at, 'now')) - julianday(first_seen_at))",
+    "company": "jobs.company COLLATE NOCASE",
+    "title": "jobs.title COLLATE NOCASE",
+    "first_seen_at": "jobs.first_seen_at",
+    "age_days": "(julianday(COALESCE(jobs.removed_at, 'now')) - julianday(jobs.first_seen_at))",
 }
 
 
 def _job_filters_sql(
     company: str | None, source_name: str | None, removed: str | None, emailed: str | None,
-    status: str | None = None,
+    status: str | None = None, location: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
     if company:
-        clauses.append("LOWER(company) LIKE ?")
+        clauses.append("LOWER(jobs.company) LIKE ?")
         params.append(f"%{company.lower()}%")
     if source_name:
-        clauses.append("source_name = ?")
+        clauses.append("jobs.source_name = ?")
         params.append(source_name)
     if removed == "active":
-        clauses.append("removed_at IS NULL")
+        clauses.append("jobs.removed_at IS NULL")
     elif removed == "removed":
-        clauses.append("removed_at IS NOT NULL")
+        clauses.append("jobs.removed_at IS NOT NULL")
     if emailed == "sent":
-        clauses.append("emailed_at IS NOT NULL")
+        clauses.append("jobs.emailed_at IS NOT NULL")
     elif emailed == "not_sent":
-        clauses.append("emailed_at IS NULL")
+        clauses.append("jobs.emailed_at IS NULL")
     if status == "none":
-        clauses.append("status IS NULL")
+        clauses.append("jobs.status IS NULL")
     elif status:
-        clauses.append("status = ?")
+        clauses.append("jobs.status = ?")
         params.append(status)
+    if location == "__unresolved__":
+        clauses.append("(geocoded_locations.status IS NULL OR geocoded_locations.status != 'resolved')")
+    elif location:
+        clauses.append("geocoded_locations.display_name = ?")
+        params.append(location)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -268,21 +328,24 @@ def list_jobs(
     sort: str = "", direction: str = "",
     company: str | None = None, source_name: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    location: str | None = None,
 ) -> list[dict]:
-    order_column = _JOB_SORT_COLUMNS.get(sort, "first_seen_at")
+    order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
     query = (
-        "SELECT key, title, company, location, url, posted_date, source_name, source_id, "
-        "summary, first_seen_at, removed_at, emailed_at, status FROM jobs "
-        f"{where_sql} ORDER BY {order_column} {order_dir}, rowid {order_dir} LIMIT ? OFFSET ?"
+        "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
+        "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
+        "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status "
+        "FROM jobs LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
+        f"{where_sql} ORDER BY {order_column} {order_dir}, jobs.rowid {order_dir} LIMIT ? OFFSET ?"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
-            "key": r[0], "title": r[1], "company": r[2], "location": r[3], "url": r[4],
-            "posted_date": r[5], "source_name": r[6], "source_id": r[7], "summary": r[8],
-            "first_seen_at": r[9], "removed_at": r[10], "emailed_at": r[11], "status": r[12],
+            "key": r[0], "title": r[1], "company": r[2], "location": r[4] or r[3], "url": r[5],
+            "posted_date": r[6], "source_name": r[7], "source_id": r[8], "summary": r[9],
+            "first_seen_at": r[10], "removed_at": r[11], "emailed_at": r[12], "status": r[13],
         }
         for r in rows
     ]
@@ -292,9 +355,14 @@ def count_jobs(
     conn: sqlite3.Connection, *,
     company: str | None = None, source_name: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    location: str | None = None,
 ) -> int:
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status)
-    row = conn.execute(f"SELECT COUNT(*) FROM jobs {where_sql}", params).fetchone()
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
+    row = conn.execute(
+        "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "
+        f"ON jobs.location = geocoded_locations.location {where_sql}",
+        params,
+    ).fetchone()
     return row[0]
 
 
@@ -303,6 +371,37 @@ def list_job_source_names(conn: sqlite3.Connection) -> list[str]:
         "SELECT DISTINCT source_name FROM jobs ORDER BY source_name COLLATE NOCASE"
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def list_job_locations(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT display_name FROM geocoded_locations "
+        "WHERE status = 'resolved' AND display_name IS NOT NULL "
+        "ORDER BY display_name COLLATE NOCASE"
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def list_mappable_jobs(
+    conn: sqlite3.Connection, *,
+    company: str | None = None, source_name: str | None = None, location: str | None = None,
+    removed: str | None = None, emailed: str | None = None, status: str | None = None,
+) -> list[dict]:
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
+    resolved_clause = "geocoded_locations.status = 'resolved'"
+    where_sql = f"{where_sql} AND {resolved_clause}" if where_sql else f"WHERE {resolved_clause}"
+    query = (
+        "SELECT jobs.key, jobs.title, jobs.company, jobs.url, "
+        "geocoded_locations.display_name, geocoded_locations.lat, geocoded_locations.lng "
+        "FROM jobs LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
+        f"{where_sql}"
+    )
+    rows = conn.execute(query, params).fetchall()
+    return [
+        {"key": r[0], "title": r[1], "company": r[2], "url": r[3],
+         "display_name": r[4], "lat": r[5], "lng": r[6]}
+        for r in rows
+    ]
 
 
 def mark_emailed(conn: sqlite3.Connection, keys: list[str]) -> None:

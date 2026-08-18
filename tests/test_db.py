@@ -12,6 +12,117 @@ def make_job(key="k1", title="Engineer", source_id="s1", summary=None):
                source_id=source_id, summary=summary)
 
 
+def test_init_db_creates_geocoded_locations_table_and_enables_fk_pragma(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, status) VALUES (?, ?)",
+        ("Chicago, IL", "pending"),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT location, status FROM geocoded_locations WHERE location = ?", ("Chicago, IL",)
+    ).fetchone()
+    assert row == ("Chicago, IL", "pending")
+
+    fk_pragma = conn.execute("PRAGMA foreign_keys").fetchone()
+    assert fk_pragma == (1,)
+
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    assert any(fk[2] == "geocoded_locations" and fk[3] == "location" for fk in fks)
+
+
+def test_init_db_migrates_a_legacy_jobs_table_to_add_the_location_fk(tmp_db_path):
+    import sqlite3
+
+    legacy_conn = sqlite3.connect(tmp_db_path)
+    legacy_conn.execute(
+        "CREATE TABLE jobs (key TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, "
+        "location TEXT, url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, "
+        "source_id TEXT, summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
+        "removed_at TEXT, emailed_at TEXT)"
+    )
+    legacy_conn.execute(
+        "INSERT INTO jobs (key, title, company, location, url, source_name, first_seen_at) "
+        "VALUES ('k1', 'Engineer', 'Acme', 'Chicago, IL', 'https://x.test/1', 'Acme Board', "
+        "'2026-01-01T00:00:00+00:00')"
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    conn = db.init_db(tmp_db_path)
+
+    rows = db.list_jobs(conn)
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k1"
+    assert rows[0]["location"] == "Chicago, IL"
+
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    assert any(fk[2] == "geocoded_locations" for fk in fks)
+
+    stub = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert stub == ("pending",)
+
+
+def test_fk_enforcement_rejects_a_job_location_with_no_geocoded_locations_row(tmp_db_path):
+    import sqlite3
+
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location) "
+            "VALUES ('k1', 'Engineer', 'https://x.test/1', 'Acme Board', "
+            "'2026-01-01T00:00:00+00:00', 'Nowhere, XX')"
+        )
+
+
+def test_save_jobs_creates_a_pending_geocoded_locations_stub_for_a_new_location(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+
+    row = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("pending",)
+
+
+def test_save_jobs_reuses_an_existing_geocoded_locations_row_for_a_repeated_location(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8, lng = -87.6 "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    db.save_jobs(conn, [Job(key="k2", title="Sales", url="https://x.test/2",
+                             source_name="Acme Board", location="Chicago, IL")], run_id)
+
+    row = conn.execute(
+        "SELECT status, lat FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("resolved", 41.8)
+
+
+def test_save_jobs_with_no_location_does_not_touch_geocoded_locations(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
+                             source_name="Acme Board")], run_id)
+
+    count = conn.execute("SELECT COUNT(*) FROM geocoded_locations").fetchone()[0]
+    assert count == 0
+
+
 def test_new_job_then_seen_on_second_run(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     job = make_job()
@@ -670,3 +781,110 @@ def test_list_jobs_returns_status_field_defaulting_to_none(tmp_db_path):
     rows = db.list_jobs(conn)
 
     assert rows[0]["status"] is None
+
+
+def test_list_job_locations_returns_distinct_resolved_display_names(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, display_name, status) VALUES "
+        "('Chicago, IL', 'Chicago, IL', 'resolved'), "
+        "('Chicago, Illinois', 'Chicago, IL', 'resolved'), "
+        "('Nowhere', NULL, 'failed')"
+    )
+    conn.commit()
+
+    assert db.list_job_locations(conn) == ["Chicago, IL"]
+
+
+def test_list_jobs_location_filter_matches_by_resolved_display_name(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Austin, TX"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_jobs(conn, location="Chicago, IL")
+
+    assert [r["key"] for r in rows] == ["a"]
+    assert rows[0]["location"] == "Chicago, IL"
+
+
+def test_list_jobs_unresolved_location_sentinel_matches_pending_and_failed(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Remote"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_jobs(conn, location="__unresolved__")
+
+    assert [r["key"] for r in rows] == ["b"]
+    assert rows[0]["location"] == "Remote"
+
+
+def test_count_jobs_location_filter_matches_list_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    assert db.count_jobs(conn, location="Chicago, IL") == 1
+    assert db.count_jobs(conn, location="Austin, TX") == 0
+
+
+def test_list_mappable_jobs_returns_only_resolved_locations(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Remote"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_mappable_jobs(conn)
+
+    assert [r["key"] for r in rows] == ["a"]
+    assert rows[0] == {
+        "key": "a", "title": "A", "company": "Acme", "url": "https://x.test/a",
+        "display_name": "Chicago, IL", "lat": 41.8, "lng": -87.6,
+    }
+
+
+def test_list_mappable_jobs_applies_the_same_filters_as_list_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Zeta", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    rows = db.list_mappable_jobs(conn, company="Acme")
+
+    assert [r["key"] for r in rows] == ["a"]
