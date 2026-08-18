@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/leaflet.markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="/static/vendor/leaflet.markercluster/MarkerCluster.Default.css">
+<script src="/static/vendor/leaflet/leaflet.js" defer></script>
+<script src="/static/vendor/leaflet.markercluster/leaflet.markercluster.js" defer></script>
+<script src="/static/leaflet_renderer.js" defer></script>
+<script src="/static/map.js" defer></script>
+{% endblock %}
 {% block content %}
 <h1>Jobs Map</h1>
 <form method="get" action="/jobs/map" class="filter-bar">
