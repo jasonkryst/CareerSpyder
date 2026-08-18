@@ -262,6 +262,33 @@ button:hover {
   border-color: var(--accent);
 }
 
+.btn {
+  display: inline-block;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.875rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
 input[type="text"], input[type="email"], input[type="number"], select {
   background: var(--bg);
   color: var(--fg);

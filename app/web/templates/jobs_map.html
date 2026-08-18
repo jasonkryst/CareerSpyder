@@ -9,7 +9,10 @@
 <script src="/static/map.js" defer></script>
 {% endblock %}
 {% block content %}
-<h1>Jobs Map</h1>
+<div class="page-header">
+  <h1>Jobs Map</h1>
+  <a href="{{ query_url(request, '/jobs') }}" class="btn">Table view</a>
+</div>
 <form method="get" action="/jobs/map" class="filter-bar">
   <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
   <label>Search name
@@ -39,6 +42,5 @@
   <button type="submit">Filter</button>
   {% if filters.company or filters.source or filters.location or filters.removed or filters.emailed or filters.status %}<a href="/jobs/map">Clear filters</a>{% endif %}
 </form>
-<p><a href="{{ query_url(request, '/jobs') }}">Table view</a></p>
 <div id="map" data-jobs-url="{{ query_url(request, '/jobs/map/data') }}" style="height: 600px;"></div>
 {% endblock %}
