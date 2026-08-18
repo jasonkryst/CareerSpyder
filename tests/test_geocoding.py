@@ -2,9 +2,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from app import db
 from app.geocoding.base import GeocodeResult
 from app.geocoding.factory import get_geocoder
 from app.geocoding.nominatim import NominatimGeocoder
+from app.geocoding.service import geocode_pending
 
 
 def test_geocode_result_holds_provider_fields():
@@ -88,3 +90,87 @@ def test_get_geocoder_raises_on_unknown_provider(monkeypatch):
     monkeypatch.setenv("GEOCODER_PROVIDER", "not-a-real-provider")
     with pytest.raises(ValueError, match="not-a-real-provider"):
         get_geocoder()
+
+
+class _FakeGeocoder:
+    name = "fake"
+    min_interval_seconds = 0.0
+
+    def __init__(self, results=None, raises_for=()):
+        self.results = results or {}
+        self.raises_for = set(raises_for)
+        self.calls = []
+
+    def geocode(self, location):
+        self.calls.append(location)
+        if location in self.raises_for:
+            raise RuntimeError("provider outage")
+        return self.results.get(location)
+
+
+def test_geocode_pending_resolves_a_pending_location(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute("INSERT INTO geocoded_locations (location, status) VALUES ('Chicago, IL', 'pending')")
+    conn.commit()
+    geocoder = _FakeGeocoder(results={
+        "Chicago, IL": GeocodeResult(display_name="Chicago, IL, USA", city="Chicago",
+                                      region="Illinois", country="USA", lat=41.8, lng=-87.6),
+    })
+
+    geocode_pending(conn, geocoder)
+
+    row = conn.execute(
+        "SELECT status, display_name, city, region, country, lat, lng, provider "
+        "FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("resolved", "Chicago, IL, USA", "Chicago", "Illinois", "USA", 41.8, -87.6, "fake")
+
+
+def test_geocode_pending_marks_a_location_failed_when_geocoder_returns_none(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute("INSERT INTO geocoded_locations (location, status) VALUES ('Remote', 'pending')")
+    conn.commit()
+    geocoder = _FakeGeocoder(results={"Remote": None})
+
+    geocode_pending(conn, geocoder)
+
+    row = conn.execute("SELECT status FROM geocoded_locations WHERE location = 'Remote'").fetchone()
+    assert row == ("failed",)
+
+
+def test_geocode_pending_never_requeries_already_resolved_or_failed_rows(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, status) VALUES "
+        "('Chicago, IL', 'resolved'), ('Remote', 'failed'), ('New York, NY', 'pending')"
+    )
+    conn.commit()
+    geocoder = _FakeGeocoder(results={"New York, NY": GeocodeResult(
+        display_name="New York, NY, USA", city="New York", region="New York",
+        country="USA", lat=40.7, lng=-74.0,
+    )})
+
+    geocode_pending(conn, geocoder)
+
+    assert geocoder.calls == ["New York, NY"]
+
+
+def test_geocode_pending_catches_a_per_location_exception_and_marks_it_failed(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, status) VALUES "
+        "('Boom Town', 'pending'), ('Chicago, IL', 'pending')"
+    )
+    conn.commit()
+    geocoder = _FakeGeocoder(
+        results={"Chicago, IL": GeocodeResult(display_name="Chicago, IL, USA", city="Chicago",
+                                               region="Illinois", country="USA", lat=41.8, lng=-87.6)},
+        raises_for=["Boom Town"],
+    )
+
+    geocode_pending(conn, geocoder)
+
+    boom_row = conn.execute("SELECT status FROM geocoded_locations WHERE location = 'Boom Town'").fetchone()
+    chicago_row = conn.execute("SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'").fetchone()
+    assert boom_row == ("failed",)
+    assert chicago_row == ("resolved",)
