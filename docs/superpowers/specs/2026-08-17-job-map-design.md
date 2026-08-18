@@ -241,7 +241,8 @@ today.
 
 ## Documentation + version
 
-- `pyproject.toml`: `0.20.0` → `0.21.0`.
+- `pyproject.toml`: `0.30.0` → `0.31.0` (already bumped ahead of implementation,
+  at the user's request, when this spec's branch was created).
 - `CHANGELOG.md`: new `### Added` entry — job location map on a new
   `/jobs/map` view, background geocoding via a swappable provider
   (Nominatim by default), and a Location filter/cleaner display on the
