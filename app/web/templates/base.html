@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CareerSpyder</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#b3101f">
+  <link rel="icon" href="/static/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon-180.png">
   <script>
     (function () {
       var stored = localStorage.getItem("theme");
@@ -20,6 +24,13 @@
   <script src="/static/dashboard.js" defer></script>
   <script src="/static/confirm-modal.js" defer></script>
   <script src="/static/toast.js" defer></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      });
+    }
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>

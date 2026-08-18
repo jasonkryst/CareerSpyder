@@ -46,6 +46,11 @@ behind a menu button in the header, and tables switch from a
 horizontally-scrolling grid to a stacked card layout — tap the button
 to open the menu, and scroll normally to read table rows.
 
+CareerSpyder can also be installed as an app: look for an install
+icon in your browser's address bar (or an "Add to Home Screen" option
+on mobile) to get a standalone window and home screen icon, separate
+from your regular browser tabs.
+
 ## Source types & examples
 
 Every source has a **Type** that determines which other fields are
