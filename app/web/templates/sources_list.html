@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% from "_sort_header.html" import sort_th %}
 {% block content %}
-<h1>Sources</h1>
-<a href="/sources/new">Add source</a>
+<div class="page-header">
+  <h1>Sources</h1>
+  <a href="/sources/new" class="btn">Add source</a>
+</div>
 <form method="get" action="/sources" class="filter-bar">
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
