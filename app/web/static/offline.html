@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline — CareerSpyder</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+    }
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      gap: 1rem;
+      padding: 1.5rem;
+    }
+    svg { color: #b3101f; }
+    button {
+      background: #b3101f;
+      color: #ffffff;
+      border: none;
+      border-radius: 0.375rem;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="9" cy="9" r="5"></circle>
+      <line x1="13" y1="13" x2="20" y2="20"></line>
+    </svg>
+    <h1>You're offline</h1>
+    <p>CareerSpyder needs a network connection to load job and source data.</p>
+    <button type="button" onclick="location.reload()">Retry</button>
+  </main>
+</body>
+</html>

@@ -47,3 +47,13 @@ def test_manifest_json_has_expected_fields(client):
 
     maskable = next(i for i in data["icons"] if i["src"] == "/static/icons/icon-512-maskable.png")
     assert maskable["purpose"] == "maskable"
+
+
+def test_offline_page_is_self_contained(client):
+    resp = client.get("/static/offline.html")
+
+    assert resp.status_code == 200
+    assert "You're offline" in resp.text
+    assert "<style>" in resp.text
+    assert '/static/style.css' not in resp.text
+    assert "location.reload()" in resp.text
