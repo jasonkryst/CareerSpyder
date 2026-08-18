@@ -4,7 +4,17 @@ from unittest.mock import patch
 
 from app import db, orchestrator
 from app.config import GreenhouseSource, LeverSource
+from app.geocoding.base import GeocodeResult
 from app.models import Job
+
+
+class _FakeGeocoder:
+    name = "fake"
+    min_interval_seconds = 0.0
+
+    def geocode(self, location):
+        return GeocodeResult(display_name="Chicago, IL, USA", city="Chicago",
+                              region="Illinois", country="USA", lat=41.8, lng=-87.6)
 
 
 def test_infor_adapter_is_registered():
@@ -35,6 +45,43 @@ def test_phenompeople_adapter_is_registered():
 def test_findly_adapter_is_registered():
     from app.adapters import ADAPTERS
     assert "findly" in ADAPTERS
+
+
+def test_run_once_geocodes_pending_locations_via_an_injected_geocoder(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+
+    def fake_fetch(source):
+        return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
+                     source_name=source.name, location="Chicago, IL")]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source], geocoder=_FakeGeocoder())
+
+    row = conn.execute(
+        "SELECT status, display_name FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert row == ("resolved", "Chicago, IL, USA")
+
+
+def test_run_once_does_not_abort_when_the_geocoding_step_raises(tmp_db_path, monkeypatch):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+
+    def fake_fetch(source):
+        return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
+
+    def boom(conn, geocoder):
+        raise RuntimeError("unexpected failure")
+
+    monkeypatch.setattr(orchestrator, "geocode_pending", boom)
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        summary = orchestrator.run_once(conn, [source])
+
+    assert [j.key for j in summary.new_jobs] == ["gh:1"]
+    runs = db.list_runs(conn)
+    assert runs[0]["finished_at"] is not None
 
 
 def test_run_once_collects_new_jobs_and_isolates_failures(tmp_db_path):
