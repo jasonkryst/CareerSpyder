@@ -57,3 +57,15 @@ def test_offline_page_is_self_contained(client):
     assert "<style>" in resp.text
     assert '/static/style.css' not in resp.text
     assert "location.reload()" in resp.text
+
+
+def test_service_worker_route_has_correct_headers_and_scope_content(client):
+    resp = client.get("/sw.js")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/javascript")
+    assert resp.headers["service-worker-allowed"] == "/"
+    assert resp.headers["cache-control"] == "no-cache"
+    assert "OFFLINE_URL" in resp.text
+    assert "/static/offline.html" in resp.text
+    assert 'event.request.mode === "navigate"' in resp.text
