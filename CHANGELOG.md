@@ -14,6 +14,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   location display, deduping scraped location text variants into one normalized name
   (issue #49).
 
+### Changed
+
+- The Jobs page's Map view link, the Jobs Map page's Table view link, and the Sources
+  page's Add source link are now prominent buttons in the top-right of the page title
+  instead of plain text links, via new reusable `.page-header`/`.btn` styles.
+
 ### Fixed
 
 - `docker-compose.prod.yml` now mounts `/app/config` and `/app/data` from
