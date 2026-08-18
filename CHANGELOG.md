@@ -13,6 +13,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   per-location job list popup. The Jobs table also gains a Location filter and cleaner
   location display, deduping scraped location text variants into one normalized name
   (issue #49).
+- PWA install support: CareerSpyder can now be installed from the browser's
+  Add to Home Screen / install prompt (manifest, app icons, standalone
+  window). A minimal service worker shows a branded offline page when the
+  network is unavailable; it does not cache job/source data or enable
+  offline browsing, since that data is always live. The app also gains a
+  favicon for the first time.
 
 ### Changed
 

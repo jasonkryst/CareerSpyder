@@ -236,6 +236,9 @@ displayed in your browser's local timezone.
 There is no authentication in v1 — this is meant for a trusted home/private
 network only (see [ROADMAP.md](ROADMAP.md)).
 
+CareerSpyder can also be installed as an app from your browser's
+install/Add to Home Screen prompt, for a standalone window and app icon.
+
 ## Development
 
 Requirements: Python 3.12+.
