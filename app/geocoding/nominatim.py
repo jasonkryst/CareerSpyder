@@ -14,7 +14,7 @@ class NominatimGeocoder:
         try:
             response = requests.get(
                 _SEARCH_URL,
-                params={"q": location, "format": "jsonv2", "limit": 1, "addressdetails": 1},
+                params={"q": location, "format": "jsonv2", "limit": "1", "addressdetails": "1"},
                 headers={"User-Agent": _USER_AGENT},
                 timeout=10,
             )

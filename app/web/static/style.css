@@ -449,6 +449,7 @@ tr.removed td {
     gap: var(--space-3);
     text-align: right;
     border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
   }
 
   .table-scroll tr td:last-child {
