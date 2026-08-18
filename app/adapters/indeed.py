@@ -12,12 +12,12 @@ def fetch(source: IndeedSource, html_renderer=render_html) -> list[Job]:
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
     for card in soup.select("div.job_seen_beacon"):
-        title_el = card.select_one("h2.jobTitle span")
-        link_el = card.select_one("h2.jobTitle a")
+        link_el = card.select_one("a.jcs-JobTitle")
+        title_el = link_el.select_one("span[title]") if link_el else None
         if title_el is None or link_el is None:
             continue
-        company_el = card.select_one("span.companyName")
-        location_el = card.select_one("div.companyLocation")
+        company_el = card.select_one('span[data-testid="company-name"]')
+        location_el = card.select_one('div[data-testid="text-location"]')
         href = urljoin(source.url, str(link_el.get("href", "")))
         jobs.append(Job(
             key=f"indeed:{href}",

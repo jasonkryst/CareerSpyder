@@ -4,9 +4,9 @@ from app.config import IndeedSource
 HTML = """
 <html><body>
   <div class="job_seen_beacon">
-    <h2 class="jobTitle"><a href="/rc/clk?jk=xyz"><span>Backend Engineer</span></a></h2>
-    <span class="companyName">Acme Corp</span>
-    <div class="companyLocation">Remote</div>
+    <a class="jcs-JobTitle" href="/rc/clk?jk=xyz"><span title="Backend Engineer">Backend Engineer</span></a>
+    <span data-testid="company-name">Acme Corp</span>
+    <div data-testid="text-location">Remote</div>
   </div>
 </body></html>
 """
