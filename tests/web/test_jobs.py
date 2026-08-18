@@ -220,6 +220,65 @@ def test_jobs_page_location_filter_shown_in_clear_filters_check(client):
     assert "Clear filters" in resp.text
 
 
+def test_jobs_map_page_renders(client):
+    resp = client.get("/jobs/map")
+    assert resp.status_code == 200
+    assert "Jobs Map" in resp.text
+
+
+def test_jobs_map_data_groups_jobs_by_location(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", title="Job A", location="Chicago, IL"),
+        make_job(key="b", title="Job B", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["display_name"] == "Chicago, IL"
+    assert data[0]["lat"] == 41.8
+    assert {j["key"] for j in data[0]["jobs"]} == {"a", "b"}
+
+
+def test_jobs_map_data_excludes_unresolved_locations(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", location="Remote")], db.start_run(conn))
+
+    resp = client.get("/jobs/map/data")
+
+    assert resp.json() == []
+
+
+def test_jobs_map_data_respects_filters(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="a", company="Acme", location="Chicago, IL")], run_id)
+    db.save_jobs(conn, [make_job(key="b", company="Zeta", location="Chicago, IL")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data?company=Acme")
+
+    assert [j["key"] for j in resp.json()[0]["jobs"]] == ["a"]
+
+
+def test_jobs_page_has_map_view_link(client):
+    resp = client.get("/jobs")
+    assert 'href="/jobs/map"' in resp.text
+
+
 def test_jobs_page_invalid_sort_does_not_error(client):
     resp = client.get("/jobs?sort=nonsense")
 

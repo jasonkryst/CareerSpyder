@@ -50,6 +50,7 @@
   <button type="submit">Filter</button>
   {% if filters.company or filters.source or filters.location or filters.removed or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
+<p><a href="{{ query_url(request, '/jobs/map') }}">Map view</a></p>
 <div class="table-scroll">
 <table>
   <thead>
