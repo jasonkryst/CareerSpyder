@@ -26,3 +26,24 @@ def test_pwa_icons_are_served_at_correct_sizes(client):
 
         width, height = _png_dimensions(ICON_DIR / filename)
         assert (width, height) == (size, size), filename
+
+
+def test_manifest_json_has_expected_fields(client):
+    resp = client.get("/static/manifest.json")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "CareerSpyder"
+    assert data["short_name"] == "CareerSpyder"
+    assert data["start_url"] == "/"
+    assert data["scope"] == "/"
+    assert data["display"] == "standalone"
+    assert data["theme_color"] == "#b3101f"
+
+    icon_srcs = {icon["src"] for icon in data["icons"]}
+    assert "/static/icons/icon-192.png" in icon_srcs
+    assert "/static/icons/icon-512.png" in icon_srcs
+    assert "/static/icons/icon-512-maskable.png" in icon_srcs
+
+    maskable = next(i for i in data["icons"] if i["src"] == "/static/icons/icon-512-maskable.png")
+    assert maskable["purpose"] == "maskable"
