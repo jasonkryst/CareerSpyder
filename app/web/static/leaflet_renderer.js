@@ -1,8 +1,12 @@
 window.CareerSpyderMap = (function () {
   function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.textContent = value === null || value === undefined ? "" : String(value);
-    return div.innerHTML;
+    const str = value === null || value === undefined ? "" : String(value);
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function popupHtml(location) {
