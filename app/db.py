@@ -5,6 +5,19 @@ from datetime import UTC, datetime
 from app.models import Job
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS geocoded_locations (
+    location TEXT PRIMARY KEY,
+    display_name TEXT,
+    city TEXT,
+    region TEXT,
+    country TEXT,
+    lat REAL,
+    lng REAL,
+    status TEXT NOT NULL,
+    provider TEXT,
+    resolved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     key TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -18,7 +31,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     first_seen_run_id INTEGER,
     first_seen_at TEXT NOT NULL,
     removed_at TEXT,
-    emailed_at TEXT
+    emailed_at TEXT,
+    status TEXT,
+    FOREIGN KEY (location) REFERENCES geocoded_locations(location)
 );
 
 CREATE TABLE IF NOT EXISTS job_status_history (
@@ -78,6 +93,7 @@ def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
 
 def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")

@@ -12,6 +12,26 @@ def make_job(key="k1", title="Engineer", source_id="s1", summary=None):
                source_id=source_id, summary=summary)
 
 
+def test_init_db_creates_geocoded_locations_table_and_enables_fk_pragma(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, status) VALUES (?, ?)",
+        ("Chicago, IL", "pending"),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT location, status FROM geocoded_locations WHERE location = ?", ("Chicago, IL",)
+    ).fetchone()
+    assert row == ("Chicago, IL", "pending")
+
+    fk_pragma = conn.execute("PRAGMA foreign_keys").fetchone()
+    assert fk_pragma == (1,)
+
+    fks = conn.execute("PRAGMA foreign_key_list(jobs)").fetchall()
+    assert any(fk[2] == "geocoded_locations" and fk[3] == "location" for fk in fks)
+
+
 def test_new_job_then_seen_on_second_run(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     job = make_job()
