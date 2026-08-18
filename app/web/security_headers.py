@@ -12,7 +12,7 @@ _HEADERS = {
     # have small inline <script> blocks and the app has no nonce plumbing.
     # This CSP's real value is frame-ancestors/object-src, not script whitelisting.
     "Content-Security-Policy": (
-        "default-src 'self'; img-src 'self' data:; "
+        "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; "
         "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
         "frame-ancestors 'none'; object-src 'none'"
     ),
