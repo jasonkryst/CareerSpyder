@@ -60,7 +60,7 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
             page = browser.new_page()
             page.goto(url, wait_until="networkidle", timeout=30000)
             frame = page.frame_locator("#parentIframe")
-            frame.locator(".slick-row").first.wait_for(timeout=15000)
+            frame.locator(".slick-row").first.wait_for(timeout=30000)
 
             for _ in range(page_number - 1):
                 next_button = frame.locator("button.nextPage")
