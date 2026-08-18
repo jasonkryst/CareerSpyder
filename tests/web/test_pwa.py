@@ -69,3 +69,24 @@ def test_service_worker_route_has_correct_headers_and_scope_content(client):
     assert "OFFLINE_URL" in resp.text
     assert "/static/offline.html" in resp.text
     assert 'event.request.mode === "navigate"' in resp.text
+
+
+def test_base_html_includes_manifest_and_theme_color(client):
+    resp = client.get("/")
+
+    assert 'rel="manifest" href="/static/manifest.json"' in resp.text
+    assert 'name="theme-color" content="#b3101f"' in resp.text
+
+
+def test_base_html_includes_favicon_and_apple_touch_icon(client):
+    resp = client.get("/")
+
+    assert 'rel="icon" href="/static/icons/favicon-32.png"' in resp.text
+    assert 'rel="apple-touch-icon" href="/static/icons/apple-touch-icon-180.png"' in resp.text
+
+
+def test_base_html_registers_service_worker(client):
+    resp = client.get("/")
+
+    assert "serviceWorker" in resp.text
+    assert '"/sw.js"' in resp.text
