@@ -39,7 +39,9 @@ dependency and no separate frontend build.
   whether it was included in a digest email.
 - **Email digest** — sent only when a run finds at least one new job or at
   least one source failure; a clean run with nothing to report stays
-  silent.
+  silent. Each job line shows its status when one is set and its source;
+  the email also includes the run's search timestamp and, if
+  `PUBLIC_BASE_URL` is configured, a link back to the `/jobs` page.
 - **Server-rendered web UI** — dashboard, run history, source management
   (add/edit/delete with a live "test this source" preview before saving),
   and settings — no SPA, no JS build step, full page reloads.
@@ -50,8 +52,9 @@ dependency and no separate frontend build.
   import/export (import replaces the entire source list; export downloads
   the current one); `/settings/preferences` holds the Light/Dark/System
   theme choice plus which days to check for jobs, whether a still-listed
-  job is resent in every digest or only ever emailed once, and one or
-  more digest recipient addresses.
+  job is resent in every digest or only ever emailed once, one or
+  more digest recipient addresses, and whether Not Interested jobs are
+  hidden from the jobs map (on by default).
 - **No database migration story to manage** — a single SQLite file holds
   dedup state, run history, and settings; it lives on a persistent Docker
   volume so it survives redeploys.
@@ -227,12 +230,13 @@ displayed in your browser's local timezone.
 | Page | Purpose |
 |---|---|
 | `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. |
-| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, removed/emailed status, and status. |
+| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected/Not Interested, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, location, removed/emailed status, and status. A **Map view** link shows the same filtered jobs as pins on a map. |
+| `/jobs/map` | The same filtered jobs as clustered pins (via Leaflet + Leaflet.markercluster) with a per-location job list popup, plus a fixed home-location marker. The initial view fits itself to whatever's plotted. Jobs marked Not Interested are excluded by default (toggle in `/settings/preferences`); jobs whose location couldn't be resolved are excluded from the map but still filterable/visible in the table under "Other / Unresolved". |
 | `/sources` | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
 | `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation via a themed dialog before doing so). |
-| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, and one or more recipient addresses (server-stored, validated client- and server-side). |
+| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, one or more recipient addresses (server-stored, validated client- and server-side), and whether Not Interested jobs are hidden from `/jobs/map` (on by default). |
 
 There is no authentication in v1 — this is meant for a trusted home/private
 network only (see [ROADMAP.md](ROADMAP.md)).
