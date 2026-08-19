@@ -126,6 +126,7 @@ scheduler will otherwise run once a day at `RUN_HOUR` in `TZ`.
 | `TZ` | No (default `UTC`) | Timezone the scheduler and `RUN_HOUR` are interpreted in. |
 | `CAREERSPYDER_DB_PATH` | No (default `/app/data/state.db`) | SQLite file location. |
 | `CAREERSPYDER_SOURCES_PATH` | No (default `/app/config/sources.json`) | Source list location. |
+| `PUBLIC_BASE_URL` | No | The site's own public URL (e.g. `https://jobs.example.com`), used to build the "View all jobs" link in digest emails. Without it, the link is omitted. |
 
 ### `sources.json`
 

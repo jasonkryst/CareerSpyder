@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from app.digest import build_digest
 from app.models import Job
 
@@ -68,3 +70,52 @@ def test_javascript_url_is_neutralized():
 
     assert 'href="javascript:alert(1)"' not in result.html_body
     assert 'href="#"' in result.html_body
+
+
+def test_shows_source_name():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")]
+
+    result = build_digest(jobs, [])
+
+    assert "Acme Board" in result.html_body
+
+
+def test_shows_status_when_one_exists_for_the_job():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], statuses={"1": "not_interested"})
+
+    assert "Not Interested" in result.html_body
+
+
+def test_omits_status_when_none_exists_for_the_job():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], statuses={"2": "applied"})
+
+    assert "Applied" not in result.html_body
+
+
+def test_includes_searched_at_timestamp_when_given():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], searched_at=datetime(2026, 8, 19, 14, 30, tzinfo=UTC))
+
+    assert "Aug 19, 2026" in result.html_body
+
+
+def test_includes_jobs_link_when_given():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], jobs_url="https://careerspyder.example.com/jobs")
+
+    assert 'href="https://careerspyder.example.com/jobs"' in result.html_body
+    assert "View all jobs" in result.html_body
+
+
+def test_omits_jobs_link_when_not_given():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [])
+
+    assert "View all jobs" not in result.html_body

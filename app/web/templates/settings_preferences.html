@@ -39,6 +39,13 @@
 
 <div class="card">
   <fieldset>
+    <legend>Map</legend>
+    <label><input type="checkbox" name="hide_not_interested_on_map" {% if settings.hide_not_interested_on_map %}checked{% endif %}> Don't show jobs marked Not Interested on the map</label>
+  </fieldset>
+</div>
+
+<div class="card">
+  <fieldset>
     <legend>Recipients</legend>
     <div id="email-recipients">
       {% for email in email_to_list %}

@@ -1,5 +1,13 @@
 from dataclasses import dataclass
 
+JOB_STATUSES = {
+    "applied": "Applied",
+    "ignored": "Ignored",
+    "accepted": "Accepted",
+    "rejected": "Rejected",
+    "not_interested": "Not Interested",
+}
+
 
 @dataclass
 class Job:

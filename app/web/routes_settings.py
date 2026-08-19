@@ -86,6 +86,7 @@ async def save_preferences(request: Request):
     selected_days = set(_str_list_field(form, "email_days")) & set(DAY_CODES)
     email_days = ",".join(day for day in DAY_CODES if day in selected_days)
     resend_jobs = "resend_jobs" in form
+    hide_not_interested_on_map = "hide_not_interested_on_map" in form
     submitted_emails = [addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip()]
 
     invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
@@ -103,7 +104,7 @@ async def save_preferences(request: Request):
         )
 
     email_to = ",".join(submitted_emails)
-    db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
+    db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map)
     return flash_redirect("/settings/preferences", "Preferences saved.")
 
 
@@ -116,7 +117,9 @@ def clear_cache(request: Request):
     )
 
 
-DEFAULT_PREFERENCES = {"email_days": [], "resend_jobs": False, "email_to": []}
+DEFAULT_PREFERENCES = {
+    "email_days": [], "resend_jobs": False, "email_to": [], "hide_not_interested_on_map": True,
+}
 
 
 def _export_payload(request: Request) -> dict:
@@ -129,11 +132,12 @@ def _export_payload(request: Request) -> dict:
             "email_days": [d for d in settings["email_days"].split(",") if d],
             "resend_jobs": settings["resend_jobs"],
             "email_to": [a for a in settings["email_to"].split(",") if a],
+            "hide_not_interested_on_map": settings["hide_not_interested_on_map"],
         }
     return {"sources": [s.model_dump() for s in sources], "preferences": preferences}
 
 
-def _parse_preferences_import(data: dict) -> tuple[str, bool, str] | None:
+def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool] | None:
     preferences = data.get("preferences")
     if preferences is None:
         return None
@@ -154,7 +158,11 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str] | None:
         if isinstance(addr, str) and addr.strip() and _is_valid_email(addr.strip())
     )
 
-    return email_days, resend_jobs, email_to
+    hide_not_interested_on_map = preferences.get("hide_not_interested_on_map")
+    if not isinstance(hide_not_interested_on_map, bool):
+        hide_not_interested_on_map = True
+
+    return email_days, resend_jobs, email_to, hide_not_interested_on_map
 
 
 @router.get("/settings/data/export")
@@ -185,8 +193,10 @@ async def import_settings(request: Request):
 
     parsed_preferences = _parse_preferences_import(json.loads(raw))
     if parsed_preferences is not None:
-        email_days, resend_jobs, email_to = parsed_preferences
-        db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to)
+        email_days, resend_jobs, email_to, hide_not_interested_on_map = parsed_preferences
+        db.save_preferences(
+            request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+        )
 
     redirect_message = f"Imported {len(sources)} source(s)."
     if parsed_preferences is not None:

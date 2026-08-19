@@ -26,7 +26,12 @@ def test_run_and_notify_sends_email_when_digest_present(tmp_db_path, tmp_path, m
         scheduler.run_and_notify(conn, sources_path)
 
     mock_run_once.assert_called_once()
-    mock_digest.assert_called_once_with([], ["Bad Co"], "new job")
+    mock_digest.assert_called_once()
+    call_args, call_kwargs = mock_digest.call_args
+    assert call_args == ([], ["Bad Co"], "new job")
+    assert call_kwargs["statuses"] == {}
+    assert call_kwargs["jobs_url"] is None
+    assert "searched_at" in call_kwargs
     mock_send.assert_called_once_with(
         "smtp.example.com", 587, "user", "secret", "from@x.test", ["to@x.test"], "Subj", "<p>Body</p>",
     )
@@ -138,7 +143,8 @@ def test_run_and_notify_skips_email_when_no_recipients_configured(tmp_db_path, t
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": ["job-a"], "failed_sources": [], "run_id": 1})()
+    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+    fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
 
     with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
          patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
@@ -155,7 +161,8 @@ def test_run_and_notify_splits_comma_separated_recipients(tmp_db_path, tmp_path,
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": ["job-a"], "failed_sources": [], "run_id": 1})()
+    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+    fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
 
     with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
          patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
@@ -172,8 +179,9 @@ def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(tm
     sources_path = str(tmp_path / "sources.json")
     (tmp_path / "sources.json").write_text('{"sources": []}')
 
+    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
     fake_summary = type("S", (), {
-        "new_jobs": [], "found_jobs": ["job-a"], "failed_sources": [], "run_id": 1,
+        "new_jobs": [], "found_jobs": [fake_job], "failed_sources": [], "run_id": 1,
     })()
 
     with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
@@ -181,7 +189,9 @@ def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(tm
          patch("app.scheduler.emailer.send_email") as mock_send:
         scheduler.run_and_notify(conn, sources_path)
 
-    mock_digest.assert_called_once_with(["job-a"], [], "job")
+    call_args, call_kwargs = mock_digest.call_args
+    assert call_args == ([fake_job], [], "job")
+    assert call_kwargs["statuses"] == {}
     mock_send.assert_called_once()
 
 
@@ -291,6 +301,68 @@ def test_run_and_notify_end_to_end_sends_real_digest_for_a_new_job(tmp_db_path, 
     assert "&lt;Engineer&gt;" in html_body  # real digest builder escapes it
     assert "<Engineer>" not in html_body
     assert db.list_jobs(conn)[0]["emailed_at"] is not None
+
+
+def test_run_and_notify_includes_source_and_existing_status_in_real_digest(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn, resend_jobs=True)
+    run_id = db.start_run(conn)
+    job = Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")
+    db.save_jobs(conn, [job], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    db.set_job_status(conn, "k1", "not_interested")
+    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+        {"id": "s1", "name": "Acme Board", "type": "greenhouse", "board_token": "acme"},
+    ]}))
+
+    with patch("app.scheduler.emailer.send_email") as mock_send:
+        scheduler.run_and_notify(conn, sources_path)
+
+    mock_send.assert_called_once()
+    html_body = mock_send.call_args[0][7]
+    assert "Acme Board" in html_body
+    assert "Not Interested" in html_body
+
+
+def test_run_and_notify_includes_jobs_link_when_public_base_url_is_set(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://careerspyder.example.com")
+    job = Job(key="gh:1", title="Engineer", url="https://acme.test/1", company="Acme", source_name="Acme")
+    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ]}))
+
+    with patch("app.scheduler.emailer.send_email") as mock_send:
+        scheduler.run_and_notify(conn, sources_path)
+
+    html_body = mock_send.call_args[0][7]
+    assert 'href="https://careerspyder.example.com/jobs"' in html_body
+
+
+def test_run_and_notify_omits_jobs_link_when_public_base_url_is_unset(tmp_db_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    job = Job(key="gh:1", title="Engineer", url="https://acme.test/1", company="Acme", source_name="Acme")
+    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ]}))
+
+    with patch("app.scheduler.emailer.send_email") as mock_send:
+        scheduler.run_and_notify(conn, sources_path)
+
+    html_body = mock_send.call_args[0][7]
+    assert "View all jobs" not in html_body
 
 
 def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):

@@ -330,6 +330,23 @@ def test_get_settings_defaults_days_and_resend_after_seeding(tmp_db_path):
     assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
     assert settings["resend_jobs"] is False
     assert settings["email_to"] == "to@x.test"
+    assert settings["hide_not_interested_on_map"] is True
+
+
+def test_save_preferences_defaults_hide_not_interested_on_map_to_true(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["hide_not_interested_on_map"] is True
+
+
+def test_save_preferences_can_turn_off_hide_not_interested_on_map(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test", hide_not_interested_on_map=False)
+
+    settings = db.get_settings(conn)
+    assert settings["hide_not_interested_on_map"] is False
 
 
 def test_init_db_adds_new_columns_to_a_pre_existing_database(tmp_db_path):
@@ -354,6 +371,7 @@ def test_init_db_adds_new_columns_to_a_pre_existing_database(tmp_db_path):
     assert settings["email_to"] == "oldto@x.test"
     assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
     assert settings["resend_jobs"] is False
+    assert settings["hide_not_interested_on_map"] is True
 
 
 def test_init_db_is_idempotent_on_an_already_migrated_database(tmp_db_path):
@@ -753,6 +771,22 @@ def test_get_job_status_history_groups_by_key_for_a_batch(tmp_db_path):
     assert history["k2"][0]["status"] == "ignored"
 
 
+def test_get_job_statuses_returns_current_status_per_key(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "not_interested")
+
+    statuses = db.get_job_statuses(conn, ["k1", "k2"])
+
+    assert statuses == {"k1": "not_interested", "k2": None}
+
+
+def test_get_job_statuses_with_empty_keys_list_returns_empty_dict(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    assert db.get_job_statuses(conn, []) == {}
+
+
 def test_list_jobs_filters_by_status(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn))
@@ -888,3 +922,41 @@ def test_list_mappable_jobs_applies_the_same_filters_as_list_jobs(tmp_db_path):
     rows = db.list_mappable_jobs(conn, company="Acme")
 
     assert [r["key"] for r in rows] == ["a"]
+
+
+def test_list_mappable_jobs_exclude_status_omits_matching_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+    db.set_job_status(conn, "b", "not_interested")
+
+    rows = db.list_mappable_jobs(conn, exclude_status="not_interested")
+
+    assert [r["key"] for r in rows] == ["a"]
+
+
+def test_list_mappable_jobs_without_exclude_status_includes_everything(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
+        Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+    db.set_job_status(conn, "b", "not_interested")
+
+    rows = db.list_mappable_jobs(conn)
+
+    assert {r["key"] for r in rows} == {"a", "b"}

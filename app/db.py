@@ -129,6 +129,7 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(conn, "hide_not_interested_on_map INTEGER NOT NULL DEFAULT 1")
     conn.commit()
     _migrate_jobs_table(conn)
     _migrate_jobs_location_fk(conn)
@@ -234,8 +235,8 @@ def count_runs(conn: sqlite3.Connection, *, failures: str | None = None) -> int:
 
 def get_settings(conn: sqlite3.Connection) -> dict | None:
     row = conn.execute(
-        "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs "
-        "FROM settings WHERE id = 1"
+        "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs, "
+        "hide_not_interested_on_map FROM settings WHERE id = 1"
     ).fetchone()
     if row is None:
         return None
@@ -243,6 +244,7 @@ def get_settings(conn: sqlite3.Connection) -> dict | None:
         "smtp_host": row[0], "smtp_port": row[1], "smtp_user": row[2],
         "email_from": row[3], "email_to": row[4],
         "email_days": row[5], "resend_jobs": bool(row[6]),
+        "hide_not_interested_on_map": bool(row[7]),
     }
 
 
@@ -259,13 +261,17 @@ def save_settings(conn: sqlite3.Connection, smtp_host: str, smtp_port: int, smtp
     conn.commit()
 
 
-def save_preferences(conn: sqlite3.Connection, email_days: str, resend_jobs: bool, email_to: str) -> None:
+def save_preferences(
+    conn: sqlite3.Connection, email_days: str, resend_jobs: bool, email_to: str,
+    hide_not_interested_on_map: bool = True,
+) -> None:
     conn.execute(
-        "INSERT INTO settings (id, email_days, resend_jobs, email_to) "
-        "VALUES (1, ?, ?, ?) "
+        "INSERT INTO settings (id, email_days, resend_jobs, email_to, hide_not_interested_on_map) "
+        "VALUES (1, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET "
-        "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, email_to=excluded.email_to",
-        (email_days, int(resend_jobs), email_to),
+        "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, email_to=excluded.email_to, "
+        "hide_not_interested_on_map=excluded.hide_not_interested_on_map",
+        (email_days, int(resend_jobs), email_to, int(hide_not_interested_on_map)),
     )
     conn.commit()
 
@@ -386,9 +392,14 @@ def list_mappable_jobs(
     conn: sqlite3.Connection, *,
     company: str | None = None, source_name: str | None = None, location: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    exclude_status: str | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
-    resolved_clause = "geocoded_locations.status = 'resolved'"
+    clauses = ["geocoded_locations.status = 'resolved'"]
+    if exclude_status:
+        clauses.append("(jobs.status IS NULL OR jobs.status != ?)")
+        params.append(exclude_status)
+    resolved_clause = " AND ".join(clauses)
     where_sql = f"{where_sql} AND {resolved_clause}" if where_sql else f"WHERE {resolved_clause}"
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.url, "
@@ -450,6 +461,16 @@ def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> No
         (key, status, now),
     )
     conn.commit()
+
+
+def get_job_statuses(conn: sqlite3.Connection, keys: list[str]) -> dict[str, str | None]:
+    if not keys:
+        return {}
+    placeholders = ",".join("?" * len(keys))
+    rows = conn.execute(
+        f"SELECT key, status FROM jobs WHERE key IN ({placeholders})", keys,
+    ).fetchall()
+    return {key: status for key, status in rows}
 
 
 def get_job_status_history(conn: sqlite3.Connection, keys: list[str]) -> dict[str, list[dict]]:
