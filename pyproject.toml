@@ -13,7 +13,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pydantic>=2.13.4",
     "apscheduler>=3.11.3",
-    "requests>=2.31",
+    "requests>=2.34.2",
     "beautifulsoup4>=4.12",
     "playwright>=1.62.0",
 ]
