@@ -33,7 +33,15 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
     resend = bool(settings and settings["resend_jobs"])
     jobs_to_send = summary.found_jobs if resend else summary.new_jobs
     job_label = "job" if resend else "new job"
-    d = digest.build_digest(jobs_to_send, summary.failed_sources, job_label)
+
+    statuses = db.get_job_statuses(conn, [j.key for j in jobs_to_send])
+    public_base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    jobs_url = f"{public_base_url}/jobs" if public_base_url else None
+
+    d = digest.build_digest(
+        jobs_to_send, summary.failed_sources, job_label,
+        statuses=statuses, searched_at=datetime.now(UTC), jobs_url=jobs_url,
+    )
     if d is None:
         return
 

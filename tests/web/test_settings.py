@@ -93,6 +93,24 @@ def test_settings_preferences_page_shows_resend_checkbox(client):
     assert 'name="resend_jobs"' in resp.text
 
 
+def test_settings_preferences_page_shows_hide_not_interested_checkbox_checked_by_default(client):
+    resp = client.get("/settings/preferences")
+
+    assert 'name="hide_not_interested_on_map" checked' in resp.text
+
+
+def test_settings_preferences_page_unchecks_hide_not_interested_when_turned_off(client):
+    from app import db
+    db.save_preferences(
+        client.app.state.conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+        hide_not_interested_on_map=False,
+    )
+
+    resp = client.get("/settings/preferences")
+
+    assert 'name="hide_not_interested_on_map" checked' not in resp.text
+
+
 def test_settings_preferences_page_shows_stored_recipients(client):
     from app import db
     db.save_preferences(client.app.state.conn, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test,b@x.test")
@@ -113,7 +131,7 @@ def test_settings_preferences_page_shows_a_blank_recipient_row_when_none_stored(
 def test_settings_preferences_page_wraps_sections_in_cards(client):
     resp = client.get("/settings/preferences")
 
-    assert resp.text.count('class="card"') == 4
+    assert resp.text.count('class="card"') == 5
 
 
 def test_post_preferences_saves_days_resend_and_recipients(client):
@@ -152,6 +170,27 @@ def test_post_preferences_unchecked_resend_is_stored_as_false(client):
     from app import db
     settings = db.get_settings(client.app.state.conn)
     assert settings["resend_jobs"] is False
+
+
+def test_post_preferences_saves_hide_not_interested_on_map_when_checked(client):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon"],
+        "email_to": ["a@x.test"],
+        "hide_not_interested_on_map": "on",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["hide_not_interested_on_map"] is True
+
+
+def test_post_preferences_unchecked_hide_not_interested_is_stored_as_false(client):
+    client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
+
+    from app import db
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["hide_not_interested_on_map"] is False
 
 
 def test_post_preferences_drops_blank_recipient_rows(client):
@@ -277,6 +316,7 @@ def test_get_export_settings_returns_sources_and_preferences_as_download(client)
         "email_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
         "resend_jobs": False,
         "email_to": ["to@x.test"],
+        "hide_not_interested_on_map": True,
     }
 
 
@@ -333,6 +373,61 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
     assert settings["email_days"] == "tue,thu"
     assert settings["resend_jobs"] is False
     assert settings["email_to"] == "new@x.test"
+
+
+def test_post_import_settings_with_preferences_imports_hide_not_interested_on_map(client):
+    import json
+    from urllib.parse import urlparse
+
+    from app import db
+
+    db.save_preferences(
+        client.app.state.conn, "mon", True, "old@x.test", hide_not_interested_on_map=True,
+    )
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["tue"], "resend_jobs": False, "email_to": ["new@x.test"],
+            "hide_not_interested_on_map": False,
+        },
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert urlparse(resp.headers["location"]).path == "/settings/data"
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["hide_not_interested_on_map"] is False
+
+
+def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_true(client):
+    import json
+
+    from app import db
+
+    db.save_preferences(
+        client.app.state.conn, "mon", True, "old@x.test", hide_not_interested_on_map=False,
+    )
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["tue"], "resend_jobs": False, "email_to": ["new@x.test"],
+            "hide_not_interested_on_map": "yes",
+        },
+    }).encode()
+
+    client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    settings = db.get_settings(client.app.state.conn)
+    assert settings["hide_not_interested_on_map"] is True
 
 
 def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client):

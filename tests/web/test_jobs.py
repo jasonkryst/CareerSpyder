@@ -274,6 +274,45 @@ def test_jobs_map_data_respects_filters(client):
     assert [j["key"] for j in resp.json()[0]["jobs"]] == ["a"]
 
 
+def test_jobs_map_data_hides_not_interested_jobs_by_default(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", location="Chicago, IL"),
+        make_job(key="b", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+    db.set_job_status(conn, "b", "not_interested")
+
+    resp = client.get("/jobs/map/data")
+
+    assert {j["key"] for j in resp.json()[0]["jobs"]} == {"a"}
+
+
+def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client):
+    conn = client.app.state.conn
+    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test", hide_not_interested_on_map=False)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", location="Chicago, IL"),
+        make_job(key="b", location="Chicago, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+    db.set_job_status(conn, "b", "not_interested")
+
+    resp = client.get("/jobs/map/data")
+
+    assert {j["key"] for j in resp.json()[0]["jobs"]} == {"a", "b"}
+
+
 def test_jobs_page_has_map_view_link(client):
     resp = client.get("/jobs")
     assert 'href="/jobs/map"' in resp.text
@@ -343,6 +382,19 @@ def test_post_job_status_sets_status_and_redirects_with_flash(client):
     assert parse_qs(location.query)["flash"] == ["Marked as Applied."]
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["status"] == "applied"
+
+
+def test_post_job_status_accepts_not_interested(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "not_interested"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    location = urlparse(resp.headers["location"])
+    assert parse_qs(location.query)["flash"] == ["Marked as Not Interested."]
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["status"] == "not_interested"
 
 
 def test_post_job_status_clearing_redirects_with_cleared_message(client):

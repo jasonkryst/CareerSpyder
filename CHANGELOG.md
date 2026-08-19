@@ -7,6 +7,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Jobs map now defaults to a view fitted to whatever's plotted (instead of always opening
+  centered on the continental US at a fixed zoom), and always shows a fixed home-location
+  pin.
+- A **Not Interested** job status, alongside the existing Applied/Ignored/Accepted/Rejected
+  set on the Jobs page.
+- A "hide Not Interested jobs on the map" preference (Settings > Preferences), on by
+  default, so marking a job Not Interested also drops its pin from `/jobs/map`.
+- Digest emails now show each job's status (when one is set), its source name, a "View all
+  jobs" link back to the web app (requires the new `PUBLIC_BASE_URL` env var — omitted
+  when unset), and the timestamp of the run that produced the digest.
 - Job location map (`/jobs/map`, linked from the Jobs page): background geocoding of job
   locations via a swappable provider (Nominatim/OpenStreetMap by default, no API key), a
   cache of resolved coordinates, and a Leaflet-based map with clustered markers and a

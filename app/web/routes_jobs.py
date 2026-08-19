@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app import db
+from app.models import JOB_STATUSES as STATUSES
 from app.textutils import safe_url_scheme
 from app.web.flash import flash_redirect
 from app.web.pagination import paginate
@@ -12,7 +13,6 @@ from app.web.templating import templates
 router = APIRouter()
 
 PAGE_SIZE = 25
-STATUSES = {"applied": "Applied", "ignored": "Ignored", "accepted": "Accepted", "rejected": "Rejected"}
 
 
 def _age_days(first_seen_at: str, removed_at: str | None) -> int:
@@ -89,9 +89,13 @@ def jobs_map_data(
     emailed: str = "", status: str = "",
 ):
     conn = request.app.state.conn
+    settings = db.get_settings(conn)
+    hide_not_interested = settings is None or settings["hide_not_interested_on_map"]
+    exclude_status = "not_interested" if hide_not_interested and status != "not_interested" else None
     rows = db.list_mappable_jobs(
         conn, company=company or None, source_name=source or None, location=location or None,
         removed=removed or None, emailed=emailed or None, status=status or None,
+        exclude_status=exclude_status,
     )
     grouped: dict[tuple, dict] = {}
     for row in rows:

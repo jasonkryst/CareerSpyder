@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from datetime import datetime
 from html import escape
 
-from app.models import Job
+from app.models import JOB_STATUSES, Job
 from app.textutils import safe_url_scheme
 
 
@@ -15,9 +16,16 @@ def _safe_href(url: str) -> str:
     return escape(safe_url_scheme(url), quote=True)
 
 
-def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str = "new job") -> Digest | None:
+def build_digest(
+    new_jobs: list[Job], failed_sources: list[str], job_label: str = "new job", *,
+    statuses: dict[str, str | None] | None = None,
+    searched_at: datetime | None = None,
+    jobs_url: str | None = None,
+) -> Digest | None:
     if not new_jobs and not failed_sources:
         return None
+
+    statuses = statuses or {}
 
     subject = (
         f"CareerSpyder: {len(new_jobs)} {job_label}(s)" if new_jobs
@@ -25,6 +33,9 @@ def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str 
     )
 
     parts: list[str] = []
+    if searched_at is not None:
+        parts.append(f"<p>Searched {escape(searched_at.strftime('%b %d, %Y %I:%M %p %Z'))}</p>")
+
     if new_jobs:
         by_company: dict[str, list[Job]] = {}
         for job in new_jobs:
@@ -33,9 +44,12 @@ def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str 
             parts.append(f"<h3>{escape(company)}</h3><ul>")
             for job in jobs:
                 location = f" — {escape(job.location)}" if job.location else ""
+                source = f" (via {escape(job.source_name)})" if job.source_name else ""
+                status = statuses.get(job.key)
+                status_html = f" [{escape(JOB_STATUSES.get(status, status))}]" if status else ""
                 href = _safe_href(job.url)
                 title = escape(job.title)
-                parts.append(f'<li><a href="{href}">{title}</a>{location}</li>')
+                parts.append(f'<li><a href="{href}">{title}</a>{location}{source}{status_html}</li>')
             parts.append("</ul>")
 
     if failed_sources:
@@ -43,5 +57,8 @@ def build_digest(new_jobs: list[Job], failed_sources: list[str], job_label: str 
         for name in failed_sources:
             parts.append(f"<li>{escape(name)}</li>")
         parts.append("</ul>")
+
+    if jobs_url:
+        parts.append(f'<p><a href="{escape(jobs_url, quote=True)}">View all jobs</a></p>')
 
     return Digest(subject=subject, html_body="".join(parts))
