@@ -365,6 +365,9 @@ docs/superpowers/
   every source type; also available in-app at `/guide`.
 - [CHANGELOG.md](CHANGELOG.md) — what's shipped so far.
 - [ROADMAP.md](ROADMAP.md) — known limitations and what's planned next.
+- [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md)
+  — a security/UI-UX/accessibility audit of the app; its actionable
+  findings are tracked in ROADMAP.md.
 - [AGENTS.md](AGENTS.md) — conventions and commands for AI coding agents
   working in this repo.
 - `docs/superpowers/specs/2026-08-09-careerspyder-design.md` — the original

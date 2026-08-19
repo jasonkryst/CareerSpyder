@@ -7,6 +7,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- A full application audit covering security, UI/UX, and accessibility —
+  see [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
+  No Critical findings; one High (SSRF via user-configured source URLs,
+  gated by a Medium CSRF finding) plus several Medium/Low UX, robustness,
+  and accessibility gaps, now tracked in [ROADMAP.md](ROADMAP.md).
 - Jobs map now defaults to a view fitted to whatever's plotted (instead of always opening
   centered on the continental US at a fixed zoom), and always shows a fixed home-location
   pin.
