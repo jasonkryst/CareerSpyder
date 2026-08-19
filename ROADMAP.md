@@ -18,6 +18,34 @@ later rather than fixed immediately.
   design, to avoid persisting a credential in plaintext on disk. If this
   becomes painful operationally, revisit with e.g. an encrypted-at-rest
   secret store rather than a plain UI field.
+- **No CSRF protection on any state-changing route (from audit).** Every
+  `POST` route trusts any request that reaches it by network path alone.
+  Since the app sets no cookies, a per-user token isn't a natural fit;
+  an `Origin`/`Sec-Fetch-Site` check on state-changing requests would
+  close this without new session infrastructure. See
+  [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md#m1-no-csrf-protection-on-any-state-changing-route)
+  (finding M1) — this is what makes the SSRF finding below remotely
+  triggerable, so fix together.
+- **SSRF via user-configured source URLs (from audit).** URL-bearing
+  source fields (`generic_html`, `linkedin`, `indeed`, `infor`,
+  `talentbrew`, `workday`, `phenompeople`, `findly`) have no scheme
+  allow-list and no internal/link-local address check, and
+  `/sources/test-preview` executes the adapter immediately without the
+  source being saved. Playwright-driven adapters will navigate to
+  `file://` and internal-network URLs. See
+  [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md#h1-ssrf-via-user-supplied-source-urls-reachable-through-sourcestest-preview-with-no-csrf-protection-to-gate-it)
+  (finding H1).
+- **Unbounded settings-import upload and unrate-limited preview fetches
+  (from audit).** `/settings/data`'s import has no upload size cap;
+  `/sources/test-preview`'s Playwright-driven fetches have no concurrency
+  limit (unlike the daily run, which is serialized). See the audit's
+  findings M2 and M3.
+- **Minor security hygiene items (from audit).** `board_token` is
+  interpolated unescaped into the Greenhouse/Lever API URL (finding L1);
+  a non-numeric `max_pages` form value raises an unhandled 500 instead of
+  a graceful validation error (finding L2); runtime dependencies are
+  pinned with `>=` only, no upper bounds (finding L3). None are urgent —
+  see the audit for details.
 
 ## Reliability & operations
 
@@ -51,6 +79,47 @@ later rather than fixed immediately.
   (from review).** `app/digest.py` currently only reflects the new-job
   count in the subject when there are new jobs, even if the same run also
   had source failures — a minor readability gap, not a functional one.
+
+## UI, UX & accessibility
+
+- **"None" leaks into the Company field after a validation error (from
+  audit).** `source_form.py`'s `echo_source()` plus the template's `{{
+  source.company if source else '' }}` renders the literal text "None"
+  into the input when Company was left blank on a failed submit — a
+  visible bug, and likely present for `selectors.location` too, which
+  uses the same pattern. See the audit's finding U1 for the one-line fix.
+- **Raw pydantic/adapter exceptions shown directly to end users (from
+  audit).** Source add/edit validation errors and `/sources/test-preview`
+  failures both render `str(exc)` verbatim — confusing jargon for a
+  self-hosting home user, and a minor incidental leak of internal model
+  names and library internals. See finding U2.
+- **"Clear job cache" has no confirmation, unlike every other destructive
+  action on the same page (from audit).** Delete-source and
+  Import-settings both use the app's confirm-modal pattern; Clear job
+  cache doesn't, despite its own copy warning of a possible large digest
+  email as a side effect. See finding U3 — a one-line template fix.
+- **Ambiguous "Status" filter naming on `/jobs` and `/jobs/map` (from
+  audit).** The filter labeled "Status" filters Active/Removed, while the
+  table's own "Status" column shows the separate Applied/Ignored/
+  Accepted/Rejected/Not Interested job status (filtered by the
+  differently-labeled "Job status" field). See finding U4.
+- **Per-job Status select auto-submits with no visible trigger (from
+  audit, WCAG 3.2.2).** `/jobs`' per-row status `<select>` submits the
+  whole page on `change` with no visible Save control — a recognized
+  accessibility anti-pattern that's disorienting for keyboard/
+  screen-reader users and costs everyone their scroll position. See
+  finding A1; the fix (an AJAX row-patch or a visible Save button) is the
+  most consequential piece of UI work this audit surfaced.
+- **Smaller UX/accessibility polish items (from audit).** No
+  required-field indication on the source form (U5); the confirm-modal
+  has no non-JS fallback, so Delete/Import submit with zero warning if JS
+  is blocked (U6); the `/jobs/map` Leaflet container has no accessible
+  name (A2); form validation error banners aren't marked `role="alert"`
+  (A3). See the audit for details on each.
+
+Full write-up, including what's already solid (landmarks, focus
+handling, dark-mode contrast, responsive table collapse, etc.):
+[docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
 
 ## Testing & tooling
 
