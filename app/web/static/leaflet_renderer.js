@@ -1,4 +1,16 @@
 window.CareerSpyderMap = (function () {
+  const HOME_LOCATION = { lat: 41.6412, lng: -88.4487, label: "Home — Yorkville, IL" };
+
+  const homeIcon = L.divIcon({
+    className: "home-marker",
+    html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30" height="30">'
+      + '<path fill="#2e7d32" stroke="#ffffff" stroke-width="1" stroke-linejoin="round" '
+      + 'd="M12 2.7 2.5 10.8V21h6v-6.5h7V21h6V10.8z"/></svg>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 28],
+    popupAnchor: [0, -26],
+  });
+
   function escapeHtml(value) {
     const str = value === null || value === undefined ? "" : String(value);
     return str
@@ -29,12 +41,20 @@ window.CareerSpyderMap = (function () {
     }).addTo(map);
 
     const cluster = L.markerClusterGroup();
+    const boundsPoints = [[HOME_LOCATION.lat, HOME_LOCATION.lng]];
     locations.forEach(function (location) {
       const marker = L.marker([location.lat, location.lng]);
       marker.bindPopup(popupHtml(location));
       cluster.addLayer(marker);
+      boundsPoints.push([location.lat, location.lng]);
     });
     map.addLayer(cluster);
+
+    L.marker([HOME_LOCATION.lat, HOME_LOCATION.lng], { icon: homeIcon, zIndexOffset: 1000 })
+      .bindPopup(escapeHtml(HOME_LOCATION.label))
+      .addTo(map);
+
+    map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40], maxZoom: 12 });
   }
 
   return { renderMap: renderMap };
