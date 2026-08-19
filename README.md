@@ -13,15 +13,18 @@ dependency and no separate frontend build.
 
 ## Features
 
-- **Five source types**, one adapter each:
-  - `greenhouse` / `lever` — call the ATS's public JSON board API directly.
-    No HTML parsing; stable and low-maintenance.
+- **Eleven source types**, one adapter each:
+  - `greenhouse` / `lever` / `infor` / `healthcaresource` / `talentbrew` /
+    `workday` / `phenompeople` / `findly` — call each ATS/career-site
+    platform's own JSON API directly. No HTML parsing, no browser; stable
+    and low-maintenance.
   - `generic_html` — fetch any careers page via plain HTTP (or a headless
     Chromium render when the page needs JavaScript) and extract listings
     with CSS selectors you define.
   - `linkedin` / `indeed` — best-effort, Playwright-based scraping of public
     job search result pages. Explicitly fragile (blocking, layout changes,
     CAPTCHAs); isolated so their breakage never affects the other sources.
+  - See [Field reference](#sourcesjson) below for per-type required fields.
 - **Per-source keyword filters** — optional `include_keywords` /
   `exclude_keywords` on every source, matched case-insensitively against the
   job title.
@@ -30,16 +33,20 @@ dependency and no separate frontend build.
   the others; failures are logged and surfaced in the run history and in
   the digest email.
 - **Dedup that persists** — every job is keyed by the platform's own job ID
-  (Greenhouse/Lever) or a stable hash of company + title + link
-  (HTML/LinkedIn/Indeed) so a job is only ever reported "new" once, even
-  across container restarts.
+  where one exists (Greenhouse, Lever, HealthcareSource, TalentBrew,
+  Workday, PhenomPeople, Findly), the job's own URL (LinkedIn, Indeed), or
+  a composite of company + title + link/location for platforms with
+  neither (`generic_html`, Infor) — so a job is only ever reported "new"
+  once, even across container restarts.
 - **Job lifecycle tracking** — the `/jobs` page shows every job ever
   found, when it was first seen, when it was marked removed (its source
   scraped successfully without it, or the source was deleted), and
   whether it was included in a digest email.
 - **Email digest** — sent only when a run finds at least one new job or at
   least one source failure; a clean run with nothing to report stays
-  silent.
+  silent. Each job line shows its status when one is set and its source;
+  the email also includes the run's search timestamp and, if
+  `PUBLIC_BASE_URL` is configured, a link back to the `/jobs` page.
 - **Server-rendered web UI** — dashboard, run history, source management
   (add/edit/delete with a live "test this source" preview before saving),
   and settings — no SPA, no JS build step, full page reloads.
@@ -50,8 +57,9 @@ dependency and no separate frontend build.
   import/export (import replaces the entire source list; export downloads
   the current one); `/settings/preferences` holds the Light/Dark/System
   theme choice plus which days to check for jobs, whether a still-listed
-  job is resent in every digest or only ever emailed once, and one or
-  more digest recipient addresses.
+  job is resent in every digest or only ever emailed once, one or
+  more digest recipient addresses, and whether Not Interested jobs are
+  hidden from the jobs map (on by default).
 - **No database migration story to manage** — a single SQLite file holds
   dedup state, run history, and settings; it lives on a persistent Docker
   volume so it survives redeploys.
@@ -83,11 +91,11 @@ service. There is one container, one process.
 |---|---|---|
 | Adapters | `app/adapters/*.py` | Fetch + normalize one source type into `Job` objects. Every adapter has the shape `fetch(source, **injectable_io) -> list[Job]`, so tests can inject fakes instead of hitting the network or a real browser. |
 | Orchestrator | `app/orchestrator.py` | Runs every configured source, applies keyword filters, dedupes across sources within a run, dedupes against SQLite, and records run history. Serializes concurrent runs with a lock so an overlapping "Run now" and daily cron can't double-report jobs. |
-| Dedup store | `app/db.py` | SQLite: `jobs` (seen-before keys), `runs` (history), `settings` (SMTP host/port/from, recipient list, check days, resend flag — **not** the password, see [Secrets](#secrets)). |
-| Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company) and "sources that failed this run." Returns `None` (no email sent) when both are empty. All scraped text is HTML-escaped before landing in the email. |
+| Dedup store | `app/db.py` | SQLite: `jobs` (seen-before keys, status), `runs` (history), `settings` (SMTP host/port/from, recipient list, check days, resend flag, hide-Not-Interested-on-map flag — **not** the password, see [Secrets](#secrets)). |
+| Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company, showing each job's status/source when set) and "sources that failed this run," plus the run's search timestamp and an optional "View all jobs" link. Returns `None` (no email sent) when there are no new jobs and no failures. All scraped text is HTML-escaped before landing in the email. |
 | Emailer | `app/emailer.py` | Sends the digest via SMTP (STARTTLS, 30s timeout). |
 | Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Skips the scan and email entirely on days not selected in Preferences. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
-| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/jobs`, `/sources`, `/settings`. |
+| Web UI | `app/web/*.py` + `app/web/templates/*.html` | FastAPI routes + Jinja2 templates for `/`, `/jobs`, `/jobs/map`, `/sources`, `/settings`. |
 
 ## Quick start (Docker)
 
@@ -227,12 +235,13 @@ displayed in your browser's local timezone.
 | Page | Purpose |
 |---|---|
 | `/` (Dashboard) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, auto-refreshing, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. |
-| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, removed/emailed status, and status. |
+| `/jobs` | Every job CareerSpyder has ever found — company, search name, linked title (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected/Not Interested, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, location, removed/emailed status, and status. A **Map view** link shows the same filtered jobs as pins on a map. |
+| `/jobs/map` | The same filtered jobs as clustered pins (via Leaflet + Leaflet.markercluster) with a per-location job list popup, plus a fixed home-location marker. The initial view fits itself to whatever's plotted. Jobs marked Not Interested are excluded by default (toggle in `/settings/preferences`); jobs whose location couldn't be resolved are excluded from the map but still filterable/visible in the table under "Other / Unresolved". |
 | `/sources` | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
 | `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation via a themed dialog before doing so). |
-| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, and one or more recipient addresses (server-stored, validated client- and server-side). |
+| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, one or more recipient addresses (server-stored, validated client- and server-side), and whether Not Interested jobs are hidden from `/jobs/map` (on by default). |
 
 There is no authentication in v1 — this is meant for a trusted home/private
 network only (see [ROADMAP.md](ROADMAP.md)).

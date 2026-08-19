@@ -46,6 +46,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a better fit for a manually managed deploy host. `docker-compose.yml`
   (local dev/CI) is unaffected — it keeps its relative bind mounts, since
   it always runs from a known checkout directory.
+- Docs (`README.md`, `docs/USAGE.md`, the in-app `/guide` page, and the Settings → Data
+  import/export hint) now mention the Not Interested job status, the "hide Not Interested
+  jobs on the map" preference, and the `/jobs/map` page, all of which had shipped without
+  being reflected in these references.
 
 ## [0.17.0] — 2026-08-17
 

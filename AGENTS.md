@@ -104,13 +104,14 @@ existing tests — don't casually relax them:
 - **Adapter pattern.** Every source type gets one module in
   `app/adapters/` exporting `fetch(source, **injectable_io) -> list[Job]`.
   Register it in `app/adapters/__init__.py`'s `ADAPTERS` dict, keyed by the
-  `type` string used in `app/config.py`. Adding a sixth source type means:
+  `type` string used in `app/config.py`. Adding a new source type means:
   a new `SourceConfig` variant in `config.py`, a new adapter module, a
   registry entry, and a `tests/adapters/test_<type>.py` with fixture-based
   (not live) tests.
 - **Config models are pydantic, discriminated by `type`.** `SourceConfig`
-  in `app/config.py` is a `Union` of five source models tagged by a
-  `Literal["type"]` field. Required-but-scrapeable-blank fields
+  in `app/config.py` is a `Union` of source models tagged by a
+  `Literal["type"]` field — see `app/adapters/__init__.py`'s `ADAPTERS`
+  dict for the current, authoritative list. Required-but-scrapeable-blank fields
   (`board_token`, `url`, CSS selectors) use `Field(min_length=1)` —
   browsers submit hidden fields from other source types too, so
   server-side validation is the only real guard; don't rely on the form
