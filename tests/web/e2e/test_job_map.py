@@ -22,8 +22,11 @@ def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
     # the same session-scoped live_server/DB -- otherwise two nearby markers could cluster
     # into one bubble at the map's default low zoom, breaking the single-marker assumption.
     page.goto(live_server + "/jobs/map?location=" + quote("E2E Test City"))
-    page.wait_for_selector(".leaflet-marker-icon")
-    page.locator(".leaflet-marker-icon").click()
+    # Excludes .home-marker: the map always plots a fixed home pin too, which also
+    # gets Leaflet's .leaflet-marker-icon class.
+    job_marker = page.locator(".leaflet-marker-icon:not(.home-marker)")
+    job_marker.wait_for()
+    job_marker.click()
 
     page.wait_for_selector(".leaflet-popup")
     popup_text = page.locator(".leaflet-popup").inner_text()
@@ -46,8 +49,11 @@ def test_job_map_popup_escapes_a_title_containing_html_and_quote_characters(live
     conn.commit()
 
     page.goto(live_server + "/jobs/map?location=" + quote("E2E XSS City"))
-    page.wait_for_selector(".leaflet-marker-icon")
-    page.locator(".leaflet-marker-icon").click()
+    # Excludes .home-marker: the map always plots a fixed home pin too, which also
+    # gets Leaflet's .leaflet-marker-icon class.
+    job_marker = page.locator(".leaflet-marker-icon:not(.home-marker)")
+    job_marker.wait_for()
+    job_marker.click()
 
     page.wait_for_selector(".leaflet-popup")
     popup = page.locator(".leaflet-popup")
