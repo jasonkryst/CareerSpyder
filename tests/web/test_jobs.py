@@ -739,8 +739,9 @@ def test_location_override_returns_400_on_geocoder_exception(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
 
-    import requests as _requests
     from unittest.mock import patch
+
+    import requests as _requests
     with patch("app.geocoding.nominatim.requests.get", side_effect=_requests.RequestException("timeout")):
         resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
 
