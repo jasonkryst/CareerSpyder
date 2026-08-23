@@ -582,7 +582,6 @@ def test_secondary_checkbox_checked_when_source_is_secondary(client):
     assert resp.status_code == 303
 
     sources_resp = client.get("/sources")
-    source_id = None
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(sources_resp.text, "html.parser")
     edit_link = soup.find("a", href=lambda h: h and "/edit" in h)
