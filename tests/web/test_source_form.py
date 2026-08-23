@@ -555,3 +555,64 @@ def test_test_results_page_size_is_25(client):
     resp = client.get("/sources/new")
 
     assert "RESULTS_PAGE_SIZE = 25" in resp.text
+
+
+# ── Secondary source flag (issue #82) ─────────────────────────────────────────
+
+def test_source_form_has_secondary_checkbox(client):
+    resp = client.get("/sources/new")
+    assert 'name="secondary"' in resp.text
+
+
+def test_secondary_checkbox_unchecked_by_default(client):
+    resp = client.get("/sources/new")
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cb = soup.find("input", {"name": "secondary", "type": "checkbox"})
+    assert cb is not None
+    assert cb.get("checked") is None
+
+
+def test_secondary_checkbox_checked_when_source_is_secondary(client):
+    resp = client.post("/sources/new", data={
+        "name": "Indeed Scrape", "type": "indeed",
+        "url": "https://indeed.test/jobs", "secondary": "on",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+
+    sources_resp = client.get("/sources")
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(sources_resp.text, "html.parser")
+    edit_link = soup.find("a", href=lambda h: h and "/edit" in h)
+    assert edit_link is not None
+    edit_resp = client.get(edit_link["href"])
+    assert 'name="secondary"' in edit_resp.text
+    edit_soup = BeautifulSoup(edit_resp.text, "html.parser")
+    cb = edit_soup.find("input", {"name": "secondary", "type": "checkbox"})
+    assert cb is not None
+    assert cb.get("checked") is not None
+
+
+def test_secondary_false_persisted_when_checkbox_omitted(client):
+    import json
+    client.post("/sources/new", data={
+        "name": "Greenhouse", "type": "greenhouse", "board_token": "acme",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+    sources_path = client.app.state.sources_path
+    with open(sources_path) as f:
+        data = json.load(f)
+    assert data["sources"][0]["secondary"] is False
+
+
+def test_secondary_true_persisted_when_checkbox_checked(client):
+    import json
+    client.post("/sources/new", data={
+        "name": "Indeed", "type": "indeed", "url": "https://indeed.test/jobs",
+        "secondary": "on", "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+    sources_path = client.app.state.sources_path
+    with open(sources_path) as f:
+        data = json.load(f)
+    assert data["sources"][0]["secondary"] is True

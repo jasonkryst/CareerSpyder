@@ -34,6 +34,12 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
     jobs_to_send = summary.found_jobs if resend else summary.new_jobs
     job_label = "job" if resend else "new job"
 
+    duplicate_keys = {
+        row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only")
+    }
+    jobs_to_send = [j for j in jobs_to_send if j.key not in duplicate_keys]
+
+    secondary_source_ids = {s.id for s in sources if s.secondary}
     statuses = db.get_job_statuses(conn, [j.key for j in jobs_to_send])
     public_base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     jobs_url = f"{public_base_url}/jobs" if public_base_url else None
@@ -41,6 +47,7 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
     d = digest.build_digest(
         jobs_to_send, summary.failed_sources, job_label,
         statuses=statuses, searched_at=datetime.now(UTC), jobs_url=jobs_url,
+        secondary_source_ids=secondary_source_ids,
     )
     if d is None:
         return

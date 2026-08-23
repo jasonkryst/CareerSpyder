@@ -50,8 +50,15 @@
       {% endfor %}
     </select>
   </label>
+  <label>Duplicates
+    <select name="duplicates">
+      <option value="" {% if not filters.duplicates %}selected{% endif %}>Hidden</option>
+      <option value="include" {% if filters.duplicates == "include" %}selected{% endif %}>Include</option>
+      <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
+    </select>
+  </label>
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>
@@ -73,8 +80,20 @@
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
     <td data-label="Company">{{ job.company or "—" }}</td>
-    <td data-label="Search name">{{ job.source_name }}</td>
-    <td data-label="Title">{{ external_link(job.safe_url, job.title) }}</td>
+    <td data-label="Search name">
+      {{ job.source_name }}
+      {% if job.is_secondary %}<span class="badge badge-secondary" title="Secondary source">2°</span>{% endif %}
+    </td>
+    <td data-label="Title">
+      {{ external_link(job.safe_url, job.title) }}
+      {% if job.is_duplicate %}<span class="badge badge-duplicate" title="Marked as duplicate{% if job.duplicate_of %} of {{ job.duplicate_of }}{% endif %}">Duplicate</span>{% endif %}
+      <button type="button" class="duplicate-btn icon-btn"
+              data-key="{{ job.key }}"
+              data-title="{{ job.title | e }}"
+              data-duplicate="{{ 'true' if job.is_duplicate else 'false' }}"
+              data-duplicate-of="{{ job.duplicate_of or '' }}"
+              aria-label="Mark duplicate for {{ job.title | e }}">&#128258;</button>
+    </td>
     <td data-label="Location">
       {% if job.is_overridden %}<span class="location-overridden-badge" title="Location manually overridden">&#9998;</span>{% endif %}
       {{ job.location or "—" }}
@@ -122,6 +141,26 @@
   {% if pagination.has_next %}<a href="{{ query_url(request, '/jobs', page=pagination.page + 1) }}">Next</a>{% endif %}
 </nav>
 
+<dialog id="duplicate-modal" class="modal" aria-labelledby="duplicate-modal-title">
+  <h2 id="duplicate-modal-title">Mark as Duplicate</h2>
+  <p id="duplicate-modal-job" class="modal-subtitle"></p>
+  <form method="post" action="/jobs/duplicate" id="duplicate-form">
+    <input type="hidden" name="key" id="duplicate-key">
+    <input type="hidden" name="action" id="duplicate-action" value="mark">
+    <label for="duplicate-of-input">
+      Duplicate of (optional)
+      <input type="text" id="duplicate-of-input" name="duplicate_of"
+             placeholder="e.g. Company — Job Title or URL" autocomplete="off">
+    </label>
+    <p class="field-hint">Optionally describe what this is a duplicate of. Duplicates are hidden from the map and job list by default.</p>
+    <div class="modal-actions">
+      <button type="submit" class="btn-primary" id="duplicate-save-btn">Mark as duplicate</button>
+      <button type="submit" id="duplicate-clear-btn" hidden>Clear duplicate flag</button>
+      <button type="button" id="duplicate-cancel-btn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="location-override-modal" class="modal" aria-labelledby="override-modal-title">
   <h2 id="override-modal-title">Override Location</h2>
   <p id="override-modal-job" class="modal-subtitle"></p>
@@ -143,6 +182,40 @@
 </dialog>
 
 <script>
+(function () {
+  var dupModal = document.getElementById("duplicate-modal");
+  if (dupModal && typeof dupModal.showModal === "function") {
+    var dupForm = document.getElementById("duplicate-form");
+    var dupKey = document.getElementById("duplicate-key");
+    var dupAction = document.getElementById("duplicate-action");
+    var dupOfInput = document.getElementById("duplicate-of-input");
+    var dupJobEl = document.getElementById("duplicate-modal-job");
+    var dupSaveBtn = document.getElementById("duplicate-save-btn");
+    var dupClearBtn = document.getElementById("duplicate-clear-btn");
+    var dupCancelBtn = document.getElementById("duplicate-cancel-btn");
+
+    document.querySelectorAll(".duplicate-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        dupKey.value = btn.dataset.key;
+        dupAction.value = "mark";
+        dupOfInput.value = btn.dataset.duplicateOf || "";
+        dupJobEl.textContent = btn.dataset.title;
+        var isDuplicate = btn.dataset.duplicate === "true";
+        dupSaveBtn.hidden = isDuplicate;
+        dupClearBtn.hidden = !isDuplicate;
+        dupModal.showModal();
+        dupOfInput.focus();
+      });
+    });
+
+    dupClearBtn.addEventListener("click", function () {
+      dupAction.value = "clear";
+    });
+
+    dupCancelBtn.addEventListener("click", function () { dupModal.close(); });
+  }
+})();
+
 (function () {
   var modal = document.getElementById("location-override-modal");
   if (!modal || typeof modal.showModal !== "function") return;

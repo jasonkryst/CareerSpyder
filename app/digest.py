@@ -21,11 +21,13 @@ def build_digest(
     statuses: dict[str, str | None] | None = None,
     searched_at: datetime | None = None,
     jobs_url: str | None = None,
+    secondary_source_ids: set[str] | None = None,
 ) -> Digest | None:
     if not new_jobs and not failed_sources:
         return None
 
     statuses = statuses or {}
+    secondary_source_ids = secondary_source_ids or set()
 
     subject = (
         f"CareerSpyder: {len(new_jobs)} {job_label}(s)" if new_jobs
@@ -44,7 +46,9 @@ def build_digest(
             parts.append(f"<h3>{escape(company)}</h3><ul>")
             for job in jobs:
                 location = f" — {escape(job.location)}" if job.location else ""
-                source = f" (via {escape(job.source_name)})" if job.source_name else ""
+                is_secondary = job.source_id in secondary_source_ids
+                source_label = f"{escape(job.source_name)} [Secondary]" if is_secondary else escape(job.source_name)
+                source = f" (via {source_label})" if job.source_name else ""
                 status = statuses.get(job.key)
                 status_html = f" [{escape(JOB_STATUSES.get(status, status))}]" if status else ""
                 href = _safe_href(job.url)

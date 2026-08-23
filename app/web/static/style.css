@@ -618,6 +618,28 @@ dialog.modal .modal-actions {
   vertical-align: middle;
 }
 
+.badge {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+.badge-secondary {
+  background: var(--accent);
+  color: #fff;
+  opacity: 0.85;
+}
+
+.badge-duplicate {
+  background: var(--fg-muted);
+  color: #fff;
+  opacity: 0.8;
+}
+
 dialog.modal .modal-subtitle {
   color: var(--fg-muted);
   font-size: 0.875rem;

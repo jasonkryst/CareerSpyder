@@ -70,6 +70,13 @@ later rather than fixed immediately.
 
 ## Features
 
+- **Auto-dedup engine for secondary sources (issue #82, item 4).** Jobs
+  found by secondary sources (Indeed, LinkedIn) could be automatically
+  compared against primary-source listings using title + company similarity
+  scoring (e.g. `difflib.SequenceMatcher`) to produce low/medium/high
+  confidence duplicate candidates. High-confidence matches could be
+  auto-flagged; lower-confidence ones surfaced for manual review in the UI.
+  Manual duplicate marking (added in #82) provides the data model for this.
 - **Official LinkedIn/Indeed APIs or RSS feeds (from design spec).** The
   current `linkedin`/`indeed` adapters are explicitly best-effort
   Playwright scraping of public search pages — fragile by nature (layout

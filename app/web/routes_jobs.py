@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app import db
+from app import config, db
 from app.geocoding.factory import get_geocoder
 from app.models import JOB_STATUSES as STATUSES
 from app.textutils import safe_url_scheme
@@ -27,28 +27,34 @@ def _form_str(form: dict, key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _secondary_source_ids(sources_path: str) -> set[str]:
+    return {s.id for s in config.load_sources(sources_path) if s.secondary}
+
+
 @router.get("/jobs", response_class=HTMLResponse)
 def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
     company: str = "", source: str = "", removed: str = "active", emailed: str = "", status: str = "",
-    location: str = "",
+    location: str = "", duplicates: str = "",
 ):
     conn = request.app.state.conn
     filters = {
         "company": company or None, "source_name": source or None,
         "removed": removed or None, "emailed": emailed or None, "status": status or None,
-        "location": location or None,
+        "location": location or None, "duplicates": duplicates or None,
     }
     total = db.count_jobs(conn, **filters)
     pagination = paginate(total, page, PAGE_SIZE)
     rows = db.list_jobs(
         conn, limit=PAGE_SIZE, offset=pagination.offset, sort=sort, direction=direction, **filters,
     )
+    secondary_ids = _secondary_source_ids(request.app.state.sources_path)
     history = db.get_job_status_history(conn, [row["key"] for row in rows])
     for row in rows:
         row["age_days"] = _age_days(row["first_seen_at"], row["removed_at"])
         row["safe_url"] = safe_url_scheme(row["url"])
+        row["is_secondary"] = row["source_id"] in secondary_ids
         row["history"] = [
             {"status_label": STATUSES.get(entry["status"], "No status"), "changed_at": entry["changed_at"]}
             for entry in history.get(row["key"], [])
@@ -60,7 +66,7 @@ def jobs(
         "statuses": STATUSES,
         "filters": {
             "company": company, "source": source, "removed": removed, "emailed": emailed,
-            "status": status, "location": location,
+            "status": status, "location": location, "duplicates": duplicates,
         },
     })
 
@@ -124,6 +130,30 @@ async def update_job_status(request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
     message = f"Marked as {STATUSES[status]}." if status else "Status cleared."
+    return flash_redirect("/jobs", message)
+
+
+@router.post("/jobs/duplicate")
+async def update_job_duplicate(request: Request):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    action = _form_str(form, "action")
+    duplicate_of = _form_str(form, "duplicate_of").strip() or None
+
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+
+    conn = request.app.state.conn
+    try:
+        if action == "clear":
+            db.clear_job_duplicate(conn, key)
+            message = "Duplicate flag cleared."
+        else:
+            db.set_job_duplicate(conn, key, duplicate_of)
+            message = "Marked as duplicate."
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     return flash_redirect("/jobs", message)
 
 
