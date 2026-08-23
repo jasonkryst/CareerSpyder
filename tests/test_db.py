@@ -902,6 +902,7 @@ def test_list_mappable_jobs_returns_only_resolved_locations(tmp_db_path):
     assert [r["key"] for r in rows] == ["a"]
     assert rows[0] == {
         "key": "a", "title": "A", "company": "Acme", "url": "https://x.test/a",
+        "is_overridden": False,
         "display_name": "Chicago, IL", "lat": 41.8, "lng": -87.6,
     }
 
@@ -960,3 +961,160 @@ def test_list_mappable_jobs_without_exclude_status_includes_everything(tmp_db_pa
     rows = db.list_mappable_jobs(conn)
 
     assert {r["key"] for r in rows} == {"a", "b"}
+
+
+# --- Location override tests (issue #84) ---
+
+def _make_chicago_job(conn, key="job1"):
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key=key, title="Engineer", url="https://x.test/1", company="Acme",
+            location="Remote", source_name="Src", source_id="s1"),
+    ], run_id)
+    return key
+
+
+def test_init_db_adds_location_override_column(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    assert "location_override" in cols
+
+
+def test_set_location_override_stores_geocoded_entry_and_links_job(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Chicago, Cook County, Illinois, United States",
+        city="Chicago", region="Illinois", country="United States",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    row = conn.execute(
+        "SELECT location_override FROM jobs WHERE key = 'job1'"
+    ).fetchone()
+    assert row == ("Chicago, IL",)
+
+    geo = conn.execute(
+        "SELECT status, display_name, lat, lng, provider FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert geo[0] == "manual"
+    assert geo[1] == "Chicago, Cook County, Illinois, United States"
+    assert geo[2] == 41.8781
+    assert geo[3] == -87.6298
+    assert geo[4] == "nominatim"
+
+
+def test_set_location_override_raises_for_unknown_job(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    with pytest.raises(KeyError):
+        db.set_location_override(
+            conn, "no-such-key", "Chicago, IL",
+            display_name="Chicago", city="Chicago", region="IL", country="US",
+            lat=41.8, lng=-87.6, provider="nominatim",
+        )
+
+
+def test_set_location_override_upserts_existing_geocoded_entry(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Old Name", city="Chicago", region="IL", country="US",
+        lat=41.0, lng=-87.0, provider="nominatim",
+    )
+
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Chicago, Illinois, USA", city="Chicago", region="Illinois", country="USA",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    geo = conn.execute(
+        "SELECT display_name, lat FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert geo == ("Chicago, Illinois, USA", 41.8781)
+
+
+def test_clear_location_override_removes_override(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Chicago", city="Chicago", region="IL", country="US",
+        lat=41.8, lng=-87.6, provider="nominatim",
+    )
+
+    db.clear_location_override(conn, "job1")
+
+    row = conn.execute("SELECT location_override FROM jobs WHERE key = 'job1'").fetchone()
+    assert row == (None,)
+
+
+def test_clear_location_override_raises_for_unknown_job(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    with pytest.raises(KeyError):
+        db.clear_location_override(conn, "no-such-key")
+
+
+def test_list_jobs_includes_is_overridden_false_when_no_override(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+
+    rows = db.list_jobs(conn)
+
+    assert rows[0]["is_overridden"] is False
+    assert rows[0]["location_override"] is None
+
+
+def test_list_jobs_includes_is_overridden_true_and_shows_override_display_name(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Chicago, Illinois, USA", city="Chicago", region="IL", country="US",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    rows = db.list_jobs(conn)
+
+    assert rows[0]["is_overridden"] is True
+    assert rows[0]["location_override"] == "Chicago, IL"
+    assert rows[0]["location"] == "Chicago, Illinois, USA"
+
+
+def test_list_mappable_jobs_uses_override_location_for_map(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+    db.set_location_override(
+        conn, "job1", "Chicago, IL",
+        display_name="Chicago, Illinois, USA", city="Chicago", region="IL", country="US",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    rows = db.list_mappable_jobs(conn)
+
+    assert len(rows) == 1
+    assert rows[0]["is_overridden"] is True
+    assert rows[0]["lat"] == 41.8781
+    assert rows[0]["display_name"] == "Chicago, Illinois, USA"
+
+
+def test_list_mappable_jobs_original_location_not_on_map_after_override(tmp_db_path):
+    """Original 'Remote' location had no geocoded coords; after override the job appears on map."""
+    conn = db.init_db(tmp_db_path)
+    _make_chicago_job(conn)
+
+    rows_before = db.list_mappable_jobs(conn)
+    assert rows_before == []
+
+    db.set_location_override(
+        conn, "job1", "Austin, TX",
+        display_name="Austin, TX, USA", city="Austin", region="Texas", country="USA",
+        lat=30.2672, lng=-97.7431, provider="nominatim",
+    )
+
+    rows_after = db.list_mappable_jobs(conn)
+    assert len(rows_after) == 1
+    assert rows_after[0]["lat"] == 30.2672

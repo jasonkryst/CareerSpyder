@@ -75,7 +75,16 @@
     <td data-label="Company">{{ job.company or "—" }}</td>
     <td data-label="Search name">{{ job.source_name }}</td>
     <td data-label="Title">{{ external_link(job.safe_url, job.title) }}</td>
-    <td data-label="Location">{{ job.location or "—" }}</td>
+    <td data-label="Location">
+      {% if job.is_overridden %}<span class="location-overridden-badge" title="Location manually overridden">&#9998;</span>{% endif %}
+      {{ job.location or "—" }}
+      <button type="button" class="location-override-btn icon-btn"
+              data-key="{{ job.key }}"
+              data-title="{{ job.title | e }}"
+              data-current="{{ job.location_override or '' }}"
+              data-overridden="{{ 'true' if job.is_overridden else 'false' }}"
+              aria-label="Override location for {{ job.title | e }}">&#128205;</button>
+    </td>
     <td data-label="Date found"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at }}</time></td>
     <td data-label="Removed">{% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>{% else %}—{% endif %}</td>
     <td data-label="Age (days)">{{ job.age_days }}</td>
@@ -112,4 +121,94 @@
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
   {% if pagination.has_next %}<a href="{{ query_url(request, '/jobs', page=pagination.page + 1) }}">Next</a>{% endif %}
 </nav>
+
+<dialog id="location-override-modal" class="modal" aria-labelledby="override-modal-title">
+  <h2 id="override-modal-title">Override Location</h2>
+  <p id="override-modal-job" class="modal-subtitle"></p>
+  <form id="location-override-form">
+    <input type="hidden" id="override-key" name="key">
+    <label for="override-location-input">
+      Location
+      <input type="text" id="override-location-input" name="location"
+             placeholder="e.g. Chicago, IL" autocomplete="off">
+    </label>
+    <p class="field-hint">Enter a city or address. The location will be verified against the map before saving.</p>
+    <div class="modal-error" role="alert" hidden></div>
+    <div class="modal-actions">
+      <button type="submit" class="btn-primary" id="override-save-btn">Save</button>
+      <button type="button" id="override-clear-btn">Clear override</button>
+      <button type="button" id="override-cancel-btn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById("location-override-modal");
+  if (!modal || typeof modal.showModal !== "function") return;
+
+  var form = document.getElementById("location-override-form");
+  var keyInput = document.getElementById("override-key");
+  var locationInput = document.getElementById("override-location-input");
+  var errorEl = modal.querySelector(".modal-error");
+  var jobEl = document.getElementById("override-modal-job");
+  var clearBtn = document.getElementById("override-clear-btn");
+  var cancelBtn = document.getElementById("override-cancel-btn");
+
+  document.querySelectorAll(".location-override-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      keyInput.value = btn.dataset.key;
+      locationInput.value = btn.dataset.current;
+      jobEl.textContent = btn.dataset.title;
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+      clearBtn.hidden = btn.dataset.overridden !== "true";
+      modal.showModal();
+      locationInput.focus();
+    });
+  });
+
+  cancelBtn.addEventListener("click", function () { modal.close(); });
+  modal.addEventListener("cancel", function () { errorEl.hidden = true; });
+
+  async function postOverride(location) {
+    var data = new FormData();
+    data.append("key", keyInput.value);
+    data.append("location", location);
+    var saveBtn = document.getElementById("override-save-btn");
+    saveBtn.disabled = true;
+    clearBtn.disabled = true;
+    try {
+      var resp = await fetch("/jobs/location-override", { method: "POST", body: data });
+      if (resp.ok) {
+        modal.close();
+        window.location.reload();
+      } else {
+        var body = await resp.json().catch(function () { return {}; });
+        errorEl.textContent = body.detail || "An unexpected error occurred.";
+        errorEl.hidden = false;
+      }
+    } catch (err) {
+      errorEl.textContent = "Network error. Please try again.";
+      errorEl.hidden = false;
+    } finally {
+      saveBtn.disabled = false;
+      clearBtn.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var loc = locationInput.value.trim();
+    if (!loc) {
+      errorEl.textContent = "Please enter a location.";
+      errorEl.hidden = false;
+      return;
+    }
+    postOverride(loc);
+  });
+
+  clearBtn.addEventListener("click", function () { postOverride(""); });
+})();
+</script>
 {% endblock %}

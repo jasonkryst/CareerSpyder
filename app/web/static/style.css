@@ -593,3 +593,50 @@ dialog.modal .modal-actions {
   background: none;
   border: none;
 }
+
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg-muted);
+  opacity: 0.6;
+  vertical-align: middle;
+}
+
+.icon-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.location-overridden-badge {
+  margin-right: var(--space-1);
+  color: var(--accent);
+  font-size: 0.875rem;
+  vertical-align: middle;
+}
+
+dialog.modal .modal-subtitle {
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+  margin-top: calc(var(--space-1) * -1);
+  margin-bottom: var(--space-3);
+}
+
+dialog.modal .modal-error {
+  background: var(--error-bg);
+  color: var(--error-fg);
+  border-left: 4px solid var(--error-fg);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  font-size: 0.875rem;
+}
+
+dialog.modal .field-hint {
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+  margin: var(--space-1) 0 0;
+}

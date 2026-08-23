@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Location Override** (issue #84): a map-pin button (&#128205;) in each job's Location cell
+  opens a modal where you can type a replacement location. The location is validated against
+  the geocoding provider before saving — if it cannot be resolved to map coordinates the save
+  is rejected with an error. Overridden locations are flagged with a pencil icon (&#9998;) in
+  the Jobs table and in each job's map popup. Clicking the pin on an already-overridden row
+  pre-fills the current override and offers a **Clear override** button to revert.
+
 ### Changed
 
 - Both `/jobs` and `/jobs/map` now default the Status filter to **Active** (non-removed jobs

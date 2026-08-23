@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     title TEXT NOT NULL,
     company TEXT,
     location TEXT,
+    location_override TEXT,
     url TEXT NOT NULL,
     posted_date TEXT,
     source_name TEXT NOT NULL,
@@ -80,6 +81,7 @@ _NEW_JOB_COLUMNS = {
     "removed_at": "TEXT",
     "emailed_at": "TEXT",
     "status": "TEXT",
+    "location_override": "TEXT",
 }
 
 
@@ -93,6 +95,7 @@ def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
 
 _JOBS_REBUILD_COLUMNS = (
     "key TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, location TEXT, "
+    "location_override TEXT, "
     "url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, source_id TEXT, "
     "summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
     "removed_at TEXT, emailed_at TEXT, status TEXT, "
@@ -112,9 +115,9 @@ def _migrate_jobs_location_fk(conn: sqlite3.Connection) -> None:
     )
     conn.execute(f"CREATE TABLE jobs_new ({_JOBS_REBUILD_COLUMNS})")
     conn.execute(
-        "INSERT INTO jobs_new (key, title, company, location, url, posted_date, source_name, "
-        "source_id, summary, first_seen_run_id, first_seen_at, removed_at, emailed_at, status) "
-        "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary, "
+        "INSERT INTO jobs_new (key, title, company, location, location_override, url, posted_date, "
+        "source_name, source_id, summary, first_seen_run_id, first_seen_at, removed_at, emailed_at, status) "
+        "SELECT key, title, company, location, NULL, url, posted_date, source_name, source_id, summary, "
         "first_seen_run_id, first_seen_at, removed_at, emailed_at, status FROM jobs"
     )
     conn.execute("DROP TABLE jobs")
@@ -341,17 +344,24 @@ def list_jobs(
     where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
+        "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status "
-        "FROM jobs LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
+        "FROM jobs "
+        "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
+        "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
         f"{where_sql} ORDER BY {order_column} {order_dir}, jobs.rowid {order_dir} LIMIT ? OFFSET ?"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
-            "key": r[0], "title": r[1], "company": r[2], "location": r[4] or r[3], "url": r[5],
-            "posted_date": r[6], "source_name": r[7], "source_id": r[8], "summary": r[9],
-            "first_seen_at": r[10], "removed_at": r[11], "emailed_at": r[12], "status": r[13],
+            "key": r[0], "title": r[1], "company": r[2],
+            "location": r[6] or r[5] or r[4] or r[3],
+            "location_override": r[5],
+            "is_overridden": r[5] is not None,
+            "url": r[7],
+            "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
+            "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
         }
         for r in rows
     ]
@@ -395,22 +405,24 @@ def list_mappable_jobs(
     exclude_status: str | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
-    clauses = ["geocoded_locations.status = 'resolved'"]
+    clauses = ["geocoded_locations.status IN ('resolved', 'manual')"]
     if exclude_status:
         clauses.append("(jobs.status IS NULL OR jobs.status != ?)")
         params.append(exclude_status)
     resolved_clause = " AND ".join(clauses)
     where_sql = f"{where_sql} AND {resolved_clause}" if where_sql else f"WHERE {resolved_clause}"
     query = (
-        "SELECT jobs.key, jobs.title, jobs.company, jobs.url, "
+        "SELECT jobs.key, jobs.title, jobs.company, jobs.url, jobs.location_override, "
         "geocoded_locations.display_name, geocoded_locations.lat, geocoded_locations.lng "
-        "FROM jobs LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
+        "FROM jobs LEFT JOIN geocoded_locations "
+        "ON COALESCE(jobs.location_override, jobs.location) = geocoded_locations.location "
         f"{where_sql}"
     )
     rows = conn.execute(query, params).fetchall()
     return [
         {"key": r[0], "title": r[1], "company": r[2], "url": r[3],
-         "display_name": r[4], "lat": r[5], "lng": r[6]}
+         "is_overridden": r[4] is not None,
+         "display_name": r[5], "lat": r[6], "lng": r[7]}
         for r in rows
     ]
 
@@ -460,6 +472,36 @@ def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> No
         "INSERT INTO job_status_history (job_key, status, changed_at) VALUES (?, ?, ?)",
         (key, status, now),
     )
+    conn.commit()
+
+
+def set_location_override(
+    conn: sqlite3.Connection, key: str, location: str,
+    display_name: str, city: str | None, region: str | None, country: str | None,
+    lat: float, lng: float, provider: str,
+) -> None:
+    now = _now()
+    cur = conn.execute("SELECT key FROM jobs WHERE key = ?", (key,)).fetchone()
+    if cur is None:
+        raise KeyError(key)
+    conn.execute(
+        "INSERT INTO geocoded_locations "
+        "(location, display_name, city, region, country, lat, lng, status, provider, resolved_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?) "
+        "ON CONFLICT(location) DO UPDATE SET "
+        "display_name=excluded.display_name, city=excluded.city, region=excluded.region, "
+        "country=excluded.country, lat=excluded.lat, lng=excluded.lng, "
+        "status='manual', provider=excluded.provider, resolved_at=excluded.resolved_at",
+        (location, display_name, city, region, country, lat, lng, provider, now),
+    )
+    conn.execute("UPDATE jobs SET location_override = ? WHERE key = ?", (location, key))
+    conn.commit()
+
+
+def clear_location_override(conn: sqlite3.Connection, key: str) -> None:
+    cur = conn.execute("UPDATE jobs SET location_override = NULL WHERE key = ?", (key,))
+    if cur.rowcount == 0:
+        raise KeyError(key)
     conn.commit()
 
 

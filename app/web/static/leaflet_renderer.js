@@ -21,13 +21,18 @@ window.CareerSpyderMap = (function () {
       .replace(/'/g, "&#39;");
   }
 
+  const overrideIcon = " &#9998;";
+
   function popupHtml(location) {
     const items = location.jobs
       .map(function (job) {
         const title = escapeHtml(job.title);
         const company = escapeHtml(job.company || "—");
         const url = escapeHtml(job.url);
-        return "<li><a href=\"" + url + "\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        const badge = job.is_overridden
+          ? "<span title=\"Location manually overridden\">" + overrideIcon + "</span> "
+          : "";
+        return "<li>" + badge + "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener noreferrer\">"
           + title + "</a> — " + company + "</li>";
       })
       .join("");

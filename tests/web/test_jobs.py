@@ -670,3 +670,161 @@ def test_jobs_map_data_empty_when_all_jobs_are_removed(client):
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# --- Location override endpoint tests (issue #84) ---
+
+def _fake_geocode_response(lat="41.8781136", lon="-87.6297982",
+                           display_name="Chicago, IL, USA",
+                           city="Chicago", state="Illinois", country="United States"):
+    from unittest.mock import Mock
+    resp = Mock()
+    resp.raise_for_status = Mock()
+    resp.json.return_value = [{
+        "lat": lat, "lon": lon, "display_name": display_name,
+        "address": {"city": city, "state": state, "country": country},
+    }]
+    return resp
+
+
+def test_location_override_saves_and_returns_ok(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["is_overridden"] is True
+    assert rows["k1"]["location_override"] == "Chicago, IL"
+
+
+def test_location_override_clears_when_location_empty(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+
+    resp = client.post("/jobs/location-override", data={"key": "k1", "location": ""})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k1"]["is_overridden"] is False
+    assert rows["k1"]["location_override"] is None
+
+
+def test_location_override_returns_400_when_geocode_returns_none(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import Mock, patch
+    empty_resp = Mock()
+    empty_resp.raise_for_status = Mock()
+    empty_resp.json.return_value = []
+    with patch("app.geocoding.nominatim.requests.get", return_value=empty_resp):
+        resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Nowhere, XX"})
+
+    assert resp.status_code == 400
+    assert "resolved" in resp.json()["detail"].lower()
+
+
+def test_location_override_returns_400_on_geocoder_exception(client):
+    """NominatimGeocoder swallows RequestException and returns None, which maps to the same 400."""
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import patch
+
+    import requests as _requests
+    with patch("app.geocoding.nominatim.requests.get", side_effect=_requests.RequestException("timeout")):
+        resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+
+    assert resp.status_code == 400
+    assert "resolved" in resp.json()["detail"].lower()
+
+
+def test_location_override_returns_400_when_key_missing(client):
+    resp = client.post("/jobs/location-override", data={"key": "", "location": "Chicago, IL"})
+    assert resp.status_code == 400
+
+
+def test_location_override_returns_404_for_unknown_job(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        resp = client.post("/jobs/location-override", data={"key": "no-such-key", "location": "Chicago, IL"})
+    assert resp.status_code == 404
+
+
+def test_location_override_clear_returns_404_for_unknown_job(client):
+    resp = client.post("/jobs/location-override", data={"key": "no-such-key", "location": ""})
+    assert resp.status_code == 404
+
+
+def test_jobs_page_shows_pin_button_in_location_cell(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert "location-override-btn" in resp.text
+    assert 'data-key="k1"' in resp.text
+
+
+def test_jobs_page_shows_override_badge_for_overridden_location(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_location_override(
+        conn, "k1", "Chicago, IL",
+        display_name="Chicago, IL, USA", city="Chicago", region="IL", country="US",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    resp = client.get("/jobs")
+
+    assert "location-overridden-badge" in resp.text
+    assert "Chicago, IL, USA" in resp.text
+
+
+def test_jobs_page_shows_override_modal_dialog(client):
+    resp = client.get("/jobs")
+    assert 'id="location-override-modal"' in resp.text
+    assert 'id="location-override-form"' in resp.text
+
+
+def test_jobs_map_data_shows_is_overridden_false_without_override(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn))
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    data = client.get("/jobs/map/data").json()
+
+    job = next(j for j in data[0]["jobs"] if j["key"] == "k1")
+    assert job["is_overridden"] is False
+
+
+def test_jobs_map_data_shows_is_overridden_true_and_override_coords(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1", location="Remote")], db.start_run(conn))
+    db.set_location_override(
+        conn, "k1", "Chicago, IL",
+        display_name="Chicago, IL, USA", city="Chicago", region="IL", country="US",
+        lat=41.8781, lng=-87.6298, provider="nominatim",
+    )
+
+    data = client.get("/jobs/map/data").json()
+
+    assert len(data) == 1
+    assert data[0]["lat"] == 41.8781
+    job = data[0]["jobs"][0]
+    assert job["key"] == "k1"
+    assert job["is_overridden"] is True
