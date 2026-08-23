@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app import db
+from app.geocoding.factory import get_geocoder
 from app.models import JOB_STATUSES as STATUSES
 from app.textutils import safe_url_scheme
 from app.web.flash import flash_redirect
@@ -106,6 +107,7 @@ def jobs_map_data(
         entry["jobs"].append({
             "key": row["key"], "title": row["title"], "company": row["company"],
             "url": safe_url_scheme(row["url"]),
+            "is_overridden": row["is_overridden"],
         })
     return list(grouped.values())
 
@@ -123,3 +125,44 @@ async def update_job_status(request: Request):
         raise HTTPException(status_code=404, detail="Job not found")
     message = f"Marked as {STATUSES[status]}." if status else "Status cleared."
     return flash_redirect("/jobs", message)
+
+
+@router.post("/jobs/location-override")
+async def update_location_override(request: Request):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    location = _form_str(form, "location").strip()
+
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+
+    conn = request.app.state.conn
+
+    if not location:
+        try:
+            db.clear_location_override(conn, key)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return JSONResponse({"ok": True})
+
+    geocoder = get_geocoder()
+    result = geocoder.geocode(location)
+
+    if result is None:
+        raise HTTPException(status_code=400, detail="Location could not be resolved on the map")
+
+    try:
+        db.set_location_override(
+            conn, key, location,
+            display_name=result.display_name,
+            city=result.city,
+            region=result.region,
+            country=result.country,
+            lat=result.lat,
+            lng=result.lng,
+            provider=geocoder.name,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JSONResponse({"ok": True})
