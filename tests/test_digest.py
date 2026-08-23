@@ -119,3 +119,30 @@ def test_omits_jobs_link_when_not_given():
     result = build_digest(jobs, [])
 
     assert "View all jobs" not in result.html_body
+
+
+def test_secondary_source_label_appended_for_secondary_jobs():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme",
+                source_name="Indeed", source_id="src-indeed")]
+
+    result = build_digest(jobs, [], secondary_source_ids={"src-indeed"})
+
+    assert "Indeed [Secondary]" in result.html_body
+
+
+def test_non_secondary_source_has_no_secondary_label():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme",
+                source_name="Greenhouse", source_id="src-gh")]
+
+    result = build_digest(jobs, [], secondary_source_ids={"src-indeed"})
+
+    assert "[Secondary]" not in result.html_body
+
+
+def test_empty_secondary_source_ids_produces_no_secondary_labels():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme",
+                source_name="Indeed", source_id="src-indeed")]
+
+    result = build_digest(jobs, [], secondary_source_ids=set())
+
+    assert "[Secondary]" not in result.html_body

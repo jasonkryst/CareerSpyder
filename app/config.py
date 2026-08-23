@@ -10,6 +10,7 @@ class BaseSource(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str
     company: str | None = None
+    secondary: bool = False
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)
 

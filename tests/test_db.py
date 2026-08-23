@@ -1118,3 +1118,119 @@ def test_list_mappable_jobs_original_location_not_on_map_after_override(tmp_db_p
     rows_after = db.list_mappable_jobs(conn)
     assert len(rows_after) == 1
     assert rows_after[0]["lat"] == 30.2672
+
+
+# ── Duplicate flag ─────────────────────────────────────────────────────────────
+
+def test_set_job_duplicate_marks_job_and_stores_reference(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.set_job_duplicate(conn, "k1", duplicate_of="Acme — Engineer (Greenhouse)")
+
+    rows = db.list_jobs(conn, duplicates="include")
+    assert rows[0]["is_duplicate"] is True
+    assert rows[0]["duplicate_of"] == "Acme — Engineer (Greenhouse)"
+
+
+def test_set_job_duplicate_without_reference(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.set_job_duplicate(conn, "k1")
+
+    rows = db.list_jobs(conn, duplicates="include")
+    assert rows[0]["is_duplicate"] is True
+    assert rows[0]["duplicate_of"] is None
+
+
+def test_clear_job_duplicate_removes_flag(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_duplicate(conn, "k1", duplicate_of="Some Job")
+
+    db.clear_job_duplicate(conn, "k1")
+
+    rows = db.list_jobs(conn)
+    assert rows[0]["is_duplicate"] is False
+    assert rows[0]["duplicate_of"] is None
+
+
+def test_set_job_duplicate_raises_for_unknown_key(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(KeyError):
+        db.set_job_duplicate(conn, "no-such-key")
+
+
+def test_clear_job_duplicate_raises_for_unknown_key(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(KeyError):
+        db.clear_job_duplicate(conn, "no-such-key")
+
+
+def test_list_jobs_hides_duplicates_by_default(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    rows = db.list_jobs(conn)
+
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k1"
+
+
+def test_list_jobs_includes_duplicates_when_requested(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    rows = db.list_jobs(conn, duplicates="include")
+
+    assert len(rows) == 2
+
+
+def test_list_jobs_returns_only_duplicates(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    rows = db.list_jobs(conn, duplicates="only")
+
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k2"
+
+
+def test_count_jobs_excludes_duplicates_by_default(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    assert db.count_jobs(conn) == 1
+    assert db.count_jobs(conn, duplicates="include") == 2
+
+
+def test_list_mappable_jobs_excludes_duplicates_by_default(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme",
+            location="Chicago, IL", source_name="Board", source_id="s1"),
+        Job(key="k2", title="Engineer 2", url="https://x.test/2", company="Acme",
+            location="Chicago, IL", source_name="Indeed", source_id="s2"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status='resolved', lat=41.8, lng=-87.6 WHERE location='Chicago, IL'"
+    )
+    conn.commit()
+    db.set_job_duplicate(conn, "k2")
+
+    rows = db.list_mappable_jobs(conn)
+
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k1"

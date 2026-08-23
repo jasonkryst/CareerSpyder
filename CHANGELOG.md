@@ -7,6 +7,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Job Duplication & Secondary Sources** (issue #82):
+  - Any job can now be manually marked as a duplicate via a flag button (&#128258;) in the
+    Title column. An optional "duplicate of" note records what the canonical listing is.
+    Duplicate jobs are hidden from `/jobs`, `/jobs/map`, and the email digest by default;
+    a new **Duplicates** filter dropdown lets you include or view only duplicates.
+    Clearing the flag restores a job to normal visibility.
+  - Sources can be designated **Secondary** (e.g. Indeed, LinkedIn) via a checkbox in the
+    source form. Jobs from secondary sources are tagged with a **2°** badge in the Jobs table.
+    The email digest appends `[Secondary]` to the source attribution for those jobs.
+    Secondary jobs that are marked duplicate are silently excluded from the digest even when
+    `resend_jobs` is enabled.
+
 - **Location Override** (issue #84): a map-pin button (&#128205;) in each job's Location cell
   opens a modal where you can type a replacement location. The location is validated against
   the geocoding provider before saving — if it cannot be resolved to map coordinates the save

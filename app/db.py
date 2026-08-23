@@ -82,6 +82,8 @@ _NEW_JOB_COLUMNS = {
     "emailed_at": "TEXT",
     "status": "TEXT",
     "location_override": "TEXT",
+    "is_duplicate": "INTEGER NOT NULL DEFAULT 0",
+    "duplicate_of": "TEXT",
 }
 
 
@@ -99,6 +101,7 @@ _JOBS_REBUILD_COLUMNS = (
     "url TEXT NOT NULL, posted_date TEXT, source_name TEXT NOT NULL, source_id TEXT, "
     "summary TEXT, first_seen_run_id INTEGER, first_seen_at TEXT NOT NULL, "
     "removed_at TEXT, emailed_at TEXT, status TEXT, "
+    "is_duplicate INTEGER NOT NULL DEFAULT 0, duplicate_of TEXT, "
     "FOREIGN KEY (location) REFERENCES geocoded_locations(location)"
 )
 
@@ -300,7 +303,7 @@ _JOB_SORT_COLUMNS = {
 
 def _job_filters_sql(
     company: str | None, source_name: str | None, removed: str | None, emailed: str | None,
-    status: str | None = None, location: str | None = None,
+    status: str | None = None, location: str | None = None, duplicates: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
@@ -328,6 +331,10 @@ def _job_filters_sql(
     elif location:
         clauses.append("geocoded_locations.display_name = ?")
         params.append(location)
+    if duplicates == "only":
+        clauses.append("jobs.is_duplicate = 1")
+    elif duplicates != "include":
+        clauses.append("jobs.is_duplicate = 0")
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -337,16 +344,17 @@ def list_jobs(
     sort: str = "", direction: str = "",
     company: str | None = None, source_name: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
-    location: str | None = None,
+    location: str | None = None, duplicates: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location, duplicates)
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
-        "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status "
+        "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
+        "jobs.is_duplicate, jobs.duplicate_of "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
@@ -362,6 +370,7 @@ def list_jobs(
             "url": r[7],
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
+            "is_duplicate": bool(r[16]), "duplicate_of": r[17],
         }
         for r in rows
     ]
@@ -371,9 +380,9 @@ def count_jobs(
     conn: sqlite3.Connection, *,
     company: str | None = None, source_name: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
-    location: str | None = None,
+    location: str | None = None, duplicates: str | None = None,
 ) -> int:
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location, duplicates)
     row = conn.execute(
         "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "
         f"ON jobs.location = geocoded_locations.location {where_sql}",
@@ -402,9 +411,9 @@ def list_mappable_jobs(
     conn: sqlite3.Connection, *,
     company: str | None = None, source_name: str | None = None, location: str | None = None,
     removed: str | None = None, emailed: str | None = None, status: str | None = None,
-    exclude_status: str | None = None,
+    exclude_status: str | None = None, duplicates: str | None = None,
 ) -> list[dict]:
-    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location)
+    where_sql, params = _job_filters_sql(company, source_name, removed, emailed, status, location, duplicates)
     clauses = ["geocoded_locations.status IN ('resolved', 'manual')"]
     if exclude_status:
         clauses.append("(jobs.status IS NULL OR jobs.status != ?)")
@@ -513,6 +522,24 @@ def get_job_statuses(conn: sqlite3.Connection, keys: list[str]) -> dict[str, str
         f"SELECT key, status FROM jobs WHERE key IN ({placeholders})", keys,
     ).fetchall()
     return {key: status for key, status in rows}
+
+
+def set_job_duplicate(conn: sqlite3.Connection, key: str, duplicate_of: str | None = None) -> None:
+    cur = conn.execute(
+        "UPDATE jobs SET is_duplicate = 1, duplicate_of = ? WHERE key = ?", (duplicate_of, key)
+    )
+    if cur.rowcount == 0:
+        raise KeyError(key)
+    conn.commit()
+
+
+def clear_job_duplicate(conn: sqlite3.Connection, key: str) -> None:
+    cur = conn.execute(
+        "UPDATE jobs SET is_duplicate = 0, duplicate_of = NULL WHERE key = ?", (key,)
+    )
+    if cur.rowcount == 0:
+        raise KeyError(key)
+    conn.commit()
 
 
 def get_job_status_history(conn: sqlite3.Connection, keys: list[str]) -> dict[str, list[dict]]:

@@ -44,6 +44,7 @@ def source_from_form(form: dict):
     common = {
         "name": _strip(form["name"]),
         "company": _strip(form.get("company", "")) or None,
+        "secondary": form.get("secondary") == "on",
         "include_keywords": _keywords(form.get("include_keywords", "")),
         "exclude_keywords": _keywords(form.get("exclude_keywords", "")),
         "type": form["type"],
@@ -125,6 +126,7 @@ def echo_source(form: dict):
         id=form.get("id", ""),
         name=form.get("name", ""),
         company=form.get("company") or None,
+        secondary=form.get("secondary") == "on",
         type=form.get("type", ""),
         board_token=form.get("board_token", ""),
         url=url,

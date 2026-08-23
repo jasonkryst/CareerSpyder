@@ -828,3 +828,133 @@ def test_jobs_map_data_shows_is_overridden_true_and_override_coords(client):
     job = data[0]["jobs"][0]
     assert job["key"] == "k1"
     assert job["is_overridden"] is True
+
+
+# ── Duplicate flag (issue #82) ─────────────────────────────────────────────────
+
+def test_jobs_page_hides_duplicate_by_default(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    resp = client.get("/jobs")
+
+    assert "Engineer" in resp.text
+    assert "Dupe Job" not in resp.text
+
+
+def test_jobs_page_shows_duplicate_when_filter_is_include(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    resp = client.get("/jobs?duplicates=include")
+
+    assert "Engineer" in resp.text
+    assert "Dupe Job" in resp.text
+
+
+def test_jobs_page_shows_only_duplicate_when_filter_is_only(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
+    db.set_job_duplicate(conn, "k2")
+
+    resp = client.get("/jobs?duplicates=only")
+
+    assert "Engineer" not in resp.text
+    assert "Dupe Job" in resp.text
+
+
+def test_jobs_page_duplicate_shows_badge_when_included(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_duplicate(conn, "k1", duplicate_of="Acme — Engineer")
+
+    resp = client.get("/jobs?duplicates=include")
+
+    assert "Duplicate" in resp.text
+
+
+def test_post_duplicate_marks_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark", "duplicate_of": "Greenhouse listing"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    rows = db.list_jobs(conn, duplicates="include")
+    assert rows[0]["is_duplicate"] is True
+    assert rows[0]["duplicate_of"] == "Greenhouse listing"
+
+
+def test_post_duplicate_mark_without_reference(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    rows = db.list_jobs(conn, duplicates="include")
+    assert rows[0]["is_duplicate"] is True
+    assert rows[0]["duplicate_of"] is None
+
+
+def test_post_duplicate_clear_removes_flag(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_duplicate(conn, "k1")
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "clear"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    rows = db.list_jobs(conn)
+    assert rows[0]["is_duplicate"] is False
+
+
+def test_post_duplicate_returns_404_for_unknown_job(client):
+    resp = client.post("/jobs/duplicate", data={"key": "no-such-key", "action": "mark"})
+
+    assert resp.status_code == 404
+
+
+def test_post_duplicate_returns_400_when_key_missing(client):
+    resp = client.post("/jobs/duplicate", data={"action": "mark"})
+
+    assert resp.status_code == 400
+
+
+def test_jobs_page_secondary_source_shows_badge(client):
+    import json
+    conn = client.app.state.conn
+    sources_path = client.app.state.sources_path
+    sources = [{"id": "src-1", "name": "Indeed Board", "type": "indeed",
+                "url": "https://indeed.test/jobs", "secondary": True,
+                "include_keywords": [], "exclude_keywords": []}]
+    with open(sources_path, "w") as f:
+        json.dump({"sources": sources}, f)
+
+    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Indeed Board")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert "2\u00b0" in resp.text or "badge-secondary" in resp.text
+
+
+def test_jobs_page_non_secondary_source_has_no_badge(client):
+    import json
+    conn = client.app.state.conn
+    sources_path = client.app.state.sources_path
+    sources = [{"id": "src-1", "name": "Greenhouse Board", "type": "greenhouse",
+                "board_token": "acme", "secondary": False,
+                "include_keywords": [], "exclude_keywords": []}]
+    with open(sources_path, "w") as f:
+        json.dump({"sources": sources}, f)
+
+    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Greenhouse Board")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert "badge-secondary" not in resp.text

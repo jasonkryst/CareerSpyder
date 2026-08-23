@@ -69,6 +69,8 @@
   </div>
 
   <div class="card">
+  <label>Secondary source <input type="checkbox" name="secondary" {% if source and source.secondary %}checked{% endif %}></label>
+  <p class="field-hint">Secondary sources (e.g. Indeed, LinkedIn) may surface duplicate listings. Jobs from secondary sources are marked in the UI and email digest.</p>
   <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label>
   <label>Exclude keywords (comma separated) <input type="text" name="exclude_keywords" value="{{ source.exclude_keywords | join(', ') if source else '' }}"></label>
   </div>
