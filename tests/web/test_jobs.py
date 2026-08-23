@@ -52,7 +52,7 @@ def test_jobs_page_shows_removed_date_and_class_for_a_removed_job(client):
     removed_at = db.list_jobs(conn)[0]["removed_at"]
     assert removed_at is not None
 
-    resp = client.get("/jobs")
+    resp = client.get("/jobs?removed=removed")
 
     assert removed_at in resp.text
     assert 'class="removed"' in resp.text
@@ -495,7 +495,7 @@ def test_jobs_page_wraps_removed_at_in_a_time_element(client):
     db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
     removed_at = db.list_jobs(conn)[0]["removed_at"]
 
-    resp = client.get("/jobs")
+    resp = client.get("/jobs?removed=removed")
 
     assert f'<time datetime="{removed_at}">{removed_at}</time>' in resp.text
 
@@ -533,3 +533,140 @@ def test_jobs_page_wraps_status_history_timestamp_in_a_time_element(client):
     resp = client.get("/jobs")
 
     assert f'<time datetime="{changed_at}">{changed_at}</time>' in resp.text
+
+
+# --- Active-default filter tests (issue #85) ---
+
+def test_jobs_page_defaults_to_active_only(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id)
+    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id)
+    db.reconcile_jobs(
+        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+    )
+
+    resp = client.get("/jobs")
+
+    assert "Active Job" in resp.text
+    assert "Removed Job" not in resp.text
+
+
+def test_jobs_page_active_filter_selected_in_dropdown_by_default(client):
+    resp = client.get("/jobs")
+
+    assert '<option value="active" selected>Active</option>' in resp.text
+
+
+def test_jobs_page_all_status_shows_both_active_and_removed(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id)
+    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id)
+    db.reconcile_jobs(
+        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+    )
+
+    resp = client.get("/jobs?removed=")
+
+    assert "Active Job" in resp.text
+    assert "Removed Job" in resp.text
+
+
+def test_jobs_page_clear_filters_hidden_at_default_state(client):
+    resp = client.get("/jobs")
+    assert "Clear filters" not in resp.text
+
+
+def test_jobs_page_clear_filters_shown_when_status_overridden_to_all(client):
+    resp = client.get("/jobs?removed=")
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_page_clear_filters_shown_when_status_set_to_removed(client):
+    resp = client.get("/jobs?removed=removed")
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_map_defaults_to_active_filter(client):
+    resp = client.get("/jobs/map")
+
+    assert resp.status_code == 200
+    assert '<option value="active" selected>Active</option>' in resp.text
+
+
+def test_jobs_map_clear_filters_hidden_at_default_state(client):
+    resp = client.get("/jobs/map")
+    assert "Clear filters" not in resp.text
+
+
+def test_jobs_map_clear_filters_shown_when_status_overridden_to_all(client):
+    resp = client.get("/jobs/map?removed=")
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_map_data_defaults_to_active_only(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="active", title="Active Job", location="Chicago, IL", source_id="src-active"),
+        make_job(key="gone", title="Removed Job", location="Chicago, IL", source_id="src-gone"),
+    ], run_id)
+    db.reconcile_jobs(
+        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert {j["key"] for j in data[0]["jobs"]} == {"active"}
+
+
+def test_jobs_map_data_shows_removed_when_explicitly_requested(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="active", title="Active Job", location="Chicago, IL", source_id="src-active"),
+        make_job(key="gone", title="Removed Job", location="Chicago, IL", source_id="src-gone"),
+    ], run_id)
+    db.reconcile_jobs(
+        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data?removed=")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert {j["key"] for j in data[0]["jobs"]} == {"active", "gone"}
+
+
+def test_jobs_map_data_empty_when_all_jobs_are_removed(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="gone", location="Chicago, IL", source_id="src-gone")], run_id)
+    db.reconcile_jobs(
+        conn, configured_source_ids=set(), succeeded_source_ids={"src-gone"}, found_jobs=[],
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data")
+
+    assert resp.status_code == 200
+    assert resp.json() == []

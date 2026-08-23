@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Both `/jobs` and `/jobs/map` now default the Status filter to **Active** (non-removed jobs
+  only) on first load. The filter dropdown and URL reflect this default; selecting "All" in
+  the dropdown overrides it. "Clear filters" resets to the same Active default (issue #85).
+
 ### Added
 
 - A full application audit covering security, UI/UX, and accessibility —
