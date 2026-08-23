@@ -483,6 +483,13 @@ tr.removed td {
     border-bottom: none;
   }
 
+  /* tr:last-child td (global, spec 0,1,2) strips all td borders in the last
+     row — correct on desktop, wrong in the mobile card layout where td borders
+     are intra-card separators.  This rule (spec 0,3,2) restores them. */
+  .table-scroll tr:last-child td:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+
   .table-scroll td::before {
     content: attr(data-label);
     font-weight: 600;

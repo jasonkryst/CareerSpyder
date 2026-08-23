@@ -49,6 +49,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- On mobile/narrow viewports the last table row (which renders as a stacked card)
+  now shows row separators between its fields. Previously, the global CSS rule that
+  strips the bottom border from the last desktop table row also removed all internal
+  separators inside the last mobile card (issue #83).
+
 - `docker-compose.prod.yml` now mounts `/app/config` and `/app/data` from
   named Docker volumes (`careerspyder_config`, `careerspyder_data`) instead
   of fixed absolute host-path bind mounts. A bind mount still ties
