@@ -51,7 +51,7 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>

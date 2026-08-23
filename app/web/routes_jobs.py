@@ -30,7 +30,7 @@ def _form_str(form: dict, key: str) -> str:
 def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
-    company: str = "", source: str = "", removed: str = "", emailed: str = "", status: str = "",
+    company: str = "", source: str = "", removed: str = "active", emailed: str = "", status: str = "",
     location: str = "",
 ):
     conn = request.app.state.conn
@@ -67,7 +67,7 @@ def jobs(
 @router.get("/jobs/map", response_class=HTMLResponse)
 def jobs_map(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "",
+    company: str = "", source: str = "", location: str = "", removed: str = "active",
     emailed: str = "", status: str = "",
 ):
     conn = request.app.state.conn
@@ -85,7 +85,7 @@ def jobs_map(
 @router.get("/jobs/map/data")
 def jobs_map_data(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "",
+    company: str = "", source: str = "", location: str = "", removed: str = "active",
     emailed: str = "", status: str = "",
 ):
     conn = request.app.state.conn
