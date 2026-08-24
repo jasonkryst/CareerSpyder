@@ -5,7 +5,7 @@ from unittest.mock import patch
 from app import db, orchestrator
 from app.config import GreenhouseSource, LeverSource
 from app.geocoding.base import GeocodeResult
-from app.models import Job
+from app.models import FailedSource, Job
 
 
 class _FakeGeocoder:
@@ -99,12 +99,12 @@ def test_run_once_collects_new_jobs_and_isolates_failures(tmp_db_path):
         summary = orchestrator.run_once(conn, [good_source, bad_source])
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
-    assert summary.failed_sources == ["Bad Co"]
+    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
 
     runs = db.list_runs(conn)
     assert runs[0]["id"] == summary.run_id
     assert runs[0]["new_job_count"] == 1
-    assert runs[0]["failed_sources"] == ["Bad Co"]
+    assert runs[0]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.lever.co/bad"}]
 
 
 def test_run_once_does_not_report_previously_seen_jobs_as_new(tmp_db_path):
@@ -165,7 +165,7 @@ def test_run_once_handles_unknown_source_type_without_aborting_run(tmp_db_path):
         summary = orchestrator.run_once(conn, [good_source, bad_source])
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
-    assert summary.failed_sources == ["Bad Co"]
+    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
     runs = db.list_runs(conn)
     assert runs[0]["finished_at"] is not None
 
@@ -325,3 +325,41 @@ def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported
 
     total_new = sum(len(r.new_jobs) for r in results)
     assert total_new == 1
+
+
+# --- Failed source URL tests (issue #93) ---
+
+def test_run_once_failed_source_includes_constructed_greenhouse_url(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
+        summary = orchestrator.run_once(conn, [source])
+
+    assert len(summary.failed_sources) == 1
+    assert summary.failed_sources[0].name == "Bad Co"
+    assert summary.failed_sources[0].url == "https://boards.greenhouse.io/bad-co"
+
+
+def test_run_once_failed_source_includes_constructed_lever_url(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = LeverSource(id="s1", name="Lever Co", type="lever", board_token="lever-co")
+
+    with patch.dict(orchestrator.ADAPTERS, {"lever": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
+        summary = orchestrator.run_once(conn, [source])
+
+    assert len(summary.failed_sources) == 1
+    assert summary.failed_sources[0].url == "https://jobs.lever.co/lever-co"
+
+
+def test_run_once_failed_source_url_is_stored_in_db(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
+        orchestrator.run_once(conn, [source])
+
+    runs = db.list_runs(conn)
+    assert runs[0]["failed_sources"] == [
+        {"name": "Bad Co", "url": "https://boards.greenhouse.io/bad-co"}
+    ]

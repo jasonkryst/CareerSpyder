@@ -1,4 +1,5 @@
 from app import db
+from app.models import FailedSource
 
 
 def test_dashboard_loads_with_no_runs_yet(client):
@@ -34,7 +35,7 @@ def test_run_now_forces_a_run_regardless_of_configured_days(client, monkeypatch)
 def test_dashboard_lists_past_runs(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.finish_run(conn, run_id, new_job_count=3, failed_sources=["Bad Co"])
+    db.finish_run(conn, run_id, new_job_count=3, failed_sources=[FailedSource("Bad Co", url="https://bad.test/careers")])
 
     resp = client.get("/")
 
@@ -87,7 +88,7 @@ def test_dashboard_negative_page_param_clamps_to_first_page(client):
 def test_dashboard_table_cells_have_data_labels(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.finish_run(conn, run_id, new_job_count=3, failed_sources=["Bad Co"])
+    db.finish_run(conn, run_id, new_job_count=3, failed_sources=[FailedSource("Bad Co", url="https://bad.test/careers")])
 
     resp = client.get("/")
 
@@ -175,7 +176,7 @@ def test_dashboard_sort_by_new_job_count_orders_rows(client):
 def test_dashboard_failures_filter_only_shows_failed_runs(client):
     conn = client.app.state.conn
     r1 = db.start_run(conn)
-    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=[FailedSource("Bad Co", url="https://bad.test/careers")])
     r2 = db.start_run(conn)
     db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
 
@@ -188,7 +189,7 @@ def test_dashboard_failures_filter_only_shows_failed_runs(client):
 def test_rows_endpoint_honors_sort_and_failures_params(client):
     conn = client.app.state.conn
     r1 = db.start_run(conn)
-    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=[FailedSource("Bad Co", url="https://bad.test/careers")])
     r2 = db.start_run(conn)
     db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
 
@@ -281,3 +282,67 @@ def test_dates_js_is_served(client):
 
     assert resp.status_code == 200
     assert "time[datetime]" in resp.text
+
+
+# --- Failed source link tests (issue #93) ---
+
+def test_dashboard_failed_source_with_url_renders_as_link(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0,
+                  failed_sources=[FailedSource("Acme Jobs", url="https://acme.test/careers")])
+
+    resp = client.get("/")
+
+    assert 'href="https://acme.test/careers"' in resp.text
+    assert "Acme Jobs" in resp.text
+    assert 'target="_blank"' in resp.text
+
+
+def test_dashboard_failed_source_without_url_renders_as_plain_text(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0,
+                  failed_sources=[FailedSource("Greenhouse Co", url=None)])
+
+    resp = client.get("/")
+
+    assert "Greenhouse Co" in resp.text
+    assert 'href=' not in resp.text.split('data-label="Failed sources"')[1].split('</td>')[0]
+
+
+def test_dashboard_failed_sources_rendered_as_list(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[
+        FailedSource("Source A", url="https://a.test"),
+        FailedSource("Source B", url=None),
+    ])
+
+    resp = client.get("/")
+
+    assert "<ul" in resp.text
+    assert "Source A" in resp.text
+    assert "Source B" in resp.text
+
+
+def test_dashboard_failed_source_link_has_noopener(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0,
+                  failed_sources=[FailedSource("Corp Jobs", url="https://corp.test/jobs")])
+
+    resp = client.get("/")
+
+    assert 'rel="noopener noreferrer"' in resp.text
+
+
+def test_dashboard_no_failed_sources_cell_is_empty(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=5, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "<ul" not in resp.text

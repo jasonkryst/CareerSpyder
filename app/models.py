@@ -10,6 +10,12 @@ JOB_STATUSES = {
 
 
 @dataclass
+class FailedSource:
+    name: str
+    url: str | None = None
+
+
+@dataclass
 class Job:
     key: str
     title: str

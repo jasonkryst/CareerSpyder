@@ -16,7 +16,18 @@
     <td data-label="Started"><time datetime="{{ run.started_at }}">{{ run.started_at }}</time></td>
     <td data-label="Finished">{% if run.finished_at %}<time datetime="{{ run.finished_at }}">{{ run.finished_at }}</time>{% else %}in progress{% endif %}</td>
     <td data-label="New jobs">{{ run.new_job_count }}</td>
-    <td data-label="Failed sources">{{ run.failed_sources | join(", ") }}</td>
+    <td data-label="Failed sources">
+      {% if run.failed_sources %}
+      {% from "_external_link.html" import external_link %}
+      <ul class="failed-sources-list">
+        {% for fs in run.failed_sources %}
+        <li>
+          {% if fs.url %}{{ external_link(fs.url, fs.name) }}{% else %}{{ fs.name }}{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </td>
   </tr>
   {% endfor %}
   </tbody>

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 
-from app.models import JOB_STATUSES, Job
+from app.models import JOB_STATUSES, FailedSource, Job
 from app.textutils import safe_url_scheme
 
 
@@ -17,7 +17,7 @@ def _safe_href(url: str) -> str:
 
 
 def build_digest(
-    new_jobs: list[Job], failed_sources: list[str], job_label: str = "new job", *,
+    new_jobs: list[Job], failed_sources: list[FailedSource], job_label: str = "new job", *,
     statuses: dict[str, str | None] | None = None,
     searched_at: datetime | None = None,
     jobs_url: str | None = None,
@@ -58,8 +58,15 @@ def build_digest(
 
     if failed_sources:
         parts.append("<h3>Sources that failed this run</h3><ul>")
-        for name in failed_sources:
-            parts.append(f"<li>{escape(name)}</li>")
+        for fs in failed_sources:
+            if fs.url:
+                href = _safe_href(fs.url)
+                parts.append(
+                    f'<li><a href="{href}" target="_blank" rel="noopener noreferrer">'
+                    f'{escape(fs.name)}</a></li>'
+                )
+            else:
+                parts.append(f"<li>{escape(fs.name)}</li>")
         parts.append("</ul>")
 
     if jobs_url:

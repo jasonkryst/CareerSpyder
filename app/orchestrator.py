@@ -5,12 +5,12 @@ from dataclasses import dataclass
 
 from app import db
 from app.adapters import ADAPTERS
-from app.config import SourceConfig
+from app.config import SourceConfig, get_source_url
 from app.filters import apply_keyword_filters
 from app.geocoding.base import Geocoder
 from app.geocoding.factory import get_geocoder
 from app.geocoding.service import geocode_pending
-from app.models import Job
+from app.models import FailedSource, Job
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class RunSummary:
     run_id: int
     new_jobs: list[Job]
     found_jobs: list[Job]
-    failed_sources: list[str]
+    failed_sources: list[FailedSource]
 
 
 def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Geocoder | None = None) -> RunSummary:
@@ -34,7 +34,7 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Ge
         all_jobs: list[Job] = []
         all_raw_jobs: list[Job] = []
         succeeded_source_ids: set[str] = set()
-        failed_sources: list[str] = []
+        failed_sources: list[FailedSource] = []
 
         for source in sources:
             try:
@@ -42,7 +42,7 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Ge
                 found = adapter(source)
             except Exception:
                 logger.exception("Source %r failed", source.name)
-                failed_sources.append(source.name)
+                failed_sources.append(FailedSource(name=source.name, url=get_source_url(source)))
                 continue
             succeeded_source_ids.add(source.id)
             all_raw_jobs.extend(found)
