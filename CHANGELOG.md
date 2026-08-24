@@ -7,6 +7,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Failed Source Links** (issue #93): failed sources are now clickable links in both
+  the email digest and the web dashboard.
+  - Each failed source name is rendered as a hyperlink to the source's career site:
+    Greenhouse (`boards.greenhouse.io/<token>`), Lever (`jobs.lever.co/<token>`),
+    HealthcareSource (`pm.healthcaresource.com/CS/<site_id>`), and any source type that
+    carries an explicit URL field.
+  - Email links open in a new tab (`target="_blank" rel="noopener noreferrer"`).
+  - Web dashboard links use the existing `_external_link` macro (new tab + arrow glyph +
+    screen-reader hint) and are rendered as a `<ul>` list rather than comma-separated text.
+  - Backward-compatible: old runs with plain-string failed source records in the database
+    are deserialized gracefully (name preserved, URL shown as absent).
+
+### Added
+
 - **Job Duplication & Secondary Sources** (issue #82):
   - Any job can now be manually marked as a duplicate via a flag button (&#128258;) in the
     Title column. An optional "duplicate of" note records what the canonical listing is.

@@ -96,6 +96,24 @@ class SourcesFile(BaseModel):
     sources: list[SourceConfig]
 
 
+def get_source_url(source: SourceConfig) -> str | None:
+    match source.type:
+        case "greenhouse":
+            return f"https://boards.greenhouse.io/{source.board_token}"
+        case "lever":
+            return f"https://jobs.lever.co/{source.board_token}"
+        case "generic_html" | "linkedin" | "indeed" | "infor":
+            return source.url
+        case "talentbrew":
+            return source.base_url
+        case "workday" | "phenompeople" | "findly":
+            return source.career_site_url
+        case "healthcaresource":
+            return f"https://pm.healthcaresource.com/CS/{source.site_id}"
+        case _:
+            return None
+
+
 def load_sources(path: str) -> list[SourceConfig]:
     if not os.path.exists(path):
         return []

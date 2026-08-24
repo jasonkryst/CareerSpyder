@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from app.digest import build_digest
-from app.models import Job
+from app.models import FailedSource, Job
 
 
 def test_returns_none_when_nothing_new_and_no_failures():
@@ -24,7 +24,7 @@ def test_groups_new_jobs_by_company():
 
 
 def test_includes_failed_sources_section():
-    result = build_digest([], ["Bad Co"])
+    result = build_digest([], [FailedSource("Bad Co")])
 
     assert result is not None
     assert "Bad Co" in result.html_body
@@ -43,7 +43,7 @@ def test_scraped_fields_are_html_escaped():
         ),
     ]
 
-    result = build_digest(jobs, ["<img src=x onerror=alert(3)>"])
+    result = build_digest(jobs, [FailedSource("<img src=x onerror=alert(3)>")])
 
     assert "<script>" not in result.html_body
     assert "&lt;script&gt;" in result.html_body
@@ -146,3 +146,99 @@ def test_empty_secondary_source_ids_produces_no_secondary_labels():
     result = build_digest(jobs, [], secondary_source_ids=set())
 
     assert "[Secondary]" not in result.html_body
+
+
+# --- Failed source link tests ---
+
+def test_failed_source_with_url_renders_as_link():
+    result = build_digest([], [FailedSource("Acme Jobs", url="https://jobs.acme.test")])
+
+    assert 'href="https://jobs.acme.test"' in result.html_body
+    assert "Acme Jobs" in result.html_body
+    assert 'target="_blank"' in result.html_body
+    assert 'rel="noopener noreferrer"' in result.html_body
+
+
+def test_failed_source_without_url_renders_as_plain_text():
+    result = build_digest([], [FailedSource("Acme Jobs", url=None)])
+
+    assert "Acme Jobs" in result.html_body
+    assert "<a " not in result.html_body
+
+
+def test_failed_source_url_is_html_escaped():
+    result = build_digest([], [FailedSource('Acme"Evil', url='https://jobs.acme.test/?a=1&b=2')])
+
+    assert "&amp;" in result.html_body
+    assert 'Acme"Evil' not in result.html_body
+
+
+def test_failed_source_javascript_url_is_neutralized():
+    result = build_digest([], [FailedSource("Bad Co", url="javascript:alert(1)")])
+
+    assert 'href="javascript:alert(1)"' not in result.html_body
+    assert 'href="#"' in result.html_body
+
+
+def test_failed_source_name_is_html_escaped_when_linked():
+    result = build_digest([], [FailedSource("<b>Acme</b>", url="https://jobs.acme.test")])
+
+    assert "<b>Acme</b>" not in result.html_body
+    assert "&lt;b&gt;" in result.html_body
+
+
+def test_multiple_failed_sources_render_all_items():
+    result = build_digest([], [
+        FailedSource("Source A", url="https://a.test"),
+        FailedSource("Source B", url=None),
+    ])
+
+    assert "Source A" in result.html_body
+    assert "Source B" in result.html_body
+    assert 'href="https://a.test"' in result.html_body
+
+
+def test_greenhouse_url_is_constructed_from_board_token():
+    from app.config import GreenhouseSource
+    from app.config import get_source_url
+
+    source = GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme-corp")
+
+    assert get_source_url(source) == "https://boards.greenhouse.io/acme-corp"
+
+
+def test_lever_url_is_constructed_from_board_token():
+    from app.config import LeverSource, get_source_url
+
+    source = LeverSource(id="s1", name="Beta", type="lever", board_token="beta-inc")
+
+    assert get_source_url(source) == "https://jobs.lever.co/beta-inc"
+
+
+def test_healthcaresource_url_is_constructed_from_site_id():
+    from app.config import HealthcareSource, get_source_url
+
+    source = HealthcareSource(id="s1", name="Hospital", type="healthcaresource", site_id="hospital-hcs")
+
+    assert get_source_url(source) == "https://pm.healthcaresource.com/CS/hospital-hcs"
+
+
+def test_generic_html_returns_configured_url():
+    from app.config import GenericHtmlSource, Selectors, get_source_url
+
+    source = GenericHtmlSource(
+        id="s1", name="Acme", type="generic_html",
+        url="https://acme.test/careers",
+        selectors=Selectors(job_card=".job", title="h2", link="a"),
+    )
+
+    assert get_source_url(source) == "https://acme.test/careers"
+
+
+def test_workday_returns_career_site_url():
+    from app.config import WorkdaySource, get_source_url
+
+    source = WorkdaySource(id="s1", name="Corp", type="workday",
+                           career_site_url="https://corp.wd5.myworkdayjobs.com/careers")
+
+    assert get_source_url(source) == "https://corp.wd5.myworkdayjobs.com/careers"

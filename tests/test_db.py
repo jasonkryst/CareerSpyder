@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app import db
-from app.models import Job
+from app.models import FailedSource, Job
 
 
 def make_job(key="k1", title="Engineer", source_id="s1", summary=None):
@@ -159,14 +159,14 @@ def test_clear_jobs_on_empty_table_does_not_raise(tmp_db_path):
 def test_list_runs_returns_most_recent_first(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     run1 = db.start_run(conn)
-    db.finish_run(conn, run1, new_job_count=0, failed_sources=["Bad Co"])
+    db.finish_run(conn, run1, new_job_count=0, failed_sources=[FailedSource("Bad Co", url="https://jobs.bad.test")])
     run2 = db.start_run(conn)
     db.finish_run(conn, run2, new_job_count=2, failed_sources=[])
 
     runs = db.list_runs(conn)
 
     assert [r["id"] for r in runs] == [run2, run1]
-    assert runs[1]["failed_sources"] == ["Bad Co"]
+    assert runs[1]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.bad.test"}]
 
 
 def test_list_runs_respects_offset(tmp_db_path):
@@ -234,7 +234,7 @@ def test_list_runs_unrecognized_sort_falls_back_to_default(tmp_db_path):
 def test_list_runs_filters_only_failures(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     r1 = db.start_run(conn)
-    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=[FailedSource("Bad Co", url="https://jobs.bad.test")])
     r2 = db.start_run(conn)
     db.finish_run(conn, r2, new_job_count=0, failed_sources=[])
 
@@ -258,7 +258,7 @@ def test_list_runs_invalid_failures_value_returns_all(tmp_db_path):
 def test_count_runs_respects_failures_filter(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     r1 = db.start_run(conn)
-    db.finish_run(conn, r1, new_job_count=0, failed_sources=["Bad Co"])
+    db.finish_run(conn, r1, new_job_count=0, failed_sources=[FailedSource("Bad Co", url="https://jobs.bad.test")])
 
     assert db.count_runs(conn, failures="only") == 1
     assert db.count_runs(conn, failures="clean") == 0
@@ -1234,3 +1234,77 @@ def test_list_mappable_jobs_excludes_duplicates_by_default(tmp_db_path):
 
     assert len(rows) == 1
     assert rows[0]["key"] == "k1"
+
+
+# --- Failed source serialization tests (issue #93) ---
+
+def test_finish_run_serializes_failed_source_with_url(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.finish_run(conn, run_id, new_job_count=0,
+                  failed_sources=[FailedSource("Acme Jobs", url="https://acme.test/careers")])
+
+    runs = db.list_runs(conn)
+    assert runs[0]["failed_sources"] == [{"name": "Acme Jobs", "url": "https://acme.test/careers"}]
+
+
+def test_finish_run_serializes_failed_source_without_url(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.finish_run(conn, run_id, new_job_count=0,
+                  failed_sources=[FailedSource("Greenhouse Co", url=None)])
+
+    runs = db.list_runs(conn)
+    assert runs[0]["failed_sources"] == [{"name": "Greenhouse Co", "url": None}]
+
+
+def test_finish_run_serializes_multiple_failed_sources(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[
+        FailedSource("Source A", url="https://a.test"),
+        FailedSource("Source B", url=None),
+    ])
+
+    runs = db.list_runs(conn)
+    assert runs[0]["failed_sources"] == [
+        {"name": "Source A", "url": "https://a.test"},
+        {"name": "Source B", "url": None},
+    ]
+
+
+def test_list_runs_deserializes_legacy_string_format(tmp_db_path):
+    import sqlite3
+
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    conn.execute(
+        "UPDATE runs SET finished_at = '2026-01-01T00:00:00+00:00', new_job_count = 0, "
+        "failed_sources = ? WHERE id = ?",
+        ('["Old Source"]', run_id),
+    )
+    conn.commit()
+
+    runs = db.list_runs(conn)
+
+    assert runs[0]["failed_sources"] == [{"name": "Old Source", "url": None}]
+
+
+def test_list_runs_deserializes_new_dict_format(tmp_db_path):
+    import json
+
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    conn.execute(
+        "UPDATE runs SET finished_at = '2026-01-01T00:00:00+00:00', new_job_count = 0, "
+        "failed_sources = ? WHERE id = ?",
+        (json.dumps([{"name": "New Source", "url": "https://new.test"}]), run_id),
+    )
+    conn.commit()
+
+    runs = db.list_runs(conn)
+
+    assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test"}]

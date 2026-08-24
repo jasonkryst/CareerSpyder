@@ -2,7 +2,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 
-from app.models import Job
+from app.models import FailedSource, Job
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS geocoded_locations (
@@ -189,12 +189,27 @@ def start_run(conn: sqlite3.Connection) -> int:
     return cur.lastrowid
 
 
-def finish_run(conn: sqlite3.Connection, run_id: int, new_job_count: int, failed_sources: list[str]) -> None:
+def finish_run(
+    conn: sqlite3.Connection, run_id: int, new_job_count: int,
+    failed_sources: list[FailedSource],
+) -> None:
+    serialized = json.dumps([{"name": fs.name, "url": fs.url} for fs in failed_sources])
     conn.execute(
         "UPDATE runs SET finished_at = ?, new_job_count = ?, failed_sources = ? WHERE id = ?",
-        (_now(), new_job_count, json.dumps(failed_sources), run_id),
+        (_now(), new_job_count, serialized, run_id),
     )
     conn.commit()
+
+
+def _deserialize_failed_sources(raw: str) -> list[dict]:
+    entries = json.loads(raw)
+    result = []
+    for entry in entries:
+        if isinstance(entry, str):
+            result.append({"name": entry, "url": None})
+        else:
+            result.append({"name": entry["name"], "url": entry.get("url")})
+    return result
 
 
 _RUN_SORT_COLUMNS = {
@@ -227,7 +242,7 @@ def list_runs(
     return [
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
-            "new_job_count": r[3], "failed_sources": json.loads(r[4]),
+            "new_job_count": r[3], "failed_sources": _deserialize_failed_sources(r[4]),
         }
         for r in rows
     ]
