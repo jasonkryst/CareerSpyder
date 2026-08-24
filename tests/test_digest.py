@@ -199,8 +199,7 @@ def test_multiple_failed_sources_render_all_items():
 
 
 def test_greenhouse_url_is_constructed_from_board_token():
-    from app.config import GreenhouseSource
-    from app.config import get_source_url
+    from app.config import GreenhouseSource, get_source_url
 
     source = GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme-corp")
 

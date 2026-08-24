@@ -1277,7 +1277,6 @@ def test_finish_run_serializes_multiple_failed_sources(tmp_db_path):
 
 
 def test_list_runs_deserializes_legacy_string_format(tmp_db_path):
-    import sqlite3
 
     conn = db.init_db(tmp_db_path)
     run_id = db.start_run(conn)

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 
-from app.models import FailedSource, JOB_STATUSES, Job
+from app.models import JOB_STATUSES, FailedSource, Job
 from app.textutils import safe_url_scheme
 
 
