@@ -1425,3 +1425,92 @@ def test_status_select_has_no_inline_onchange(client):
     resp = client.get("/jobs")
 
     assert 'onchange="this.form.submit()"' not in resp.text
+
+
+# ── Template controls ────────────────────────────────────────────────────────
+
+def test_jobs_page_has_state_dropdown(client):
+    resp = client.get("/jobs")
+    assert 'name="state"' in resp.text
+    assert "All states" in resp.text
+
+
+def test_jobs_page_state_option_marked_selected_when_active(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs?state=Illinois")
+
+    assert '<option value="Illinois" selected' in resp.text
+
+
+def test_jobs_page_has_zip_input(client):
+    resp = client.get("/jobs")
+    assert 'name="zip"' in resp.text
+
+
+def test_jobs_page_has_radius_dropdown_with_defaults(client):
+    resp = client.get("/jobs")
+    assert 'name="radius"' in resp.text
+    for mi in ("10", "25", "50", "100"):
+        assert f'value="{mi}"' in resp.text
+
+
+def test_jobs_page_zip_value_preserved_in_form(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()):
+        resp = client.get("/jobs?zip=60148&radius=50")
+
+    assert 'value="60148"' in resp.text
+    assert 'value="50" selected' in resp.text or '>50 mi<' in resp.text
+
+
+def test_jobs_page_zip_error_warning_shown_on_failed_geocode(client):
+    from unittest.mock import Mock, patch
+    empty_resp = Mock()
+    empty_resp.raise_for_status = Mock()
+    empty_resp.json.return_value = []
+    with patch("app.geocoding.nominatim.requests.get", return_value=empty_resp):
+        resp = client.get("/jobs?zip=00000")
+
+    assert "Could not resolve" in resp.text
+
+
+def test_jobs_page_no_zip_error_warning_when_zip_not_provided(client):
+    resp = client.get("/jobs")
+    assert "Could not resolve" not in resp.text
+
+
+def test_jobs_map_page_has_state_dropdown(client):
+    resp = client.get("/jobs/map")
+    assert 'name="state"' in resp.text
+    assert "All states" in resp.text
+
+
+def test_jobs_map_page_has_zip_input(client):
+    resp = client.get("/jobs/map")
+    assert 'name="zip"' in resp.text
+
+
+def test_jobs_map_page_has_radius_dropdown(client):
+    resp = client.get("/jobs/map")
+    assert 'name="radius"' in resp.text
+
+
+def test_jobs_map_clear_filters_shown_when_state_active(client):
+    resp = client.get("/jobs/map?state=Illinois")
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_map_clear_filters_shown_when_zip_active(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()):
+        resp = client.get("/jobs/map?zip=60148")
+    assert "Clear filters" in resp.text

@@ -27,6 +27,27 @@
       {% endfor %}
     </select>
   </label>
+  <label>State
+    <select name="state">
+      <option value="">All states</option>
+      {% for s in states %}
+      <option value="{{ s }}" {% if filters.state == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Near zip/city
+    <input type="text" name="zip" value="{{ filters.zip }}" placeholder="e.g. 60148">
+  </label>
+  <label>Radius
+    <select name="radius">
+      {% for mi in [10, 25, 50, 100] %}
+      <option value="{{ mi }}" {% if (filters.radius | int) == mi %}selected{% endif %}>{{ mi }} mi</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% if filters.zip_error %}
+  <p class="filter-warning" role="alert">Could not resolve that location — radius filter not applied.</p>
+  {% endif %}
   <label>Status
     <select name="removed">
       <option value="">All</option>
@@ -58,7 +79,7 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>
