@@ -110,7 +110,7 @@ def jobs_map(
         "filters": {
             "company": company, "source": source, "location": location,
             "removed": removed, "emailed": emailed, "status": status,
-            "state": state, "zip": zip_code, "radius": radius,
+            "state": state, "zip": zip_code, "radius": radius, "zip_error": False,
         },
     })
 
