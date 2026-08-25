@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-08-25
+
+### Added
+
+- **State filter:** a State dropdown on the Jobs page and Jobs Map filters results by
+  geocoded region (`geocoded_locations.region` as set by Nominatim). Populated dynamically
+  from already-resolved job locations — no extra geocoding required.
+- **Zip/location + radius filter:** a text input (zip code or city) paired with a miles
+  dropdown (10 / 25 / 50 / 100 mi) on the Jobs page and Jobs Map. The input is geocoded
+  on each filtered request via the existing Nominatim geocoder; jobs are filtered by
+  haversine distance against their geocoded lat/lng. An inline warning is shown when the
+  location string cannot be resolved, and the radius filter is skipped gracefully.
+  Haversine distance is computed inside SQLite via a registered Python scalar function
+  (`haversine_miles`) registered at DB init time.
+
 ### Changed
 
 - **Live row updates** (issue #97): status, remove, duplicate, and location-override
