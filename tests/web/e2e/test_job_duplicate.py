@@ -14,7 +14,7 @@ def _save_job(key, title, source_id="src-1", source_name="Acme Board"):
     return conn
 
 
-def test_marking_a_job_duplicate_hides_it_and_shows_toast(live_server, page):
+def test_marking_a_job_duplicate_shows_toast_and_dims_row(live_server, page):
     _save_job("e2e-dup-1", "E2E Duplicate Job")
 
     page.goto(live_server + "/jobs")
@@ -27,8 +27,10 @@ def test_marking_a_job_duplicate_hides_it_and_shows_toast(live_server, page):
     page.wait_for_selector(".toast")
     assert "duplicate" in page.locator(".toast").inner_text().lower()
 
-    page.wait_for_url(lambda url: "/jobs" in url)
-    assert page.locator("tr", has_text="E2E Duplicate Job").count() == 0
+    # Row stays in DOM (no reload), dimmed via filter-mismatch class
+    row = page.locator("tr", has_text="E2E Duplicate Job")
+    assert row.count() == 1
+    assert "filter-mismatch" in (row.get_attribute("class") or "")
 
 
 def test_duplicate_modal_accepts_reference_text(live_server, page):

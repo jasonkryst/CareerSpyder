@@ -233,6 +233,31 @@
         if (statusFilter === "none" ? !!newStatus : (statusFilter && newStatus !== statusFilter)) {
           markMismatch(row);
         }
+        /* update status history in the DOM */
+        if (newStatus) {
+          var label = select.options[select.selectedIndex].text;
+          var changedAt = new Date().toISOString();
+          var statusCell = row.querySelector('td[data-label="Status"]');
+          if (statusCell) {
+            var details = statusCell.querySelector("details");
+            if (!details) {
+              details = document.createElement("details");
+              var sum = document.createElement("summary");
+              sum.textContent = "History";
+              var histUl = document.createElement("ul");
+              histUl.className = "status-history";
+              details.appendChild(sum);
+              details.appendChild(histUl);
+              statusCell.appendChild(details);
+            }
+            var ul = details.querySelector(".status-history");
+            if (ul) {
+              var li = document.createElement("li");
+              li.innerHTML = escText(label) + ' &mdash; <time datetime="' + escText(changedAt) + '">' + escText(changedAt) + "</time>";
+              ul.insertBefore(li, ul.firstChild);
+            }
+          }
+        }
       } else {
         toast(result.body.detail || "Failed to update status.");
         select.value = select.dataset.previous || "";
