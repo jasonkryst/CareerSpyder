@@ -94,7 +94,7 @@
               data-duplicate-of="{{ job.duplicate_of or '' }}"
               aria-label="Mark duplicate for {{ job.title | e }}">&#128258;</button>
     </td>
-    <td data-label="Location">
+    <td data-label="Location" data-base-location="{{ job.base_location or '' }}">
       {% if job.is_overridden %}<span class="location-overridden-badge" title="Location manually overridden">&#9998;</span>{% endif %}
       {{ job.location or "—" }}
       <button type="button" class="location-override-btn icon-btn"
@@ -119,7 +119,7 @@
     <td data-label="Status">
       <form method="post" action="/jobs/status" class="inline-status-form">
         <input type="hidden" name="key" value="{{ job.key }}">
-        <select name="status" onchange="this.form.submit()" aria-label="Status for {{ job.title }}">
+        <select name="status" aria-label="Status for {{ job.title }}">
           <option value="" {% if not job.status %}selected{% endif %}>&mdash;</option>
           {% for value, label in statuses.items() %}
           <option value="{{ value }}" {% if job.status == value %}selected{% endif %}>{{ label }}</option>
@@ -190,7 +190,82 @@
 </dialog>
 
 <script>
+/* ── Shared helpers ─────────────────────────────────────────────────────── */
 (function () {
+  var urlParams = new URLSearchParams(window.location.search);
+
+  function toast(msg) {
+    if (typeof window.showToast === "function") window.showToast(msg);
+  }
+
+  function markMismatch(row) {
+    row.classList.add("filter-mismatch");
+  }
+
+  async function postJson(url, formData) {
+    var resp = await fetch(url, {
+      method: "POST", body: formData,
+      headers: { "Accept": "application/json" },
+    });
+    var body = await resp.json().catch(function () { return {}; });
+    return { ok: resp.ok, body: body };
+  }
+
+  function escText(s) {
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /* ── Status dropdown ──────────────────────────────────────────────────── */
+  document.querySelectorAll(".inline-status-form").forEach(function (form) {
+    var select = form.querySelector('select[name="status"]');
+    if (!select) return;
+    select.addEventListener("focus", function () { select.dataset.previous = select.value; });
+    select.addEventListener("change", async function () {
+      var row = form.closest("tr");
+      var data = new FormData(form);
+      var result = await postJson("/jobs/status", data);
+      if (result.ok) {
+        toast(result.body.message);
+        var statusFilter = urlParams.get("status");
+        var newStatus = result.body.status || "";
+        if (statusFilter === "none" ? !!newStatus : (statusFilter && newStatus !== statusFilter)) {
+          markMismatch(row);
+        }
+      } else {
+        toast(result.body.detail || "Failed to update status.");
+        select.value = select.dataset.previous || "";
+      }
+    });
+  });
+
+  /* ── Remove button ────────────────────────────────────────────────────── */
+  document.querySelectorAll(".inline-remove-form").forEach(function (form) {
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var row = form.closest("tr");
+      var data = new FormData(form);
+      var result = await postJson("/jobs/remove", data);
+      if (result.ok) {
+        toast(result.body.message);
+        var ts = result.body.removed_at || "";
+        var removedCell = row.querySelector('td[data-label="Removed"]');
+        if (removedCell) {
+          removedCell.innerHTML = ts
+            ? '<time datetime="' + escText(ts) + '">' + escText(ts) + "</time>"
+            : "Removed";
+        }
+        row.classList.add("removed");
+        var removedFilter = urlParams.get("removed");
+        if (removedFilter === null || removedFilter === "active") markMismatch(row);
+      } else {
+        toast(result.body.detail || "Failed to mark as removed.");
+      }
+    });
+  });
+
+  /* ── Duplicate modal ──────────────────────────────────────────────────── */
   var dupModal = document.getElementById("duplicate-modal");
   if (dupModal && typeof dupModal.showModal === "function") {
     var dupForm = document.getElementById("duplicate-form");
@@ -201,9 +276,11 @@
     var dupSaveBtn = document.getElementById("duplicate-save-btn");
     var dupClearBtn = document.getElementById("duplicate-clear-btn");
     var dupCancelBtn = document.getElementById("duplicate-cancel-btn");
+    var activeDupBtn = null;
 
     document.querySelectorAll(".duplicate-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
+        activeDupBtn = btn;
         dupKey.value = btn.dataset.key;
         dupAction.value = "mark";
         dupOfInput.value = btn.dataset.duplicateOf || "";
@@ -216,80 +293,151 @@
       });
     });
 
-    dupClearBtn.addEventListener("click", function () {
-      dupAction.value = "clear";
-    });
-
+    dupClearBtn.addEventListener("click", function () { dupAction.value = "clear"; });
     dupCancelBtn.addEventListener("click", function () { dupModal.close(); });
-  }
-})();
 
-(function () {
-  var modal = document.getElementById("location-override-modal");
-  if (!modal || typeof modal.showModal !== "function") return;
-
-  var form = document.getElementById("location-override-form");
-  var keyInput = document.getElementById("override-key");
-  var locationInput = document.getElementById("override-location-input");
-  var errorEl = modal.querySelector(".modal-error");
-  var jobEl = document.getElementById("override-modal-job");
-  var clearBtn = document.getElementById("override-clear-btn");
-  var cancelBtn = document.getElementById("override-cancel-btn");
-
-  document.querySelectorAll(".location-override-btn").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      keyInput.value = btn.dataset.key;
-      locationInput.value = btn.dataset.current;
-      jobEl.textContent = btn.dataset.title;
-      errorEl.hidden = true;
-      errorEl.textContent = "";
-      clearBtn.hidden = btn.dataset.overridden !== "true";
-      modal.showModal();
-      locationInput.focus();
-    });
-  });
-
-  cancelBtn.addEventListener("click", function () { modal.close(); });
-  modal.addEventListener("cancel", function () { errorEl.hidden = true; });
-
-  async function postOverride(location) {
-    var data = new FormData();
-    data.append("key", keyInput.value);
-    data.append("location", location);
-    var saveBtn = document.getElementById("override-save-btn");
-    saveBtn.disabled = true;
-    clearBtn.disabled = true;
-    try {
-      var resp = await fetch("/jobs/location-override", { method: "POST", body: data });
-      if (resp.ok) {
-        modal.close();
-        window.location.reload();
+    dupForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var data = new FormData(dupForm);
+      var result = await postJson("/jobs/duplicate", data);
+      if (result.ok) {
+        dupModal.close();
+        toast(result.body.message);
+        if (activeDupBtn) {
+          var row = activeDupBtn.closest("tr");
+          var isDup = result.body.is_duplicate;
+          var dupOf = result.body.duplicate_of || "";
+          activeDupBtn.dataset.duplicate = isDup ? "true" : "false";
+          activeDupBtn.dataset.duplicateOf = dupOf;
+          /* update badge in title cell */
+          var titleCell = row.querySelector('td[data-label="Title"]');
+          var badge = titleCell && titleCell.querySelector(".badge-duplicate");
+          if (isDup && !badge && titleCell) {
+            var b = document.createElement("span");
+            b.className = "badge badge-duplicate";
+            b.title = dupOf ? "Marked as duplicate of " + dupOf : "Marked as duplicate";
+            b.textContent = "Duplicate";
+            activeDupBtn.before(b);
+          } else if (!isDup && badge) {
+            badge.remove();
+          } else if (isDup && badge) {
+            badge.title = dupOf ? "Marked as duplicate of " + dupOf : "Marked as duplicate";
+          }
+          /* filter mismatch: default filter hides duplicates */
+          var dupFilter = urlParams.get("duplicates") || "";
+          if (isDup && dupFilter === "") markMismatch(row);
+        }
       } else {
-        var body = await resp.json().catch(function () { return {}; });
-        errorEl.textContent = body.detail || "An unexpected error occurred.";
-        errorEl.hidden = false;
+        toast(result.body.detail || "Failed to update duplicate flag.");
       }
-    } catch (err) {
-      errorEl.textContent = "Network error. Please try again.";
-      errorEl.hidden = false;
-    } finally {
-      saveBtn.disabled = false;
-      clearBtn.disabled = false;
-    }
+    });
   }
 
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var loc = locationInput.value.trim();
-    if (!loc) {
-      errorEl.textContent = "Please enter a location.";
-      errorEl.hidden = false;
-      return;
-    }
-    postOverride(loc);
-  });
+  /* ── Location override modal ──────────────────────────────────────────── */
+  var locModal = document.getElementById("location-override-modal");
+  if (locModal && typeof locModal.showModal === "function") {
+    var locForm = document.getElementById("location-override-form");
+    var locKey = document.getElementById("override-key");
+    var locInput = document.getElementById("override-location-input");
+    var locError = locModal.querySelector(".modal-error");
+    var locJobEl = document.getElementById("override-modal-job");
+    var locClear = document.getElementById("override-clear-btn");
+    var locCancel = document.getElementById("override-cancel-btn");
+    var locSave = document.getElementById("override-save-btn");
+    var activeLocBtn = null;
 
-  clearBtn.addEventListener("click", function () { postOverride(""); });
+    document.querySelectorAll(".location-override-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        activeLocBtn = btn;
+        locKey.value = btn.dataset.key;
+        locInput.value = btn.dataset.current;
+        locJobEl.textContent = btn.dataset.title;
+        locError.hidden = true;
+        locError.textContent = "";
+        locClear.hidden = btn.dataset.overridden !== "true";
+        locModal.showModal();
+        locInput.focus();
+      });
+    });
+
+    locCancel.addEventListener("click", function () { locModal.close(); });
+    locModal.addEventListener("cancel", function () { locError.hidden = true; });
+
+    async function postOverride(location) {
+      locSave.disabled = true;
+      locClear.disabled = true;
+      var data = new FormData();
+      data.append("key", locKey.value);
+      data.append("location", location);
+      try {
+        var result = await postJson("/jobs/location-override", data);
+        if (result.ok) {
+          locModal.close();
+          toast(result.body.message);
+          if (activeLocBtn) {
+            var row = activeLocBtn.closest("tr");
+            var locCell = row.querySelector('td[data-label="Location"]');
+            var badge = locCell && locCell.querySelector(".location-overridden-badge");
+            if (location) {
+              /* save: show new display_name and override badge */
+              var displayName = result.body.display_name || location;
+              activeLocBtn.dataset.current = location;
+              activeLocBtn.dataset.overridden = "true";
+              locClear.hidden = false;
+              if (!badge && locCell) {
+                var b = document.createElement("span");
+                b.className = "location-overridden-badge";
+                b.title = "Location manually overridden";
+                b.textContent = "✎";
+                locCell.insertBefore(b, locCell.firstChild);
+              }
+              /* replace text node with new display name */
+              if (locCell) {
+                var textNode = Array.from(locCell.childNodes).find(function (n) {
+                  return n.nodeType === Node.TEXT_NODE && n.textContent.trim();
+                });
+                if (textNode) textNode.textContent = " " + displayName;
+              }
+            } else {
+              /* clear: remove badge, restore base location */
+              if (badge) badge.remove();
+              activeLocBtn.dataset.current = "";
+              activeLocBtn.dataset.overridden = "false";
+              if (locCell) {
+                var baseLocation = locCell.dataset.baseLocation || "—";
+                var textNode2 = Array.from(locCell.childNodes).find(function (n) {
+                  return n.nodeType === Node.TEXT_NODE && n.textContent.trim();
+                });
+                if (textNode2) textNode2.textContent = " " + (baseLocation || "—");
+              }
+            }
+          }
+        } else {
+          locError.textContent = result.body.detail || "An unexpected error occurred.";
+          locError.hidden = false;
+        }
+      } catch (_) {
+        locError.textContent = "Network error. Please try again.";
+        locError.hidden = false;
+      } finally {
+        locSave.disabled = false;
+        locClear.disabled = false;
+      }
+    }
+
+    locForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var loc = locInput.value.trim();
+      if (!loc) {
+        locError.textContent = "Please enter a location.";
+        locError.hidden = false;
+        return;
+      }
+      postOverride(loc);
+    });
+
+    locClear.addEventListener("click", function () { postOverride(""); });
+  }
 })();
 </script>
 {% endblock %}
