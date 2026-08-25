@@ -1433,13 +1433,15 @@ def _make_geocoded_job(conn, key, title, location, region, lat=None, lng=None):
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key=key, title=title, url=f"https://x.test/{key}",
                              source_name="Board", location=location)], run_id)
-    cols = "status = 'resolved', region = ?"
-    params = [region]
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = ? WHERE location = ?",
+        [region, location],
+    )
     if lat is not None:
-        cols += ", lat = ?, lng = ?"
-        params += [lat, lng]
-    conn.execute(f"UPDATE geocoded_locations SET {cols} WHERE location = ?",
-                 params + [location])
+        conn.execute(
+            "UPDATE geocoded_locations SET lat = ?, lng = ? WHERE location = ?",
+            [lat, lng, location],
+        )
     conn.commit()
 
 
@@ -1523,9 +1525,9 @@ def test_haversine_filter_excludes_job_with_null_coordinates(tmp_db_path):
     assert rows == []
 
 
-def test_haversine_filter_boundary_at_exact_radius(tmp_db_path):
+def test_haversine_filter_boundary_distance_included_and_excluded(tmp_db_path):
     conn = db.init_db(tmp_db_path)
-    # Milwaukee is ~87 miles from Chicago — inside 100 mi, outside 50 mi
+    # Milwaukee is ~81 miles from Chicago (great-circle) — inside 100 mi, outside 50 mi
     _make_geocoded_job(conn, "k1", "Milwaukee Job", "Milwaukee, WI", "Wisconsin",
                        lat=43.0389, lng=-87.9065)
 

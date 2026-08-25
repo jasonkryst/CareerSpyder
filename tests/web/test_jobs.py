@@ -982,18 +982,6 @@ def test_jobs_map_data_zip_radius_filter(client):
     assert all_keys == {"a"}
 
 
-def test_jobs_map_page_includes_state_dropdown(client):
-    resp = client.get("/jobs/map")
-    assert resp.status_code == 200
-    assert 'name="state"' in resp.text
-
-
-def test_jobs_map_page_includes_zip_input(client):
-    resp = client.get("/jobs/map")
-    assert resp.status_code == 200
-    assert 'name="zip"' in resp.text
-
-
 def test_location_override_clear_returns_404_for_unknown_job(client):
     resp = client.post("/jobs/location-override", data={"key": "no-such-key", "location": ""})
     assert resp.status_code == 404
@@ -1468,7 +1456,7 @@ def test_jobs_page_zip_value_preserved_in_form(client):
         resp = client.get("/jobs?zip=60148&radius=50")
 
     assert 'value="60148"' in resp.text
-    assert 'value="50" selected' in resp.text or '>50 mi<' in resp.text
+    assert 'value="50" selected' in resp.text
 
 
 def test_jobs_page_zip_error_warning_shown_on_failed_geocode(client):

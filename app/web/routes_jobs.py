@@ -50,7 +50,10 @@ def jobs(
     zip_error = False
     if zip_code:
         geocoder = get_geocoder()
-        result = geocoder.geocode(zip_code)
+        try:
+            result = geocoder.geocode(zip_code)
+        except Exception:  # noqa: BLE001
+            result = None
         if result:
             zip_lat, zip_lng = result.lat, result.lng
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
@@ -128,7 +131,10 @@ def jobs_map_data(
     radius_miles: float | None = None
     if zip_code:
         geocoder = get_geocoder()
-        result = geocoder.geocode(zip_code)
+        try:
+            result = geocoder.geocode(zip_code)
+        except Exception:  # noqa: BLE001
+            result = None
         if result:
             zip_lat, zip_lng = result.lat, result.lng
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0

@@ -132,7 +132,7 @@ def _migrate_jobs_location_fk(conn: sqlite3.Connection) -> None:
 
 def _haversine_miles(lat1: float | None, lon1: float | None,
                      lat2: float | None, lon2: float | None) -> float | None:
-    if any(x is None for x in (lat1, lon1, lat2, lon2)):
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
         return None
     R = 3958.8
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
