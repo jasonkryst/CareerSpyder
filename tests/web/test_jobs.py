@@ -816,6 +816,172 @@ def test_location_override_returns_404_for_unknown_job(client):
     assert resp.status_code == 404
 
 
+# ── State filter (routes) ────────────────────────────────────────────────────
+
+def test_jobs_page_state_filter_narrows_to_matching_region(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", title="IL Job", location="Chicago, IL"),
+        make_job(key="b", title="WI Job", location="Milwaukee, WI"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Wisconsin' "
+        "WHERE location = 'Milwaukee, WI'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs?state=Illinois")
+
+    assert resp.status_code == 200
+    assert "IL Job" in resp.text
+    assert "WI Job" not in resp.text
+
+
+def test_jobs_page_state_dropdown_lists_geocoded_states(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs")
+
+    assert '<option value="Illinois"' in resp.text
+
+
+def test_jobs_page_state_filter_shown_in_clear_filters(client):
+    resp = client.get("/jobs?state=Illinois")
+    assert "Clear filters" in resp.text
+
+
+# ── Zip/radius filter (routes) ───────────────────────────────────────────────
+
+def test_jobs_page_zip_filter_includes_nearby_job(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8781, lng = -87.6298 "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    from unittest.mock import patch
+    # geocode("60148") → Chicago-area lat/lng (Lombard, IL is near Chicago)
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response(lat="41.8781", lon="-87.6298")):
+        resp = client.get("/jobs?zip=60148&radius=25")
+
+    assert resp.status_code == 200
+    assert "Chicago Job" in resp.text
+
+
+def test_jobs_page_zip_filter_excludes_distant_job(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [make_job(key="b", title="LA Job", location="Los Angeles, CA")], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 34.0522, lng = -118.2437 "
+        "WHERE location = 'Los Angeles, CA'"
+    )
+    conn.commit()
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response(lat="41.8781", lon="-87.6298")):
+        resp = client.get("/jobs?zip=60148&radius=25")
+
+    assert resp.status_code == 200
+    assert "LA Job" not in resp.text
+
+
+def test_jobs_page_invalid_zip_shows_warning_and_returns_unfiltered_results(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", title="Any Job")], db.start_run(conn))
+
+    from unittest.mock import Mock, patch
+    empty_resp = Mock()
+    empty_resp.raise_for_status = Mock()
+    empty_resp.json.return_value = []
+    with patch("app.geocoding.nominatim.requests.get", return_value=empty_resp):
+        resp = client.get("/jobs?zip=00000&radius=25")
+
+    assert resp.status_code == 200
+    assert "Could not resolve" in resp.text
+    assert "Any Job" in resp.text  # unfiltered — zip error skips the filter
+
+
+def test_jobs_page_zip_shown_in_clear_filters(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()):
+        resp = client.get("/jobs?zip=60148")
+
+    assert "Clear filters" in resp.text
+
+
+# ── Map data state and zip/radius (routes) ───────────────────────────────────
+
+def test_jobs_map_data_state_filter(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", title="IL Job", location="Chicago, IL"),
+        make_job(key="b", title="WI Job", location="Milwaukee, WI"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois', "
+        "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Wisconsin', "
+        "lat = 43.0, lng = -87.9 WHERE location = 'Milwaukee, WI'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs/map/data?state=Illinois")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    all_keys = {j["key"] for loc in data for j in loc["jobs"]}
+    assert all_keys == {"a"}
+
+
+def test_jobs_map_data_zip_radius_filter(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        make_job(key="a", title="Chicago Job", location="Chicago, IL"),
+        make_job(key="b", title="LA Job", location="Los Angeles, CA"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8781, lng = -87.6298 "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', lat = 34.0522, lng = -118.2437 "
+        "WHERE location = 'Los Angeles, CA'"
+    )
+    conn.commit()
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response(lat="41.8781", lon="-87.6298")):
+        resp = client.get("/jobs/map/data?zip=60148&radius=50")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    all_keys = {j["key"] for loc in data for j in loc["jobs"]}
+    assert all_keys == {"a"}
+
+
 def test_location_override_clear_returns_404_for_unknown_job(client):
     resp = client.post("/jobs/location-override", data={"key": "no-such-key", "location": ""})
     assert resp.status_code == 404
@@ -1247,3 +1413,92 @@ def test_status_select_has_no_inline_onchange(client):
     resp = client.get("/jobs")
 
     assert 'onchange="this.form.submit()"' not in resp.text
+
+
+# ── Template controls ────────────────────────────────────────────────────────
+
+def test_jobs_page_has_state_dropdown(client):
+    resp = client.get("/jobs")
+    assert 'name="state"' in resp.text
+    assert "All states" in resp.text
+
+
+def test_jobs_page_state_option_marked_selected_when_active(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.commit()
+
+    resp = client.get("/jobs?state=Illinois")
+
+    assert '<option value="Illinois" selected' in resp.text
+
+
+def test_jobs_page_has_zip_input(client):
+    resp = client.get("/jobs")
+    assert 'name="zip"' in resp.text
+
+
+def test_jobs_page_has_radius_dropdown_with_defaults(client):
+    resp = client.get("/jobs")
+    assert 'name="radius"' in resp.text
+    for mi in ("10", "25", "50", "100"):
+        assert f'value="{mi}"' in resp.text
+
+
+def test_jobs_page_zip_value_preserved_in_form(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()):
+        resp = client.get("/jobs?zip=60148&radius=50")
+
+    assert 'value="60148"' in resp.text
+    assert 'value="50" selected' in resp.text
+
+
+def test_jobs_page_zip_error_warning_shown_on_failed_geocode(client):
+    from unittest.mock import Mock, patch
+    empty_resp = Mock()
+    empty_resp.raise_for_status = Mock()
+    empty_resp.json.return_value = []
+    with patch("app.geocoding.nominatim.requests.get", return_value=empty_resp):
+        resp = client.get("/jobs?zip=00000")
+
+    assert "Could not resolve" in resp.text
+
+
+def test_jobs_page_no_zip_error_warning_when_zip_not_provided(client):
+    resp = client.get("/jobs")
+    assert "Could not resolve" not in resp.text
+
+
+def test_jobs_map_page_has_state_dropdown(client):
+    resp = client.get("/jobs/map")
+    assert 'name="state"' in resp.text
+    assert "All states" in resp.text
+
+
+def test_jobs_map_page_has_zip_input(client):
+    resp = client.get("/jobs/map")
+    assert 'name="zip"' in resp.text
+
+
+def test_jobs_map_page_has_radius_dropdown(client):
+    resp = client.get("/jobs/map")
+    assert 'name="radius"' in resp.text
+
+
+def test_jobs_map_clear_filters_shown_when_state_active(client):
+    resp = client.get("/jobs/map?state=Illinois")
+    assert "Clear filters" in resp.text
+
+
+def test_jobs_map_clear_filters_shown_when_zip_active(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()):
+        resp = client.get("/jobs/map?zip=60148")
+    assert "Clear filters" in resp.text

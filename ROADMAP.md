@@ -82,6 +82,17 @@ later rather than fixed immediately.
   Playwright scraping of public search pages — fragile by nature (layout
   changes, blocking, CAPTCHAs). Replacing them with an official API or RSS
   source, where available, would be far lower-maintenance.
+- **Job type (full-time/part-time/contract) filtering.** No adapter
+  currently extracts employment type. Known availability by platform:
+  - **Lever:** `categories.commitment` in the job listing API response
+    (e.g. `"Full-time"`, `"Part-time"`, `"Contract"`) — available.
+  - **Greenhouse:** job metadata may include employment type — needs investigation per board.
+  - **Findly:** API response may include an `employment_type` field — needs investigation.
+  - **Workday:** job posting detail fields may expose job type — needs investigation.
+  - **TalentBrew, Infor, LinkedIn, Indeed:** HTML/Playwright scrapers with no reliable
+    structured job-type field; would require regex parsing of unstructured content.
+  Implementing requires: a `job_type` field on the `Job` model and DB schema, per-adapter
+  extraction for supported platforms, and a filter UI control.
 - **Digest subject line doesn't mention failures when jobs also exist
   (from review).** `app/digest.py` currently only reflects the new-job
   count in the subject when there are new jobs, even if the same run also

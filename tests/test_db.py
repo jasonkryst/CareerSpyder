@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app import db
+from app.db import _haversine_miles
 from app.models import FailedSource, Job
 
 
@@ -1334,3 +1335,214 @@ def test_list_runs_deserializes_new_dict_format(tmp_db_path):
     runs = db.list_runs(conn)
 
     assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test"}]
+
+
+# ── haversine function ────────────────────────────────────────────────────────
+
+def test_haversine_miles_known_distance():
+    # Chicago (41.8781, -87.6298) to Milwaukee (43.0389, -87.9065) great-circle ~81 miles
+    dist = _haversine_miles(41.8781, -87.6298, 43.0389, -87.9065)
+    assert 78 < dist < 85
+
+
+def test_haversine_miles_same_point_returns_zero():
+    dist = _haversine_miles(41.8781, -87.6298, 41.8781, -87.6298)
+    assert dist == pytest.approx(0.0, abs=1e-6)
+
+
+def test_haversine_miles_null_lat1_returns_none():
+    assert _haversine_miles(None, -87.6298, 41.8781, -87.6298) is None
+
+
+def test_haversine_miles_null_lng2_returns_none():
+    assert _haversine_miles(41.8781, -87.6298, 43.0389, None) is None
+
+
+def test_haversine_registered_on_db_connection(tmp_db_path):
+    # Verify init_db registers the function so SQL can call it
+    conn = db.init_db(tmp_db_path)
+    result = conn.execute(
+        "SELECT haversine_miles(41.8781, -87.6298, 43.0389, -87.9065)"
+    ).fetchone()[0]
+    assert 78 < result < 85
+
+
+# ── list_job_states ──────────────────────────────────────────────────────────
+
+def test_list_job_states_returns_distinct_geocoded_regions(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    from app.models import Job
+    db.save_jobs(conn, [
+        Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
+        Job(key="k2", title="B", url="https://x.test/2", source_name="Board", location="Milwaukee, WI"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location = 'Chicago, IL'"
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Wisconsin' "
+        "WHERE location = 'Milwaukee, WI'"
+    )
+    conn.commit()
+
+    states = db.list_job_states(conn)
+
+    assert states == ["Illinois", "Wisconsin"]
+
+
+def test_list_job_states_excludes_pending_locations(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    from app.models import Job
+    db.save_jobs(conn, [
+        Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
+    ], run_id)
+    # location stays 'pending', no region set
+
+    states = db.list_job_states(conn)
+
+    assert states == []
+
+
+def test_list_job_states_deduplicates_same_region(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    from app.models import Job
+    db.save_jobs(conn, [
+        Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
+        Job(key="k2", title="B", url="https://x.test/2", source_name="Board", location="Naperville, IL"),
+    ], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
+        "WHERE location IN ('Chicago, IL', 'Naperville, IL')"
+    )
+    conn.commit()
+
+    states = db.list_job_states(conn)
+
+    assert states == ["Illinois"]
+
+
+# ── state filter ─────────────────────────────────────────────────────────────
+
+def _make_geocoded_job(conn, key, title, location, region, lat=None, lng=None):
+    """Helper: save a job and set its geocoded_locations row."""
+    from app.models import Job
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [Job(key=key, title=title, url=f"https://x.test/{key}",
+                             source_name="Board", location=location)], run_id)
+    conn.execute(
+        "UPDATE geocoded_locations SET status = 'resolved', region = ? WHERE location = ?",
+        [region, location],
+    )
+    if lat is not None:
+        conn.execute(
+            "UPDATE geocoded_locations SET lat = ?, lng = ? WHERE location = ?",
+            [lat, lng, location],
+        )
+    conn.commit()
+
+
+def test_state_filter_narrows_to_matching_region(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
+    _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin")
+
+    rows = db.list_jobs(conn, state="Illinois")
+
+    assert len(rows) == 1
+    assert rows[0]["title"] == "IL Job"
+
+
+def test_state_filter_with_no_match_returns_empty(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
+
+    rows = db.list_jobs(conn, state="Texas")
+
+    assert rows == []
+
+
+def test_count_jobs_with_state_filter(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
+    _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin")
+
+    assert db.count_jobs(conn, state="Illinois") == 1
+    assert db.count_jobs(conn, state="Wisconsin") == 1
+    assert db.count_jobs(conn) == 2
+
+
+def test_list_mappable_jobs_with_state_filter(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois", lat=41.8, lng=-87.6)
+    _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin", lat=43.0, lng=-87.9)
+
+    rows = db.list_mappable_jobs(conn, state="Illinois")
+
+    assert len(rows) == 1
+    assert rows[0]["key"] == "k1"
+
+
+# ── zip/radius filter ─────────────────────────────────────────────────────────
+
+def test_haversine_filter_includes_job_within_radius(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    # Chicago job at ~0 miles from search center (Chicago)
+    _make_geocoded_job(conn, "k1", "Chicago Job", "Chicago, IL", "Illinois",
+                       lat=41.8781, lng=-87.6298)
+
+    rows = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0)
+
+    assert len(rows) == 1
+    assert rows[0]["title"] == "Chicago Job"
+
+
+def test_haversine_filter_excludes_job_outside_radius(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    # LA is ~1750 miles from Chicago
+    _make_geocoded_job(conn, "k1", "LA Job", "Los Angeles, CA", "California",
+                       lat=34.0522, lng=-118.2437)
+
+    rows = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0)
+
+    assert rows == []
+
+
+def test_haversine_filter_excludes_job_with_null_coordinates(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    # Save job but leave lat/lng null (pending geocode)
+    from app.models import Job
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [Job(key="k1", title="No Coords", url="https://x.test/1",
+                             source_name="Board", location="Remote")], run_id)
+    # geocoded_locations row exists but lat/lng are null
+
+    rows = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0)
+
+    assert rows == []
+
+
+def test_haversine_filter_boundary_distance_included_and_excluded(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    # Milwaukee is ~81 miles from Chicago (great-circle) — inside 100 mi, outside 50 mi
+    _make_geocoded_job(conn, "k1", "Milwaukee Job", "Milwaukee, WI", "Wisconsin",
+                       lat=43.0389, lng=-87.9065)
+
+    inside = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=100.0)
+    outside = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0)
+
+    assert len(inside) == 1
+    assert outside == []
+
+
+def test_count_jobs_with_radius_filter(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "Chicago Job", "Chicago, IL", "Illinois",
+                       lat=41.8781, lng=-87.6298)
+    _make_geocoded_job(conn, "k2", "LA Job", "Los Angeles, CA", "California",
+                       lat=34.0522, lng=-118.2437)
+
+    assert db.count_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0) == 1
