@@ -537,6 +537,33 @@ def test_reconcile_jobs_leaves_legacy_rows_with_no_source_id_untouched(tmp_db_pa
     assert rows["k1"]["removed_at"] is None
 
 
+def test_mark_job_removed_sets_removed_at(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    db.mark_job_removed(conn, "k1")
+
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+
+def test_mark_job_removed_is_idempotent_on_already_removed_job(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.mark_job_removed(conn, "k1")
+    first_removed_at = db.list_jobs(conn)[0]["removed_at"]
+
+    db.mark_job_removed(conn, "k1")
+
+    assert db.list_jobs(conn)[0]["removed_at"] == first_removed_at
+
+
+def test_mark_job_removed_raises_key_error_for_unknown_key(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    with pytest.raises(KeyError):
+        db.mark_job_removed(conn, "no-such-key")
+
+
 def _job(key, company="Acme", title="Engineer", source_name="Acme Board", source_id="s1"):
     return Job(key=key, title=title, url="https://x.test/1", company=company,
                location="Remote", posted_date=None, source_name=source_name,

@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 
-from app import db
+from app import checker, db
 from app.adapters import ADAPTERS
 from app.config import SourceConfig, get_source_url
 from app.filters import apply_keyword_filters
@@ -26,6 +26,7 @@ class RunSummary:
     new_jobs: list[Job]
     found_jobs: list[Job]
     failed_sources: list[FailedSource]
+    url_removed_count: int = 0
 
 
 def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Geocoder | None = None) -> RunSummary:
@@ -62,7 +63,14 @@ def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Ge
         except Exception:
             logger.exception("Geocoding step failed for run %s", run_id)
 
+        try:
+            url_removed_count = checker.check_job_urls(conn)
+        except Exception:
+            logger.exception("URL check step failed for run %s", run_id)
+            url_removed_count = 0
+
         db.finish_run(conn, run_id, len(new_jobs), failed_sources)
         return RunSummary(
-            run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs, failed_sources=failed_sources,
+            run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs,
+            failed_sources=failed_sources, url_removed_count=url_removed_count,
         )
