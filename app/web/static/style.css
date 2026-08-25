@@ -430,6 +430,10 @@ tr.removed td {
   color: var(--fg-muted);
 }
 
+tr.filter-mismatch {
+  opacity: 0.45;
+}
+
 .inline-status-form {
   margin: 0;
 }

@@ -31,6 +31,10 @@ def _secondary_source_ids(sources_path: str) -> set[str]:
     return {s.id for s in config.load_sources(sources_path) if s.secondary}
 
 
+def _wants_json(request: Request) -> bool:
+    return "application/json" in request.headers.get("accept", "")
+
+
 @router.get("/jobs", response_class=HTMLResponse)
 def jobs(
     request: Request, page: str = "1", sort: str = "",
@@ -130,6 +134,8 @@ async def update_job_status(request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
     message = f"Marked as {STATUSES[status]}." if status else "Status cleared."
+    if _wants_json(request):
+        return JSONResponse({"ok": True, "message": message, "status": status})
     return flash_redirect("/jobs", message)
 
 
@@ -139,10 +145,14 @@ async def remove_job(request: Request):
     key = _form_str(form, "key")
     if not key:
         raise HTTPException(status_code=400, detail="Missing job key")
+    conn = request.app.state.conn
     try:
-        db.mark_job_removed(request.app.state.conn, key)
+        db.mark_job_removed(conn, key)
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
+    if _wants_json(request):
+        row = conn.execute("SELECT removed_at FROM jobs WHERE key = ?", (key,)).fetchone()
+        return JSONResponse({"ok": True, "message": "Job marked as removed.", "removed_at": row[0] if row else None})
     return flash_redirect("/jobs", "Job marked as removed.")
 
 
@@ -167,6 +177,12 @@ async def update_job_duplicate(request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if _wants_json(request):
+        return JSONResponse({
+            "ok": True, "message": message,
+            "is_duplicate": action != "clear",
+            "duplicate_of": duplicate_of if action != "clear" else None,
+        })
     return flash_redirect("/jobs", message)
 
 
@@ -186,7 +202,7 @@ async def update_location_override(request: Request):
             db.clear_location_override(conn, key)
         except KeyError:
             raise HTTPException(status_code=404, detail="Job not found")
-        return JSONResponse({"ok": True})
+        return JSONResponse({"ok": True, "message": "Location override cleared."})
 
     geocoder = get_geocoder()
     result = geocoder.geocode(location)
@@ -208,4 +224,8 @@ async def update_location_override(request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return JSONResponse({"ok": True})
+    return JSONResponse({
+        "ok": True, "message": "Location override saved.",
+        "display_name": result.display_name,
+        "location_override": location,
+    })

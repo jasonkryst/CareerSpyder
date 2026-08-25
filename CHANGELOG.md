@@ -5,6 +5,29 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Live row updates** (issue #97): status, remove, duplicate, and location-override
+  actions on the Jobs page now update in place via AJAX without refreshing the page,
+  preserving active filters and sort state.
+  - All four POST endpoints detect `Accept: application/json` and return a JSON response
+    (`ok`, `message`, plus action-specific fields) instead of a redirect, so the existing
+    HTML form fallback continues to work unchanged.
+  - The status-change select submits via `fetch` on change; the remove trash-button
+    intercepts form submit; the duplicate modal form submits via `fetch`; the
+    location-override modal (which already used `fetch`) no longer calls
+    `window.location.reload()`.
+  - On success a toast notification is shown (using the existing `window.showToast` helper
+    added to `toast.js`). On error the toast shows the server's detail message, and the
+    status select reverts to its previous value.
+  - Rows whose new state no longer matches the active filter (e.g. marked removed while
+    the "Active" filter is on, or marked duplicate while duplicates are hidden) are dimmed
+    to `opacity: 0.45` via a new `tr.filter-mismatch` CSS class rather than disappearing,
+    so the user can keep acting on them.
+  - A new `base_location` field is returned by `db.list_jobs` and exposed as a
+    `data-base-location` attribute on the location cell, so the location override modal
+    can restore the original geocoded location when an override is cleared.
+
 ### Added
 
 - **Failed Source Links** (issue #93): failed sources are now clickable links in both

@@ -380,6 +380,7 @@ def list_jobs(
         {
             "key": r[0], "title": r[1], "company": r[2],
             "location": r[6] or r[5] or r[4] or r[3],
+            "base_location": r[4] or r[3],
             "location_override": r[5],
             "is_overridden": r[5] is not None,
             "url": r[7],

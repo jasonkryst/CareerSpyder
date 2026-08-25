@@ -751,7 +751,7 @@ def test_location_override_saves_and_returns_ok(client):
         resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+    assert resp.json()["ok"] is True
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["is_overridden"] is True
     assert rows["k1"]["location_override"] == "Chicago, IL"
@@ -768,7 +768,7 @@ def test_location_override_clears_when_location_empty(client):
     resp = client.post("/jobs/location-override", data={"key": "k1", "location": ""})
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+    assert resp.json()["ok"] is True
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["is_overridden"] is False
     assert rows["k1"]["location_override"] is None
@@ -1013,3 +1013,237 @@ def test_jobs_page_non_secondary_source_has_no_badge(client):
     resp = client.get("/jobs")
 
     assert "badge-secondary" not in resp.text
+
+
+# ── Live-update JSON responses (issue #97) ────────────────────────────────────
+
+JSON = {"Accept": "application/json"}
+
+
+# --- Status endpoint JSON path ---
+
+def test_post_job_status_json_returns_ok_message_and_status(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, headers=JSON)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "Marked as Applied."
+    assert body["status"] == "applied"
+    assert db.list_jobs(conn)[0]["status"] == "applied"
+
+
+def test_post_job_status_json_clears_status(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_status(conn, "k1", "applied")
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": ""}, headers=JSON)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "Status cleared."
+    assert body["status"] is None
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_post_job_status_json_invalid_status_returns_400(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "bogus"}, headers=JSON)
+
+    assert resp.status_code == 400
+
+
+def test_post_job_status_json_unknown_key_returns_404(client):
+    resp = client.post("/jobs/status", data={"key": "no-such", "status": "applied"}, headers=JSON)
+
+    assert resp.status_code == 404
+
+
+# --- Remove endpoint JSON path ---
+
+def test_post_job_remove_json_returns_ok_and_removed_at(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/remove", data={"key": "k1"}, headers=JSON)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "Job marked as removed."
+    assert body["removed_at"] is not None
+    assert db.list_jobs(conn, removed="removed")[0]["removed_at"] is not None
+
+
+def test_post_job_remove_json_unknown_key_returns_404(client):
+    resp = client.post("/jobs/remove", data={"key": "no-such"}, headers=JSON)
+
+    assert resp.status_code == 404
+
+
+def test_post_job_remove_json_missing_key_returns_400(client):
+    resp = client.post("/jobs/remove", data={}, headers=JSON)
+
+    assert resp.status_code == 400
+
+
+# --- Duplicate endpoint JSON path ---
+
+def test_post_job_duplicate_json_mark_returns_ok(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post(
+        "/jobs/duplicate",
+        data={"key": "k1", "action": "mark", "duplicate_of": "Acme — Engineer"},
+        headers=JSON,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["is_duplicate"] is True
+    assert body["duplicate_of"] == "Acme — Engineer"
+    assert "duplicate" in body["message"].lower()
+
+
+def test_post_job_duplicate_json_mark_without_reference(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, headers=JSON)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["is_duplicate"] is True
+    assert body["duplicate_of"] is None
+
+
+def test_post_job_duplicate_json_clear_returns_ok(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.set_job_duplicate(conn, "k1")
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "clear"}, headers=JSON)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["is_duplicate"] is False
+    assert body["duplicate_of"] is None
+    assert db.list_jobs(conn)[0]["is_duplicate"] is False
+
+
+def test_post_job_duplicate_json_unknown_key_returns_404(client):
+    resp = client.post("/jobs/duplicate", data={"key": "no-such", "action": "mark"}, headers=JSON)
+
+    assert resp.status_code == 404
+
+
+def test_post_job_duplicate_json_missing_key_returns_400(client):
+    resp = client.post("/jobs/duplicate", data={"action": "mark"}, headers=JSON)
+
+    assert resp.status_code == 400
+
+
+# --- Location override updated response shape ---
+
+def test_location_override_save_response_includes_display_name(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        resp = client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "Location override saved."
+    assert "display_name" in body
+    assert body["location_override"] == "Chicago, IL"
+
+
+def test_location_override_clear_response_includes_message(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+
+    resp = client.post("/jobs/location-override", data={"key": "k1", "location": ""})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "Location override cleared."
+
+
+# --- HTML redirect path still works for all actions ---
+
+def test_post_job_status_html_path_still_redirects(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/jobs")
+
+
+def test_post_job_remove_html_path_still_redirects(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/jobs")
+
+
+def test_post_job_duplicate_html_path_still_redirects(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/jobs")
+
+
+# --- base_location in DB and template ---
+
+def test_list_jobs_includes_base_location_field(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn))
+
+    rows = db.list_jobs(conn)
+
+    assert "base_location" in rows[0]
+
+
+def test_jobs_page_location_cell_has_data_base_location_attribute(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert "data-base-location=" in resp.text
+
+
+def test_status_select_has_no_inline_onchange(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'onchange="this.form.submit()"' not in resp.text
