@@ -133,6 +133,19 @@ async def update_job_status(request: Request):
     return flash_redirect("/jobs", message)
 
 
+@router.post("/jobs/remove")
+async def remove_job(request: Request):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+    try:
+        db.mark_job_removed(request.app.state.conn, key)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return flash_redirect("/jobs", "Job marked as removed.")
+
+
 @router.post("/jobs/duplicate")
 async def update_job_duplicate(request: Request):
     form = dict((await request.form()).items())

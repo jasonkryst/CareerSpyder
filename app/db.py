@@ -487,6 +487,14 @@ def reconcile_jobs(conn: sqlite3.Connection, configured_source_ids: set[str],
     conn.commit()
 
 
+def mark_job_removed(conn: sqlite3.Connection, key: str) -> None:
+    exists = conn.execute("SELECT 1 FROM jobs WHERE key = ?", (key,)).fetchone()
+    if exists is None:
+        raise KeyError(key)
+    conn.execute("UPDATE jobs SET removed_at = ? WHERE key = ? AND removed_at IS NULL", (_now(), key))
+    conn.commit()
+
+
 def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> None:
     now = _now()
     cur = conn.execute("UPDATE jobs SET status = ? WHERE key = ?", (status, key))

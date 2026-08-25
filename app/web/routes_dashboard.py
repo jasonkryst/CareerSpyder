@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app import db
+from app import checker, db
 from app.scheduler import run_and_notify
 from app.web.pagination import paginate
 from app.web.templating import templates
@@ -45,4 +45,10 @@ def run_now(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         run_and_notify, request.app.state.conn, request.app.state.sources_path, force=True,
     )
+    return RedirectResponse(url="/", status_code=303)
+
+
+@router.post("/check-urls")
+def check_urls(request: Request, background_tasks: BackgroundTasks):
+    background_tasks.add_task(checker.check_job_urls, request.app.state.conn)
     return RedirectResponse(url="/", status_code=303)

@@ -370,6 +370,61 @@ def test_jobs_page_filter_form_preserves_active_sort_via_hidden_fields(client):
     assert '<input type="hidden" name="dir" value="asc">' in resp.text
 
 
+def test_post_job_remove_marks_job_removed_and_redirects(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/jobs"
+    assert parse_qs(location.query)["flash"] == ["Job marked as removed."]
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+
+def test_post_job_remove_is_idempotent_on_already_removed_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
+
+    resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+
+def test_post_job_remove_returns_404_for_unknown_key(client):
+    resp = client.post("/jobs/remove", data={"key": "no-such-key"})
+
+    assert resp.status_code == 404
+
+
+def test_post_job_remove_returns_400_when_key_missing(client):
+    resp = client.post("/jobs/remove", data={})
+
+    assert resp.status_code == 400
+
+
+def test_jobs_page_shows_remove_button_for_active_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'action="/jobs/remove"' in resp.text
+
+
+def test_jobs_page_does_not_show_remove_button_for_already_removed_job(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
+
+    resp = client.get("/jobs?removed=removed")
+
+    assert 'action="/jobs/remove"' not in resp.text
+
+
 def test_post_job_status_sets_status_and_redirects_with_flash(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
@@ -500,7 +555,7 @@ def test_jobs_page_wraps_removed_at_in_a_time_element(client):
     assert f'<time datetime="{removed_at}">{removed_at}</time>' in resp.text
 
 
-def test_jobs_page_does_not_wrap_removed_dash_placeholder_in_a_time_element(client):
+def test_jobs_page_shows_remove_button_and_no_time_element_for_active_job(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
 
@@ -509,8 +564,8 @@ def test_jobs_page_does_not_wrap_removed_dash_placeholder_in_a_time_element(clie
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(resp.text, "html.parser")
     cell = soup.select_one('td[data-label="Removed"]')
-    assert cell.get_text(strip=True) == "—"
     assert cell.find("time") is None
+    assert cell.find("form") is not None
 
 
 def test_jobs_page_wraps_emailed_at_in_a_time_element(client):

@@ -105,7 +105,15 @@
               aria-label="Override location for {{ job.title | e }}">&#128205;</button>
     </td>
     <td data-label="Date found"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at }}</time></td>
-    <td data-label="Removed">{% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>{% else %}—{% endif %}</td>
+    <td data-label="Removed">
+      {% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>
+      {% else %}
+      <form method="post" action="/jobs/remove" class="inline-remove-form">
+        <input type="hidden" name="key" value="{{ job.key }}">
+        <button type="submit" class="icon-btn" aria-label="Mark removed for {{ job.title | e }}" title="Mark as removed">&#128465;</button>
+      </form>
+      {% endif %}
+    </td>
     <td data-label="Age (days)">{{ job.age_days }}</td>
     <td data-label="Emailed">{% if job.emailed_at %}<time datetime="{{ job.emailed_at }}">{{ job.emailed_at }}</time>{% else %}Not sent{% endif %}</td>
     <td data-label="Status">
