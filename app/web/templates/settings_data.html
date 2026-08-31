@@ -12,7 +12,9 @@
 <p>Clears CareerSpyder's record of jobs it has already seen. The next run
 will treat every currently known job as new and may send a large digest
 email as a result.</p>
-<form method="post" action="/settings/data/clear-cache">
+<form method="post" action="/settings/data/clear-cache"
+      data-confirm-title="Clear job cache"
+      data-confirm-message="This will clear all seen-job records. The next run may send a large digest email. Continue?">
   <button type="submit">Clear job cache</button>
 </form>
 </div>
