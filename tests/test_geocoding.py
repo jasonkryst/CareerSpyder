@@ -42,6 +42,80 @@ def test_nominatim_geocode_parses_a_successful_response():
     assert "CareerSpyder" in kwargs["headers"]["User-Agent"]
 
 
+def test_nominatim_geocode_uses_structured_params_for_bare_zip():
+    fake_response = Mock()
+    fake_response.json.return_value = [{
+        "lat": "41.8827", "lon": "-88.0075",
+        "display_name": "60148, DuPage County, Illinois, United States",
+        "address": {"town": "Lombard", "state": "Illinois", "country": "United States"},
+    }]
+    fake_response.raise_for_status = Mock()
+
+    with patch("app.geocoding.nominatim.requests.get", return_value=fake_response) as mock_get:
+        result = NominatimGeocoder().geocode("60148")
+
+    assert result is not None
+    assert result.lat == 41.8827
+    _, kwargs = mock_get.call_args
+    assert "q" not in kwargs["params"]
+    assert kwargs["params"]["postalcode"] == "60148"
+    assert kwargs["params"]["countrycodes"] == "us"
+
+
+def test_nominatim_geocode_uses_structured_params_for_zip_plus_4():
+    fake_response = Mock()
+    fake_response.json.return_value = [{
+        "lat": "41.8827", "lon": "-88.0075",
+        "display_name": "60148, DuPage County, Illinois, United States",
+        "address": {"town": "Lombard", "state": "Illinois", "country": "United States"},
+    }]
+    fake_response.raise_for_status = Mock()
+
+    with patch("app.geocoding.nominatim.requests.get", return_value=fake_response) as mock_get:
+        result = NominatimGeocoder().geocode("60148-3401")
+
+    assert result is not None
+    _, kwargs = mock_get.call_args
+    assert "q" not in kwargs["params"]
+    assert kwargs["params"]["postalcode"] == "60148"
+    assert kwargs["params"]["countrycodes"] == "us"
+
+
+def test_nominatim_geocode_uses_free_text_for_city_state_query():
+    fake_response = Mock()
+    fake_response.json.return_value = [{
+        "lat": "41.8781136", "lon": "-87.6297982",
+        "display_name": "Chicago, Cook County, Illinois, United States",
+        "address": {"city": "Chicago", "state": "Illinois", "country": "United States"},
+    }]
+    fake_response.raise_for_status = Mock()
+
+    with patch("app.geocoding.nominatim.requests.get", return_value=fake_response) as mock_get:
+        NominatimGeocoder().geocode("Chicago, IL")
+
+    _, kwargs = mock_get.call_args
+    assert "q" in kwargs["params"]
+    assert "postalcode" not in kwargs["params"]
+
+
+def test_nominatim_geocode_uses_free_text_for_zip_with_country_suffix():
+    """'60148, USA' is not a bare ZIP — passes through free-text as entered."""
+    fake_response = Mock()
+    fake_response.json.return_value = [{
+        "lat": "41.8827", "lon": "-88.0075",
+        "display_name": "60148, DuPage County, Illinois, United States",
+        "address": {"town": "Lombard", "state": "Illinois", "country": "United States"},
+    }]
+    fake_response.raise_for_status = Mock()
+
+    with patch("app.geocoding.nominatim.requests.get", return_value=fake_response) as mock_get:
+        NominatimGeocoder().geocode("60148, USA")
+
+    _, kwargs = mock_get.call_args
+    assert kwargs["params"]["q"] == "60148, USA"
+    assert "postalcode" not in kwargs["params"]
+
+
 def test_nominatim_geocode_falls_back_to_town_when_no_city_field():
     fake_response = Mock()
     fake_response.json.return_value = [{
