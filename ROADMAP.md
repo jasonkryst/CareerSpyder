@@ -100,40 +100,21 @@ later rather than fixed immediately.
 
 ## UI, UX & accessibility
 
-- **"None" leaks into the Company field after a validation error (from
-  audit).** `source_form.py`'s `echo_source()` plus the template's `{{
-  source.company if source else '' }}` renders the literal text "None"
-  into the input when Company was left blank on a failed submit — a
-  visible bug, and likely present for `selectors.location` too, which
-  uses the same pattern. See the audit's finding U1 for the one-line fix.
 - **Raw pydantic/adapter exceptions shown directly to end users (from
   audit).** Source add/edit validation errors and `/sources/test-preview`
   failures both render `str(exc)` verbatim — confusing jargon for a
   self-hosting home user, and a minor incidental leak of internal model
   names and library internals. See finding U2.
-- **"Clear job cache" has no confirmation, unlike every other destructive
-  action on the same page (from audit).** Delete-source and
-  Import-settings both use the app's confirm-modal pattern; Clear job
-  cache doesn't, despite its own copy warning of a possible large digest
-  email as a side effect. See finding U3 — a one-line template fix.
 - **Ambiguous "Status" filter naming on `/jobs` and `/jobs/map` (from
   audit).** The filter labeled "Status" filters Active/Removed, while the
   table's own "Status" column shows the separate Applied/Ignored/
   Accepted/Rejected/Not Interested job status (filtered by the
   differently-labeled "Job status" field). See finding U4.
-- **Per-job Status select auto-submits with no visible trigger (from
-  audit, WCAG 3.2.2).** `/jobs`' per-row status `<select>` submits the
-  whole page on `change` with no visible Save control — a recognized
-  accessibility anti-pattern that's disorienting for keyboard/
-  screen-reader users and costs everyone their scroll position. See
-  finding A1; the fix (an AJAX row-patch or a visible Save button) is the
-  most consequential piece of UI work this audit surfaced.
 - **Smaller UX/accessibility polish items (from audit).** No
   required-field indication on the source form (U5); the confirm-modal
   has no non-JS fallback, so Delete/Import submit with zero warning if JS
-  is blocked (U6); the `/jobs/map` Leaflet container has no accessible
-  name (A2); form validation error banners aren't marked `role="alert"`
-  (A3). See the audit for details on each.
+  is blocked (U6); form validation error banners aren't marked
+  `role="alert"` (A3). See the audit for details on each.
 
 Full write-up, including what's already solid (landmarks, focus
 handling, dark-mode contrast, responsive table collapse, etc.):

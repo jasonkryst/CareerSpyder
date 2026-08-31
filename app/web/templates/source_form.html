@@ -5,7 +5,7 @@
 <form method="post" action="{{ action }}">
   {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
   <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label>
-  <label>Company <input type="text" name="company" value="{{ source.company if source else '' }}"></label>
+  <label>Company <input type="text" name="company" value="{{ source.company or '' }}"></label>
   <label>Type
     <select name="type" onchange="showFieldsFor(this.value)">
       {% for t in ["greenhouse", "lever", "generic_html", "linkedin", "indeed", "infor", "healthcaresource", "talentbrew", "workday", "phenompeople", "findly"] %}

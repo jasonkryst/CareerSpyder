@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-08-31
+
+### Fixed
+
+- **"None" in Company field after a validation error (audit U1).** Submitting the Add
+  Source form with Company left blank, then hitting a validation error, re-rendered the
+  form with the literal text "None" in the Company input — `echo_source()` coerces a
+  blank company to `None`, and the template's `{{ source.company if source else '' }}`
+  rendered it because the echo object itself is always truthy. Fixed with
+  `{{ source.company or '' }}`.
+- **"Clear job cache" had no confirmation dialog (audit U3).** Every other destructive
+  action on the Settings → Data page (Delete source, Import settings) used the app's
+  `data-confirm-*` modal before submitting; Clear job cache was the lone exception
+  despite its own warning about triggering a large digest email. Now wired to the same
+  confirm-modal pattern.
+- **Jobs Map container had no accessible name (audit A2).** The Leaflet `<div id="map">`
+  had no `aria-label`, leaving the interactive region unnamed for screen-reader landmark
+  navigation. Added `aria-label="Job locations map"`.
+
 ## [0.50.0] — 2026-08-30
 
 ### Added
