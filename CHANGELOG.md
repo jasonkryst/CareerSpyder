@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.46.0] — 2026-08-31
+## [0.51.0] — 2026-08-31
 
 ### Fixed
 
@@ -23,6 +23,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Jobs Map container had no accessible name (audit A2).** The Leaflet `<div id="map">`
   had no `aria-label`, leaving the interactive region unnamed for screen-reader landmark
   navigation. Added `aria-label="Job locations map"`.
+
+## [0.50.0] — 2026-08-30
+
+### Added
+
+- Dependabot
 
 ## [0.45.0] — 2026-08-25
 
