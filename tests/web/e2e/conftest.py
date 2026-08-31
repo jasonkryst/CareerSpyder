@@ -24,7 +24,7 @@ def live_server(tmp_path_factory):
     env_overrides = {
         "CAREERSPYDER_DB_PATH": str(tmp_path / "state.db"),
         "CAREERSPYDER_SOURCES_PATH": str(sources_path),
-        "RUN_HOUR": "8",
+        "RUN_CRON": "0 8 * * *",
         "TZ": "UTC",
         "SMTP_HOST": "smtp.example.com",
         "SMTP_PORT": "587",

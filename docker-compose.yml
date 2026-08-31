@@ -12,7 +12,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_TO: ${EMAIL_TO:-}
-      RUN_HOUR: ${RUN_HOUR:-8}
+      RUN_CRON: ${RUN_CRON:-0 7 * * *}
       TZ: ${TZ:-UTC}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       CAREERSPYDER_DB_PATH: /app/data/state.db

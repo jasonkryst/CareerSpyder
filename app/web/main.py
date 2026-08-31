@@ -20,7 +20,7 @@ from app.web.security_headers import SecurityHeadersMiddleware
 async def lifespan(app: FastAPI):
     db_path = os.environ.get("CAREERSPYDER_DB_PATH", "/app/data/state.db")
     sources_path = os.environ.get("CAREERSPYDER_SOURCES_PATH", "/app/config/sources.json")
-    run_hour = int(os.environ.get("RUN_HOUR", "8"))
+    run_cron = os.environ.get("RUN_CRON", "0 7 * * *")
     tz = os.environ.get("TZ", "UTC")
 
     conn = db.init_db(db_path)
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 
     app.state.conn = conn
     app.state.sources_path = sources_path
-    app.state.scheduler = create_scheduler(conn, sources_path, run_hour, tz)
+    app.state.scheduler = create_scheduler(conn, sources_path, run_cron, tz)
 
     yield
 

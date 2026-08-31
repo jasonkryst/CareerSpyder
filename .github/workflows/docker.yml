@@ -47,7 +47,7 @@ jobs:
           SMTP_USER=ci
           EMAIL_FROM=ci@example.test
           EMAIL_TO=ci@example.test
-          RUN_HOUR=8
+          RUN_CRON=0 8 * * *
           TZ=UTC
           EOF
           docker compose up -d
