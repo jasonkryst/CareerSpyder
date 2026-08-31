@@ -384,5 +384,5 @@ def test_create_scheduler_raises_on_invalid_cron(tmp_db_path, tmp_path):
     conn = db.init_db(tmp_db_path)
     sources_path = str(tmp_path / "sources.json")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         scheduler.create_scheduler(conn, sources_path, run_cron="not a cron", tz="UTC")
