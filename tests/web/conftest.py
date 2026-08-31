@@ -10,7 +10,7 @@ def client(tmp_path, monkeypatch):
     sources_path = tmp_path / "sources.json"
     sources_path.write_text(json.dumps({"sources": []}))
     monkeypatch.setenv("CAREERSPYDER_SOURCES_PATH", str(sources_path))
-    monkeypatch.setenv("RUN_HOUR", "8")
+    monkeypatch.setenv("RUN_CRON", "0 8 * * *")
     monkeypatch.setenv("TZ", "UTC")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_PORT", "587")

@@ -369,7 +369,7 @@ def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):
     conn = db.init_db(tmp_db_path)
     sources_path = str(tmp_path / "sources.json")
 
-    sched = scheduler.create_scheduler(conn, sources_path, run_hour=8, tz="UTC")
+    sched = scheduler.create_scheduler(conn, sources_path, run_cron="0 8 * * *", tz="UTC")
     try:
         jobs = sched.get_jobs()
         assert len(jobs) == 1
@@ -377,3 +377,12 @@ def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):
         assert jobs[0].args == (conn, sources_path, "UTC")
     finally:
         sched.shutdown()
+
+
+def test_create_scheduler_raises_on_invalid_cron(tmp_db_path, tmp_path):
+    import pytest
+    conn = db.init_db(tmp_db_path)
+    sources_path = str(tmp_path / "sources.json")
+
+    with pytest.raises(ValueError):
+        scheduler.create_scheduler(conn, sources_path, run_cron="not a cron", tz="UTC")

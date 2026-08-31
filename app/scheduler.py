@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app import config, db, digest, emailer, orchestrator
 
@@ -72,8 +73,9 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
         logger.exception("Failed to send digest email for run %s", summary.run_id)
 
 
-def create_scheduler(conn, sources_path: str, run_hour: int, tz: str) -> BackgroundScheduler:
+def create_scheduler(conn, sources_path: str, run_cron: str, tz: str) -> BackgroundScheduler:
     sched = BackgroundScheduler(timezone=tz)
-    sched.add_job(run_and_notify, "cron", hour=run_hour, args=[conn, sources_path, tz], id="daily_run")
+    trigger = CronTrigger.from_crontab(run_cron, timezone=_resolve_tz(tz))
+    sched.add_job(run_and_notify, trigger, args=[conn, sources_path, tz], id="daily_run")
     sched.start()
     return sched
