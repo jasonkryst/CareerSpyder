@@ -225,6 +225,13 @@ footer {
   font-size: 0.875rem;
 }
 
+@media (min-width: 80rem) {
+  main,
+  footer {
+    max-width: 80rem;
+  }
+}
+
 a {
   color: var(--accent);
 }
