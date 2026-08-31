@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-08-31
+
+### Changed
+
+- **Content area widens on wide screens (issue #115).** `main` and `footer` now
+  expand from a `60rem` cap to `80rem` when the viewport reaches `80rem` or wider
+  (≈1280 px at the browser default font size), making better use of horizontal
+  space on desktop monitors and large laptop displays. Narrower viewports are
+  unchanged.
+
 ## [0.53.0] — 2026-08-31
 
 ### Fixed
