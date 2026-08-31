@@ -863,6 +863,21 @@ def test_jobs_page_state_filter_shown_in_clear_filters(client):
 
 # ── Zip/radius filter (routes) ───────────────────────────────────────────────
 
+def test_jobs_page_bare_zip_uses_structured_nominatim_params(client):
+    """Bare ZIP (no ', USA') must send postalcode+countrycodes, not a free-text q= (#117)."""
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()) as mock_get:
+        resp = client.get("/jobs?zip=60148&radius=25")
+
+    assert resp.status_code == 200
+    assert "Could not resolve" not in resp.text
+    _, kwargs = mock_get.call_args
+    assert kwargs["params"].get("postalcode") == "60148"
+    assert kwargs["params"].get("countrycodes") == "us"
+    assert "q" not in kwargs["params"]
+
+
 def test_jobs_page_zip_filter_includes_nearby_job(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)

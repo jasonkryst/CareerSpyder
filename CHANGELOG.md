@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.0] — 2026-08-31
+
+### Fixed
+
+- **Bare ZIP code search now works without ", USA" suffix (issue #117).** Searching
+  by ZIP code radius (e.g. `60148`) previously failed unless the user typed
+  `60148, USA` — Nominatim's free-text search can't reliably resolve a bare 5-digit
+  number to a US postal code. `NominatimGeocoder` now detects the US ZIP pattern
+  (`\d{5}` or `\d{5}-\d{4}`) and uses Nominatim's structured `postalcode` +
+  `countrycodes=us` query parameters instead, which target the postal-code index
+  directly. Free-text queries (city/state, full addresses) are unchanged.
+
 ## [0.52.0] — 2026-08-31
 
 ### Added
