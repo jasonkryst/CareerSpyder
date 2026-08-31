@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS runs (
     started_at TEXT NOT NULL,
     finished_at TEXT,
     new_job_count INTEGER NOT NULL DEFAULT 0,
-    failed_sources TEXT NOT NULL DEFAULT '[]'
+    failed_sources TEXT NOT NULL DEFAULT '[]',
+    kind TEXT NOT NULL DEFAULT 'scrape'
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -68,9 +69,9 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _add_column_if_missing(conn: sqlite3.Connection, ddl: str) -> None:
+def _add_column_if_missing(conn: sqlite3.Connection, ddl: str, table: str = "settings") -> None:
     try:
-        conn.execute(f"ALTER TABLE settings ADD COLUMN {ddl}")
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
     except sqlite3.OperationalError as exc:
         if "duplicate column name" not in str(exc):
             raise
@@ -150,6 +151,7 @@ def init_db(path: str) -> sqlite3.Connection:
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     _add_column_if_missing(conn, "hide_not_interested_on_map INTEGER NOT NULL DEFAULT 1")
+    _add_column_if_missing(conn, "kind TEXT NOT NULL DEFAULT 'scrape'", table="runs")
     conn.commit()
     _migrate_jobs_table(conn)
     _migrate_jobs_location_fk(conn)
@@ -195,8 +197,8 @@ def clear_jobs(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def start_run(conn: sqlite3.Connection) -> int:
-    cur = conn.execute("INSERT INTO runs (started_at) VALUES (?)", (_now(),))
+def start_run(conn: sqlite3.Connection, kind: str = "scrape") -> int:
+    cur = conn.execute("INSERT INTO runs (started_at, kind) VALUES (?, ?)", (_now(), kind))
     conn.commit()
     if cur.lastrowid is None:
         raise RuntimeError("INSERT INTO runs did not produce a rowid")
@@ -249,7 +251,7 @@ def list_runs(
     order_dir = "ASC" if direction == "asc" else "DESC"
     where_sql, params = _run_filters_sql(failures)
     query = (
-        "SELECT id, started_at, finished_at, new_job_count, failed_sources FROM runs "
+        "SELECT id, started_at, finished_at, new_job_count, failed_sources, kind FROM runs "
         f"{where_sql} ORDER BY {order_column} {order_dir}, id {order_dir} LIMIT ? OFFSET ?"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
@@ -257,6 +259,7 @@ def list_runs(
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
             "new_job_count": r[3], "failed_sources": _deserialize_failed_sources(r[4]),
+            "kind": r[5],
         }
         for r in rows
     ]

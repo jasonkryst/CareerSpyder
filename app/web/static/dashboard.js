@@ -4,6 +4,7 @@
   var status = document.getElementById("history-status");
   var runForm = document.getElementById("run-now-form");
   var runStatus = document.getElementById("run-now-status");
+  var checkUrlsForm = document.getElementById("check-urls-form");
   if (!container) return;
 
   var POLL_MS = 10000;
@@ -53,6 +54,19 @@
         .then(refresh)
         .then(function () {
           if (runStatus) runStatus.textContent = "Run started";
+          if (button) button.disabled = false;
+        });
+    });
+  }
+
+  if (checkUrlsForm) {
+    checkUrlsForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var button = checkUrlsForm.querySelector("button[type=submit]");
+      if (button) button.disabled = true;
+      fetch(checkUrlsForm.getAttribute("action"), { method: "POST" })
+        .then(refresh)
+        .then(function () {
           if (button) button.disabled = false;
         });
     });
