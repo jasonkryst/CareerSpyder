@@ -5,6 +5,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.52.0] — 2026-08-31
+
+### Added
+
+- **Trivy filesystem scan in CI (`trivy-fs` job).** A new `ci.yml` job runs
+  Trivy against the repository source and `pyproject.toml` on every PR and
+  push to master. It catches CVEs in Python dependencies before the Docker
+  image is even built, complementing the existing container image scan.
+- **SARIF upload for Trivy findings.** Both the new filesystem scan and the
+  existing container image scan now upload results in SARIF format to the
+  repository's **Security → Code scanning** dashboard. Vulnerabilities are
+  tracked there over time alongside CodeQL findings. The container scan still
+  gates the build — it fails on unresolved CRITICAL/HIGH findings — and now
+  also reports them as code-scanning alerts.
+- **`security-events: write` permission on the Docker build job.** Required
+  for SARIF upload; previously omitted since only table-format output was used.
+
 ## [0.51.0] — 2026-08-31
 
 ### Fixed

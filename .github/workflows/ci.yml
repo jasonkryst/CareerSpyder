@@ -46,3 +46,28 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: pip-audit
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Scan filesystem for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          format: sarif
+          output: trivy-fs.sarif
+
+      - name: Upload filesystem scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs

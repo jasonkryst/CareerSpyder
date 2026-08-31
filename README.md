@@ -251,7 +251,7 @@ install/Add to Home Screen prompt, for a standalone window and app icon.
 
 ## CI & Security
 
-Every pull request runs four GitHub Actions workflows: `lint` (Ruff), `typecheck` (mypy), `test` (pytest), and `dependency-audit` (pip-audit). A separate `docker.yml` job builds the image and runs a Trivy CRITICAL/HIGH vulnerability scan plus a smoke test against all public routes. `codeql.yml` runs CodeQL SAST on push/PR and weekly on a schedule.
+Every pull request runs five GitHub Actions workflows: `lint` (Ruff), `typecheck` (mypy), `test` (pytest), `dependency-audit` (pip-audit), and `trivy-fs` (Trivy filesystem/dependency scan). A separate `docker.yml` job builds the image, runs a Trivy CRITICAL/HIGH container scan, and smoke-tests all public routes. `codeql.yml` runs CodeQL SAST on push/PR and weekly on a schedule. All Trivy and CodeQL findings are uploaded as SARIF to the repository's **Security → Code scanning** dashboard.
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) automatically opens weekly PRs for pip, GitHub Actions, and Docker base-image updates. All Dependabot PRs go through the same CI gates before merging.
 
