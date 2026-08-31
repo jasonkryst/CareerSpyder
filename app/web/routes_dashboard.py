@@ -48,7 +48,13 @@ def run_now(request: Request, background_tasks: BackgroundTasks):
     return RedirectResponse(url="/", status_code=303)
 
 
+def _run_url_check(conn, run_id: int) -> None:
+    removed = checker.check_job_urls(conn)
+    db.finish_run(conn, run_id, removed, [])
+
+
 @router.post("/check-urls")
 def check_urls(request: Request, background_tasks: BackgroundTasks):
-    background_tasks.add_task(checker.check_job_urls, request.app.state.conn)
+    run_id = db.start_run(request.app.state.conn, kind="url_check")
+    background_tasks.add_task(_run_url_check, request.app.state.conn, run_id)
     return RedirectResponse(url="/", status_code=303)

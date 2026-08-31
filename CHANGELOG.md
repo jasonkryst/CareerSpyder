@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.55.0] — 2026-08-31
+
+### Added
+
+- **"Check job URLs" result now appears as a dashboard row (issue #116).** Clicking
+  the "Check job URLs" button now creates a run row in the dashboard table, showing
+  "in progress" immediately and updating to the finished timestamp and count of URLs
+  removed once complete. URL-check rows display a `"URLs removed"` cell label instead
+  of `"New jobs"` in the responsive card layout to distinguish them from scrape runs.
+  The button is JS-intercepted (like "Run now") so the in-progress row appears without
+  a full page reload.
+
 ## [0.54.0] — 2026-08-31
 
 ### Changed

@@ -346,3 +346,90 @@ def test_dashboard_no_failed_sources_cell_is_empty(client):
 
     assert resp.status_code == 200
     assert "<ul" not in resp.text
+
+
+# --- URL check run row tests (issue #116) ---
+
+def test_check_urls_post_creates_in_progress_run_row(client, monkeypatch):
+    monkeypatch.setattr("app.web.routes_dashboard._run_url_check", lambda *a: None)
+
+    client.post("/check-urls", follow_redirects=False)
+
+    resp = client.get("/rows")
+    assert 'data-label="Finished">in progress' in resp.text
+
+
+def test_check_urls_post_redirects(client, monkeypatch):
+    monkeypatch.setattr("app.web.routes_dashboard._run_url_check", lambda *a: None)
+
+    resp = client.post("/check-urls", follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+
+
+def test_url_check_row_uses_urls_removed_data_label(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, kind="url_check")
+    db.finish_run(conn, run_id, new_job_count=3, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert 'data-label="URLs removed"' in resp.text
+    assert 'data-label="New jobs"' not in resp.text
+
+
+def test_scrape_run_keeps_new_jobs_data_label(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, kind="scrape")
+    db.finish_run(conn, run_id, new_job_count=2, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert 'data-label="New jobs"' in resp.text
+    assert 'data-label="URLs removed"' not in resp.text
+
+
+def test_url_check_row_shows_removed_count(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, kind="url_check")
+    db.finish_run(conn, run_id, new_job_count=7, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert ">7<" in resp.text
+
+
+def test_url_check_row_failed_sources_cell_is_empty(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, kind="url_check")
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert "<ul" not in resp.text
+
+
+def test_mixed_run_types_both_appear_in_dashboard(client):
+    conn = client.app.state.conn
+    scrape_id = db.start_run(conn, kind="scrape")
+    db.finish_run(conn, scrape_id, new_job_count=5, failed_sources=[])
+    check_id = db.start_run(conn, kind="url_check")
+    db.finish_run(conn, check_id, new_job_count=2, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert 'data-label="New jobs"' in resp.text
+    assert 'data-label="URLs removed"' in resp.text
+
+
+def test_dashboard_includes_check_urls_form_id(client):
+    resp = client.get("/")
+
+    assert 'id="check-urls-form"' in resp.text
+
+
+def test_dashboard_js_intercepts_check_urls_form(client):
+    resp = client.get("/static/dashboard.js")
+
+    assert "check-urls-form" in resp.text
