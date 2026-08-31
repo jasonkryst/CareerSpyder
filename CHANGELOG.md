@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-08-30
+
+### Added
+
+- Dependabot
+
 ## [0.45.0] — 2026-08-25
 
 ### Added
