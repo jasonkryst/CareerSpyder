@@ -3,7 +3,7 @@ services:
     image: jasonkryst/careerspyder:latest
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "32600:8080"
     environment:
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_HOST: ${SMTP_HOST:-}
