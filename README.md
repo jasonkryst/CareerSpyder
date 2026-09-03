@@ -118,7 +118,7 @@ Then:
 docker compose up -d
 ```
 
-Open `http://localhost:8080/`, add a source or two under **Sources**, and
+Open `http://localhost:32600/`, add a source or two under **Sources**, and
 click **Run now** on the dashboard to trigger an immediate scrape. The
 scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 
@@ -326,7 +326,7 @@ docker run --rm -v careerspyder_data:/data -v "$PWD":/backup alpine \
   cp /data/state.db /backup/
 ```
 
-Exposed port: `8080`.
+Exposed port: `32600` (mapped to the container's internal port 8080).
 
 The server itself runs as a fixed non-root user (uid/gid `1000:1000`), not
 root. No manual host setup is required for this: `docker-entrypoint.sh`

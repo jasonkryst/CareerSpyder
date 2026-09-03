@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.1] — 2026-09-03
+
+### Changed
+
+- **Docker host port changed from 8080 to 32600.** `docker-compose.yml` and
+  `docker-compose.prod.yml` now map host port `32600` to the container's
+  unchanged internal port `8080`, avoiding collisions with other services on
+  the common `8080` port. Update bookmarks and firewall rules accordingly —
+  the app is now reachable at `http://localhost:32600/`.
+
 ## [0.56.0] — 2026-09-03
 
 ### Changed
