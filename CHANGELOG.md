@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.0] — 2026-09-03
+
+### Changed
+
+- **Dependency updates.** Bumped `pydantic` to `>=2.13.5`, `ruff` to `>=0.16.5`, the
+  `python` base Docker image, `github/codeql-action` (`upload-sarif`) to `4.37.9`, and
+  `hadolint/hadolint-action` to `3.5.0`. No behavior changes.
+
 ## [0.55.0] — 2026-08-31
 
 ### Added
