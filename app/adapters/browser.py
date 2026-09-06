@@ -1,7 +1,10 @@
 from playwright.sync_api import sync_playwright
 
+from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
+
 
 def render_html(url: str) -> str:
+    assert_safe_url(url)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
@@ -13,6 +16,7 @@ def render_html(url: str) -> str:
             probe.close()
 
             page = browser.new_page(user_agent=user_agent)
+            install_ssrf_guard(page)
             page.goto(url, wait_until="networkidle", timeout=30000)
             return page.content()
         finally:

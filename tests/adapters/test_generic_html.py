@@ -1,5 +1,8 @@
+import inspect
+
 from app.adapters import generic_html
 from app.config import GenericHtmlSource, Selectors
+from app.security.ssrf_guard import safe_get
 
 
 class FakeResponse:
@@ -105,3 +108,8 @@ def test_missing_title_or_link_is_skipped_not_crashed():
     jobs = generic_html.fetch(source, http_get=fake_get)
 
     assert jobs == []
+
+
+def test_fetch_default_http_get_is_the_ssrf_guarded_safe_get():
+    sig = inspect.signature(generic_html.fetch)
+    assert sig.parameters["http_get"].default is safe_get

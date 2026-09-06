@@ -1,14 +1,14 @@
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 from app.adapters.browser import render_html
 from app.config import GenericHtmlSource
 from app.models import Job
+from app.security.ssrf_guard import safe_get
 
 
-def fetch(source: GenericHtmlSource, http_get=requests.get, html_renderer=render_html) -> list[Job]:
+def fetch(source: GenericHtmlSource, http_get=safe_get, html_renderer=render_html) -> list[Job]:
     if source.render_js:
         html = html_renderer(source.url)
     else:

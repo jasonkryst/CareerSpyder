@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright
 
 from app.config import InforSource
 from app.models import Job
+from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
 
 
 def _parse_page(html: str, source: InforSource) -> list[Job]:
@@ -43,21 +44,27 @@ def _parse_page(html: str, source: InforSource) -> list[Job]:
     return jobs
 
 
+def _title_changed(current: str | None, previous: str | None) -> bool:
+    return current != previous
+
+
 def _wait_for_new_first_title(frame, previous_title: str | None, timeout_s: float = 15.0) -> None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         headings = frame.locator(".inforCardstackHeading")
         current = headings.first.text_content() if headings.count() > 0 else None
-        if current != previous_title:
+        if _title_changed(current, previous_title):
             return
         time.sleep(0.5)
 
 
 def default_frame_fetcher(url: str, page_number: int) -> str | None:
+    assert_safe_url(url)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
+            install_ssrf_guard(page)
             page.goto(url, wait_until="networkidle", timeout=30000)
             frame = page.frame_locator("#parentIframe")
             frame.locator(".slick-row").first.wait_for(timeout=30000)
