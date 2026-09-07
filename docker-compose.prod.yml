@@ -14,6 +14,7 @@ services:
       RUN_CRON: ${RUN_CRON:-0 7 * * *}
       TZ: ${TZ:-UTC}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
       CAREERSPYDER_DB_PATH: /app/data/state.db
       CAREERSPYDER_SOURCES_PATH: /app/config/sources.json
     volumes:

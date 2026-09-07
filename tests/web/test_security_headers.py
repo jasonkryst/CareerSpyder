@@ -32,3 +32,21 @@ def test_error_response_carries_baseline_security_headers(client):
     assert resp.status_code == 404
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert resp.headers["X-Frame-Options"] == "DENY"
+
+
+def test_csp_excludes_google_domains_when_ga_unset(client):
+    resp = client.get("/")
+
+    csp = resp.headers["Content-Security-Policy"]
+    assert "googletagmanager.com" not in csp
+    assert "google-analytics.com" not in csp
+
+
+def test_csp_allows_google_analytics_domains_when_ga_set(client, monkeypatch):
+    monkeypatch.setenv("GA_MEASUREMENT_ID", "G-TEST12345")
+
+    resp = client.get("/")
+
+    csp = resp.headers["Content-Security-Policy"]
+    assert "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com" in csp
+    assert "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com" in csp

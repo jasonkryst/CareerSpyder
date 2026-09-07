@@ -6,6 +6,7 @@ would otherwise break when the package is installed/run from a location
 other than the source checkout).
 """
 
+import os
 from importlib.metadata import version
 from pathlib import Path
 
@@ -18,3 +19,6 @@ templates.env.globals["app_name"] = "CareerSpyder"
 templates.env.globals["app_version"] = version("careerspyder")
 templates.env.globals["query_url"] = query_url
 templates.env.globals["sort_url"] = sort_url
+# A callable, not a value set once at import: os.environ.get() runs at
+# render time so tests can toggle GA_MEASUREMENT_ID per-test via monkeypatch.
+templates.env.globals["ga_measurement_id"] = lambda: os.environ.get("GA_MEASUREMENT_ID", "")

@@ -199,3 +199,19 @@ def test_style_css_has_toast_rules(client):
 
     assert ".toast-container" in resp.text
     assert ".toast {" in resp.text
+
+
+def test_ga_snippet_absent_when_measurement_id_unset(client):
+    resp = client.get("/")
+
+    assert "googletagmanager.com" not in resp.text
+    assert "gtag(" not in resp.text
+
+
+def test_ga_snippet_present_when_measurement_id_set(client, monkeypatch):
+    monkeypatch.setenv("GA_MEASUREMENT_ID", "G-TEST12345")
+
+    resp = client.get("/")
+
+    assert "https://www.googletagmanager.com/gtag/js?id=G-TEST12345" in resp.text
+    assert "gtag('config', 'G-TEST12345')" in resp.text

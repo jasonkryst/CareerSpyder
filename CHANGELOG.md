@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-09-07
+
+### Added
+
+- **Google Analytics via env var (issue #122).** Setting `GA_MEASUREMENT_ID` (a GA4
+  Measurement ID, format `G-XXXXXXXXXX`) now loads the standard `gtag.js` snippet on every
+  page and relaxes the CSP just enough to allow it (`googletagmanager.com` in `script-src`,
+  `google-analytics.com`/`analytics.google.com` in `connect-src`). Leaving it unset disables
+  tracking entirely — no external script is loaded and the CSP is unchanged from before this
+  feature existed.
+
 ## [0.57.0] — 2026-09-07
 
 ### Security
