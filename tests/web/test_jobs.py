@@ -1353,6 +1353,50 @@ def test_location_override_save_response_includes_display_name(client):
     assert body["location_override"] == "Chicago, IL"
 
 
+# --- Non-blocking, cached geocoding on override save (issue #133) ---
+
+def test_location_override_uses_cached_geocode_result_without_calling_nominatim(client):
+    """Regression for #133: a second override with the same location text
+    must hit the geocoded_locations cache instead of Nominatim again."""
+    from unittest.mock import patch
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn))
+
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()) as mock_get:
+        client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
+        resp = client.post("/jobs/location-override", data={"key": "k2", "location": "Chicago, IL"})
+
+    assert resp.status_code == 200
+    assert mock_get.call_count == 1
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["k2"]["location_override"] == "Chicago, IL"
+
+
+def test_location_override_calls_geocoder_via_threadpool_not_the_event_loop(client):
+    """Regression for #133: the blocking geocoder call must not run
+    directly on the event loop thread."""
+    import threading
+    from unittest.mock import patch
+
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    calling_thread_names = []
+
+    def fake_geocode(location):
+        calling_thread_names.append(threading.current_thread().name)
+
+    with patch("app.geocoding.nominatim.NominatimGeocoder.geocode", side_effect=fake_geocode):
+        client.post("/jobs/location-override", data={"key": "k1", "location": "Nowhere, XX"})
+
+    assert calling_thread_names
+    # TestClient dispatches the ASGI app itself on an "asyncio-portal-*"
+    # thread (that thread IS the event loop for this request) -- a call
+    # correctly wrapped in run_in_threadpool runs on a *different* worker
+    # thread, not that portal thread.
+    assert not calling_thread_names[0].startswith("asyncio-portal")
+
+
 def test_location_override_clear_response_includes_message(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))

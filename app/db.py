@@ -565,6 +565,20 @@ def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> No
     conn.commit()
 
 
+def get_geocoded_location(conn: sqlite3.Connection, location: str) -> dict | None:
+    row = conn.execute(
+        "SELECT display_name, city, region, country, lat, lng, provider FROM geocoded_locations "
+        "WHERE location = ? AND status IN ('resolved', 'manual')",
+        (location,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "display_name": row[0], "city": row[1], "region": row[2],
+        "country": row[3], "lat": row[4], "lng": row[5], "provider": row[6],
+    }
+
+
 def set_location_override(
     conn: sqlite3.Connection, key: str, location: str,
     display_name: str, city: str | None, region: str | None, country: str | None,
