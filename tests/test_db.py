@@ -1546,3 +1546,47 @@ def test_count_jobs_with_radius_filter(tmp_db_path):
                        lat=34.0522, lng=-118.2437)
 
     assert db.count_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0) == 1
+
+
+# --- WAL mode / busy_timeout (issue #132) ---
+
+def test_init_db_enables_wal_mode_and_busy_timeout(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+
+    assert journal_mode.lower() == "wal"
+    assert busy_timeout == 5000
+
+
+# --- geocoded_locations cache lookup (issue #133) ---
+
+def test_get_geocoded_location_returns_none_when_absent(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    assert db.get_geocoded_location(conn, "Nowhere, XX") is None
+
+
+def test_get_geocoded_location_returns_a_resolved_row(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, display_name, city, region, country, lat, lng, "
+        "status, provider) VALUES ('Chicago, IL', 'Chicago, IL, USA', 'Chicago', 'Illinois', 'USA', "
+        "41.8, -87.6, 'resolved', 'nominatim')"
+    )
+    conn.commit()
+
+    result = db.get_geocoded_location(conn, "Chicago, IL")
+
+    assert result == {
+        "display_name": "Chicago, IL, USA", "city": "Chicago", "region": "Illinois",
+        "country": "USA", "lat": 41.8, "lng": -87.6, "provider": "nominatim",
+    }
+
+
+def test_get_geocoded_location_ignores_a_pending_or_failed_row(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    conn.execute("INSERT INTO geocoded_locations (location, status) VALUES ('Remote', 'pending')")
+    conn.commit()
+
+    assert db.get_geocoded_location(conn, "Remote") is None

@@ -1,12 +1,11 @@
-import requests
-
 from app.config import PhenomPeopleSource
 from app.models import Job
+from app.security.ssrf_guard import safe_post
 
 _SIZE = 2000
 
 
-def fetch(source: PhenomPeopleSource, http_post=requests.post) -> list[Job]:
+def fetch(source: PhenomPeopleSource, http_post=safe_post) -> list[Job]:
     selected_fields = {"state": [source.state]} if source.state else {}
     resp = http_post(
         f"{source.career_site_url}/widgets",

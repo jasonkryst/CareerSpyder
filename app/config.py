@@ -2,8 +2,24 @@ import json
 import os
 import uuid
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+
+def _require_http_scheme(url: str) -> str:
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(f"URL must use http or https, got {scheme!r}")
+    return url
+
+
+# Restricts a source URL field to http/https at save time (issue #131) --
+# the deeper check (rejecting private/loopback/link-local resolved
+# addresses, re-checked after redirects) lives in app/security/ssrf_guard.py
+# and runs at request time, since DNS resolution doesn't belong in a
+# pydantic validator.
+HttpUrlStr = Annotated[str, Field(min_length=1), AfterValidator(_require_http_scheme)]
 
 
 class BaseSource(BaseModel):
@@ -34,24 +50,24 @@ class Selectors(BaseModel):
 
 class GenericHtmlSource(BaseSource):
     type: Literal["generic_html"]
-    url: str = Field(min_length=1)
+    url: HttpUrlStr
     render_js: bool = False
     selectors: Selectors
 
 
 class LinkedInSource(BaseSource):
     type: Literal["linkedin"]
-    url: str = Field(min_length=1)
+    url: HttpUrlStr
 
 
 class IndeedSource(BaseSource):
     type: Literal["indeed"]
-    url: str = Field(min_length=1)
+    url: HttpUrlStr
 
 
 class InforSource(BaseSource):
     type: Literal["infor"]
-    url: str = Field(min_length=1)
+    url: HttpUrlStr
     max_pages: int = 3
 
 
@@ -62,19 +78,19 @@ class HealthcareSource(BaseSource):
 
 class TalentBrewSource(BaseSource):
     type: Literal["talentbrew"]
-    base_url: str = Field(min_length=1)
+    base_url: HttpUrlStr
     max_pages: int = 60
 
 
 class WorkdaySource(BaseSource):
     type: Literal["workday"]
-    career_site_url: str = Field(min_length=1)
+    career_site_url: HttpUrlStr
     max_pages: int = 60
 
 
 class PhenomPeopleSource(BaseSource):
     type: Literal["phenompeople"]
-    career_site_url: str = Field(min_length=1)
+    career_site_url: HttpUrlStr
     state: str | None = None
 
 

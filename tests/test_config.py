@@ -270,3 +270,57 @@ def test_findly_max_pages_defaults_to_twenty():
         career_site_url="https://careers.aah.org",
     )
     assert source.max_pages == 20
+
+
+# --- URL scheme restriction (issue #131) ---
+
+@pytest.mark.parametrize("bad_url", [
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "ftp://example.test/",
+    "data:text/html,<script>alert(1)</script>",
+])
+def test_generic_html_source_rejects_non_http_url_schemes(bad_url):
+    with pytest.raises(ValidationError):
+        config.GenericHtmlSource(
+            id="s1", name="X", type="generic_html", url=bad_url,
+            selectors=config.Selectors(job_card=".c", title=".t", link="a"),
+        )
+
+
+def test_generic_html_source_accepts_https_url():
+    source = config.GenericHtmlSource(
+        id="s1", name="X", type="generic_html", url="https://x.test/careers",
+        selectors=config.Selectors(job_card=".c", title=".t", link="a"),
+    )
+    assert source.url == "https://x.test/careers"
+
+
+def test_linkedin_source_rejects_javascript_url():
+    with pytest.raises(ValidationError):
+        config.LinkedInSource(id="s1", name="X", type="linkedin", url="javascript:alert(1)")
+
+
+def test_indeed_source_rejects_file_url():
+    with pytest.raises(ValidationError):
+        config.IndeedSource(id="s1", name="X", type="indeed", url="file:///etc/passwd")
+
+
+def test_infor_source_rejects_javascript_url():
+    with pytest.raises(ValidationError):
+        config.InforSource(id="s1", name="X", type="infor", url="javascript:alert(1)")
+
+
+def test_talentbrew_source_rejects_javascript_base_url():
+    with pytest.raises(ValidationError):
+        config.TalentBrewSource(id="s1", name="X", type="talentbrew", base_url="javascript:alert(1)")
+
+
+def test_workday_source_rejects_javascript_career_site_url():
+    with pytest.raises(ValidationError):
+        config.WorkdaySource(id="s1", name="X", type="workday", career_site_url="javascript:alert(1)")
+
+
+def test_phenompeople_source_rejects_javascript_career_site_url():
+    with pytest.raises(ValidationError):
+        config.PhenomPeopleSource(id="s1", name="X", type="phenompeople", career_site_url="javascript:alert(1)")

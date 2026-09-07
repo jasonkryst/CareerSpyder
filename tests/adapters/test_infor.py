@@ -1,4 +1,7 @@
+from unittest.mock import MagicMock, patch
+
 from app.adapters import infor
+from app.adapters.infor import _title_changed, default_frame_fetcher
 from app.config import InforSource
 
 PAGE_1_HTML = """
@@ -128,3 +131,127 @@ def test_job_key_is_stable_across_identical_cards_and_differs_for_different_ones
     # Re-fetching the identical page must produce the identical key (dedup relies on this).
     jobs_again = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
     assert jobs[0].key == jobs_again[0].key
+
+
+# --- Pagination/polling branch logic (issue #136) ---
+
+def test_title_changed_true_when_different():
+    assert _title_changed("New Title", "Old Title") is True
+
+
+def test_title_changed_false_when_same():
+    assert _title_changed("Same Title", "Same Title") is False
+
+
+def test_title_changed_true_when_previous_is_none():
+    assert _title_changed("First Title", None) is True
+
+
+def _make_page_mock(*, cell_count=1, disabled=False):
+    """Builds a fake Playwright `page`/`frame` chain deep enough for
+    default_frame_fetcher's branch logic. Each `.text_content()` call
+    returns a new, distinct title so _wait_for_new_first_title's real
+    polling loop always sees a change on its very first check -- without
+    this, the mocked title would never change and the loop would burn its
+    full 15s real-time deadline per click (only time.sleep is mocked, not
+    time.monotonic)."""
+    heading_locator = MagicMock()
+    heading_locator.count.return_value = 1
+    titles = (f"Title {i}" for i in range(1000))
+    heading_locator.first.text_content.side_effect = lambda: next(titles)
+
+    next_button = MagicMock()
+    next_button.is_disabled.return_value = disabled
+
+    cardstack_cell = MagicMock()
+    cardstack_cell.count.return_value = cell_count
+
+    body_locator = MagicMock()
+    body_locator.inner_html.return_value = "<div class='inforCardstackCell'></div>"
+
+    frame = MagicMock()
+
+    def locator_side_effect(selector):
+        return {
+            ".inforCardstackHeading": heading_locator,
+            "button.nextPage": next_button,
+            ".slick-row": MagicMock(first=MagicMock(wait_for=MagicMock())),
+            ".inforCardstackCell": cardstack_cell,
+            "body": body_locator,
+        }[selector]
+
+    frame.locator.side_effect = locator_side_effect
+
+    page = MagicMock()
+    page.frame_locator.return_value = frame
+
+    pw_browser = MagicMock()
+    pw_browser.new_page.return_value = page
+
+    p = MagicMock()
+    p.chromium.launch.return_value = pw_browser
+
+    sync_playwright_cm = MagicMock()
+    sync_playwright_cm.__enter__.return_value = p
+    sync_playwright_cm.__exit__.return_value = False
+
+    return sync_playwright_cm, pw_browser, page, next_button, cardstack_cell
+
+
+def test_default_frame_fetcher_returns_none_when_next_button_is_disabled():
+    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(disabled=True)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
+
+    assert result is None
+
+
+def test_default_frame_fetcher_returns_none_when_zero_cards():
+    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(cell_count=0)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+
+    assert result is None
+
+
+def test_default_frame_fetcher_clicks_next_page_number_minus_one_times():
+    sync_playwright_cm, _pw_browser, _page, next_button, _cardstack_cell = _make_page_mock(cell_count=1)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"), \
+         patch("app.adapters.infor.time.sleep"):
+        default_frame_fetcher("https://rush.test/careers", page_number=3)
+
+    assert next_button.click.call_count == 2
+
+
+def test_default_frame_fetcher_returns_html_when_cards_present():
+    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(cell_count=1)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+
+    assert result == "<div class='inforCardstackCell'></div>"
+
+
+def test_default_frame_fetcher_validates_url_before_launching_browser():
+    from app.security.ssrf_guard import UnsafeUrlError
+
+    with patch("app.adapters.infor.assert_safe_url", side_effect=UnsafeUrlError("blocked")) as mock_assert, \
+         patch("app.adapters.infor.sync_playwright") as mock_sync_playwright:
+        try:
+            default_frame_fetcher("http://169.254.169.254/", page_number=1)
+        except UnsafeUrlError:
+            pass
+
+    mock_assert.assert_called_once_with("http://169.254.169.254/")
+    mock_sync_playwright.assert_not_called()

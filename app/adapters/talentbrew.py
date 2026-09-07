@@ -1,10 +1,10 @@
 import re
 
-import requests
 from bs4 import BeautifulSoup
 
 from app.config import TalentBrewSource
 from app.models import Job
+from app.security.ssrf_guard import safe_get
 
 _RESULTS_PARAMS = {
     "ActiveFacetID": "0",
@@ -65,7 +65,7 @@ def _parse_page(html: str, source: TalentBrewSource) -> list[Job]:
     return jobs
 
 
-def fetch(source: TalentBrewSource, http_get=requests.get) -> list[Job]:
+def fetch(source: TalentBrewSource, http_get=safe_get) -> list[Job]:
     all_jobs: list[Job] = []
     total_pages = None
     page = 1

@@ -147,6 +147,14 @@ def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.create_function("haversine_miles", 4, _haversine_miles)
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL lets readers and writers run concurrently instead of blocking each
+    # other outright, and busy_timeout makes a writer that DOES need to wait
+    # (e.g. two overlapping writes) retry for up to 5s instead of raising
+    # "database is locked" immediately -- this connection is shared across
+    # the FastAPI threadpool, the event loop thread, BackgroundTasks, and
+    # APScheduler's own thread (see #132).
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
@@ -555,6 +563,20 @@ def set_job_status(conn: sqlite3.Connection, key: str, status: str | None) -> No
         (key, status, now),
     )
     conn.commit()
+
+
+def get_geocoded_location(conn: sqlite3.Connection, location: str) -> dict | None:
+    row = conn.execute(
+        "SELECT display_name, city, region, country, lat, lng, provider FROM geocoded_locations "
+        "WHERE location = ? AND status IN ('resolved', 'manual')",
+        (location,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "display_name": row[0], "city": row[1], "region": row[2],
+        "country": row[3], "lat": row[4], "lng": row[5], "provider": row[6],
+    }
 
 
 def set_location_override(

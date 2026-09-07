@@ -18,23 +18,6 @@ later rather than fixed immediately.
   design, to avoid persisting a credential in plaintext on disk. If this
   becomes painful operationally, revisit with e.g. an encrypted-at-rest
   secret store rather than a plain UI field.
-- **No CSRF protection on any state-changing route (from audit).** Every
-  `POST` route trusts any request that reaches it by network path alone.
-  Since the app sets no cookies, a per-user token isn't a natural fit;
-  an `Origin`/`Sec-Fetch-Site` check on state-changing requests would
-  close this without new session infrastructure. See
-  [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md#m1-no-csrf-protection-on-any-state-changing-route)
-  (finding M1) — this is what makes the SSRF finding below remotely
-  triggerable, so fix together.
-- **SSRF via user-configured source URLs (from audit).** URL-bearing
-  source fields (`generic_html`, `linkedin`, `indeed`, `infor`,
-  `talentbrew`, `workday`, `phenompeople`, `findly`) have no scheme
-  allow-list and no internal/link-local address check, and
-  `/sources/test-preview` executes the adapter immediately without the
-  source being saved. Playwright-driven adapters will navigate to
-  `file://` and internal-network URLs. See
-  [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md#h1-ssrf-via-user-supplied-source-urls-reachable-through-sourcestest-preview-with-no-csrf-protection-to-gate-it)
-  (finding H1).
 - **Unbounded settings-import upload and unrate-limited preview fetches
   (from audit).** `/settings/data`'s import has no upload size cap;
   `/sources/test-preview`'s Playwright-driven fetches have no concurrency

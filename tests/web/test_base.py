@@ -142,6 +142,13 @@ def test_confirm_modal_markup_present_on_every_page(client):
     assert 'id="confirm-modal-cancel"' in resp.text
 
 
+def test_confirm_modal_has_accessible_name_and_description(client):
+    resp = client.get("/")
+
+    assert 'aria-labelledby="confirm-modal-title"' in resp.text
+    assert 'aria-describedby="confirm-modal-message"' in resp.text
+
+
 def test_confirm_modal_js_is_served(client):
     resp = client.get("/static/confirm-modal.js")
 

@@ -1,9 +1,8 @@
 from urllib.parse import urlparse
 
-import requests
-
 from app.config import WorkdaySource
 from app.models import Job
+from app.security.ssrf_guard import safe_post
 
 _PAGE_SIZE = 20
 
@@ -36,7 +35,7 @@ def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) ->
     return jobs
 
 
-def fetch(source: WorkdaySource, http_post=requests.post) -> list[Job]:
+def fetch(source: WorkdaySource, http_post=safe_post) -> list[Job]:
     api_url, origin = _resolve(source.career_site_url)
 
     def fetch_page(offset: int):

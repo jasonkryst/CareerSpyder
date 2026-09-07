@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app import config, db
@@ -244,28 +245,34 @@ async def update_location_override(request: Request):
             raise HTTPException(status_code=404, detail="Job not found")
         return JSONResponse({"ok": True, "message": "Location override cleared."})
 
-    geocoder = get_geocoder()
-    result = geocoder.geocode(location)
-
-    if result is None:
-        raise HTTPException(status_code=400, detail="Location could not be resolved on the map")
+    cached = db.get_geocoded_location(conn, location)
+    if cached is not None:
+        display_name, city, region, country = (
+            cached["display_name"], cached["city"], cached["region"], cached["country"],
+        )
+        lat, lng, provider = cached["lat"], cached["lng"], cached["provider"]
+    else:
+        geocoder = get_geocoder()
+        # Nominatim is a blocking `requests` call; run_in_threadpool keeps it
+        # off the single asyncio event loop thread (see #133) the same way
+        # /sources/test-preview already does for adapter fetches.
+        result = await run_in_threadpool(geocoder.geocode, location)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Location could not be resolved on the map")
+        display_name, city, region, country = result.display_name, result.city, result.region, result.country
+        lat, lng, provider = result.lat, result.lng, geocoder.name
 
     try:
         db.set_location_override(
             conn, key, location,
-            display_name=result.display_name,
-            city=result.city,
-            region=result.region,
-            country=result.country,
-            lat=result.lat,
-            lng=result.lng,
-            provider=geocoder.name,
+            display_name=display_name, city=city, region=region, country=country,
+            lat=lat, lng=lng, provider=provider,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return JSONResponse({
         "ok": True, "message": "Location override saved.",
-        "display_name": result.display_name,
+        "display_name": display_name,
         "location_override": location,
     })
