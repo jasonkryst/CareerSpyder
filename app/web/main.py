@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import db
 from app.scheduler import create_scheduler
+from app.web.csrf_protection import OriginCheckMiddleware
 from app.web.routes_dashboard import router as dashboard_router
 from app.web.routes_guide import router as guide_router
 from app.web.routes_jobs import router as jobs_router
@@ -44,6 +45,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CareerSpyder", lifespan=lifespan)
+# Registration order matters: Starlette wraps middleware added later around
+# ones added earlier, so OriginCheckMiddleware is added first to keep
+# SecurityHeadersMiddleware outermost -- otherwise a 403 short-circuit from
+# the origin check would skip the security headers entirely.
+app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.mount(
     "/static",
