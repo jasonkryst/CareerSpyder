@@ -36,7 +36,7 @@ def assert_safe_url(url: str) -> None:
     except socket.gaierror as exc:
         raise UnsafeUrlError(f"Could not resolve host: {parsed.hostname!r}") from exc
     for info in infos:
-        ip_str = info[4][0]
+        ip_str = str(info[4][0])
         if _is_disallowed_ip(ip_str):
             raise UnsafeUrlError(f"URL resolves to a disallowed address: {ip_str}")
 
