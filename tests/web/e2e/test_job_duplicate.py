@@ -44,7 +44,10 @@ def test_duplicate_modal_accepts_reference_text(live_server, page):
     page.locator("#duplicate-of-input").fill("Acme — Engineer (Greenhouse)")
     page.locator("#duplicate-save-btn").click()
 
-    page.wait_for_url(lambda url: "/jobs" in url)
+    # The modal's submit is JS-intercepted (fetch, no navigation) -- the URL
+    # never changes, so waiting on it doesn't wait for the request to finish.
+    # Wait for the toast that only appears once the fetch resolves instead.
+    page.wait_for_selector(".toast")
 
     rows = db.list_jobs(conn, duplicates="only")
     match = next((r for r in rows if r["key"] == "e2e-dup-2"), None)
@@ -63,7 +66,7 @@ def test_clearing_duplicate_flag_restores_job(live_server, page):
     page.locator("#duplicate-modal").wait_for(state="visible")
     page.locator("#duplicate-clear-btn").click()
 
-    page.wait_for_url(lambda url: "/jobs" in url)
+    page.wait_for_selector(".toast")
     page.goto(live_server + "/jobs")
     assert page.locator("tr", has_text="E2E Clearable Duplicate").count() == 1
 
