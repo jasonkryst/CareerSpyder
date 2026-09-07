@@ -135,6 +135,7 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 | `CAREERSPYDER_DB_PATH` | No (default `/app/data/state.db`) | SQLite file location. |
 | `CAREERSPYDER_SOURCES_PATH` | No (default `/app/config/sources.json`) | Source list location. |
 | `PUBLIC_BASE_URL` | No | The site's own public URL (e.g. `https://jobs.example.com`), used to build the "View all jobs" link in digest emails. Without it, the link is omitted. |
+| `GA_MEASUREMENT_ID` | No | A GA4 Measurement ID (format `G-XXXXXXXXXX`) to enable Google Analytics page-view tracking. Without it, no `gtag.js` script is loaded and the CSP stays locked down to just this site. |
 
 ### `sources.json`
 
