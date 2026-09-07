@@ -5,6 +5,46 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.57.0] — 2026-09-07
+
+### Security
+
+- **SSRF hardening on all source-URL adapters (issue #131).** `GenericHtmlSource.url`,
+  `LinkedInSource.url`, `IndeedSource.url`, `InforSource.url`, `TalentBrewSource.base_url`,
+  `WorkdaySource.career_site_url`, and `PhenomPeopleSource.career_site_url` now reject any
+  scheme other than `http`/`https` at save time. Every outbound request these adapters make
+  (`requests` and Playwright's `page.goto`, including each redirect hop) is now validated
+  against a new `app/security/ssrf_guard.py` module that resolves the hostname and rejects
+  loopback/link-local/private/reserved targets before the request is made.
+- **Origin/Sec-Fetch-Site check on state-changing requests (issue #131).** All `POST`/`PUT`/
+  `PATCH`/`DELETE` routes now reject cross-origin requests via a new `OriginCheckMiddleware`,
+  closing the gap that made the SSRF above exploitable blind from an unrelated malicious
+  webpage. No cookies or session state were added.
+
+### Fixed
+
+- **SQLite WAL mode and busy_timeout (issue #132).** `init_db` now enables `PRAGMA
+  journal_mode=WAL` and `PRAGMA busy_timeout=5000`, and the dashboard's "Check job URLs"
+  background task now serializes against `orchestrator._run_lock` the same way overlapping
+  scrapes already do — previously it could race a concurrent run on the shared connection
+  with no coordination.
+- **Non-blocking, cached location-override geocoding (issue #133).** Saving a manual location
+  override now checks the `geocoded_locations` cache before calling Nominatim, and the
+  (still-possible) network call is wrapped in `run_in_threadpool` so it can no longer freeze
+  the app's single asyncio event loop for up to 10 seconds.
+- **Accessible confirm modal (issue #134).** The shared `#confirm-modal` dialog that gates
+  every delete/overwrite action now sets `aria-labelledby`/`aria-describedby`, so screen
+  reader users hear what they're confirming, not just "Cancel, button."
+
+### Testing
+
+- Added real (mocked-Playwright) test coverage for `app/adapters/browser.py`'s
+  `render_html` — the UA-spoofing workaround and navigation args are now asserted directly
+  (issue #135).
+- Added coverage for `app/adapters/infor.py`'s pagination/polling branch logic
+  (disabled-button stop, zero-card stop, multi-page click loop) via a fake Playwright frame,
+  and extracted the polling predicate into a pure `_title_changed` function (issue #136).
+
 ## [0.56.1] — 2026-09-03
 
 ### Changed
