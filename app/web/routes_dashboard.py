@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import checker, db
+from app.orchestrator import _run_lock
 from app.scheduler import run_and_notify
 from app.web.pagination import paginate
 from app.web.templating import templates
@@ -49,8 +50,13 @@ def run_now(request: Request, background_tasks: BackgroundTasks):
 
 
 def _run_url_check(conn, run_id: int) -> None:
-    removed = checker.check_job_urls(conn)
-    db.finish_run(conn, run_id, removed, [])
+    # Serializes against orchestrator.run_once the same way two overlapping
+    # runs already serialize against each other (see #132) -- without this,
+    # clicking "Check job URLs" mid-scrape writes through the shared
+    # connection from two threads with no coordination.
+    with _run_lock:
+        removed = checker.check_job_urls(conn)
+        db.finish_run(conn, run_id, removed, [])
 
 
 @router.post("/check-urls")

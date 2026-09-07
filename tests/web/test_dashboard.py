@@ -433,3 +433,42 @@ def test_dashboard_js_intercepts_check_urls_form(client):
     resp = client.get("/static/dashboard.js")
 
     assert "check-urls-form" in resp.text
+
+
+# --- check-urls locking (issue #132) ---
+
+def test_check_urls_and_orchestrator_run_are_mutually_exclusive(client):
+    """Regression for #132: /check-urls must serialize against a concurrent
+    orchestrator run through the same lock run_once() uses, instead of
+    racing the shared connection unlocked."""
+    import threading
+    from unittest.mock import patch
+
+    from app import orchestrator
+    from app.web.routes_dashboard import _run_url_check
+
+    conn = client.app.state.conn
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_check_urls(_conn):
+        started.set()
+        release.wait(timeout=2)
+        return 0
+
+    with patch("app.web.routes_dashboard.checker.check_job_urls", side_effect=blocking_check_urls):
+        t = threading.Thread(target=_run_url_check, args=(conn, 1))
+        t.start()
+        assert started.wait(timeout=2)
+
+        # The lock must already be held by the thread above -- release it
+        # immediately if the acquire unexpectedly succeeds so a failing
+        # assertion here can't leave the shared module-level lock stuck.
+        acquired = orchestrator._run_lock.acquire(blocking=False)
+        if acquired:
+            orchestrator._run_lock.release()
+
+        release.set()
+        t.join(timeout=2)
+
+    assert not acquired, "expected _run_url_check to hold orchestrator._run_lock while checking URLs"

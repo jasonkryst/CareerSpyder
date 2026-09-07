@@ -1546,3 +1546,15 @@ def test_count_jobs_with_radius_filter(tmp_db_path):
                        lat=34.0522, lng=-118.2437)
 
     assert db.count_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0) == 1
+
+
+# --- WAL mode / busy_timeout (issue #132) ---
+
+def test_init_db_enables_wal_mode_and_busy_timeout(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+
+    assert journal_mode.lower() == "wal"
+    assert busy_timeout == 5000

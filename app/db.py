@@ -147,6 +147,14 @@ def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.create_function("haversine_miles", 4, _haversine_miles)
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL lets readers and writers run concurrently instead of blocking each
+    # other outright, and busy_timeout makes a writer that DOES need to wait
+    # (e.g. two overlapping writes) retry for up to 5s instead of raising
+    # "database is locked" immediately -- this connection is shared across
+    # the FastAPI threadpool, the event loop thread, BackgroundTasks, and
+    # APScheduler's own thread (see #132).
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(SCHEMA)
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
