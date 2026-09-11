@@ -1,6 +1,8 @@
 {
   "name": "CareerSpyder",
   "short_name": "CareerSpyder",
+  "categories": ["career", "job", "search", "employment"],
+  "description": "CareerSpyder is a web application that helps users find job opportunities and career resources.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,5 +12,25 @@
     { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/static/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Jobs",
+      "short_name": "Jobs",
+      "description": "Quickly search for job opportunities.",
+      "url": "/jobs"
+    },
+    {
+      "name": "Sources",
+      "short_name": "Sources",
+      "description": "Manage and view your saved job sources.",
+      "url": "/sources"
+    },
+    {
+      "name": "Preferences",
+      "short_name": "Preferences",
+      "description": "Customize your job search preferences.",
+      "url": "/settings/preferences"
+    }
   ]
 }
