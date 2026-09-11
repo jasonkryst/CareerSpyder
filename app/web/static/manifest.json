@@ -18,19 +18,22 @@
       "name": "Jobs",
       "short_name": "Jobs",
       "description": "Quickly search for job opportunities.",
-      "url": "/jobs"
+      "url": "/jobs",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Sources",
       "short_name": "Sources",
       "description": "Manage and view your saved job sources.",
-      "url": "/sources"
+      "url": "/sources",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Preferences",
       "short_name": "Preferences",
       "description": "Customize your job search preferences.",
-      "url": "/settings/preferences"
+      "url": "/settings/preferences",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
