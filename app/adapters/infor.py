@@ -118,15 +118,33 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
             page = browser.new_page()
             install_ssrf_guard(page)
             page.goto(url, wait_until="networkidle", timeout=30000)
-            # When the portal requires SSO login its JS calls
-            # $('#parentIframe').remove() before networkidle fires.
-            # Detect this early instead of waiting 30 s for cards inside a
-            # frame that no longer exists.
-            if page.locator("#parentIframe").count() == 0:
-                raise RuntimeError(
-                    f"Infor portal at {url!r} requires authentication — "
-                    "job listings are not accessible to unauthenticated visitors"
-                )
+
+            # v2 portals (post-2025 Infor list-view SPA) render job cards
+            # directly in div#jobListScreen → div.gridContent in the main page
+            # body.  The iframe used by v1 (Slickgrid card-stack) is absent or
+            # frozen at blank.html and holds no cards in v2.
+            if page.locator("#jobListScreen").count() > 0:
+                page.locator(_V2_CARD).first.wait_for(timeout=30000)
+
+                for _ in range(page_number - 1):
+                    load_more = page.locator("#gridBottom")
+                    if load_more.count() == 0 or not load_more.is_visible():
+                        return None
+                    prev_count = page.locator(_V2_CARD).count()
+                    load_more.click()
+                    deadline = time.monotonic() + 15.0
+                    while time.monotonic() < deadline:
+                        if page.locator(_V2_CARD).count() > prev_count:
+                            break
+                        time.sleep(0.5)
+                    else:
+                        return None
+
+                if page.locator(_V2_CARD).count() == 0:
+                    return None
+                return page.locator("div.gridContent").inner_html()
+
+            # v1: job cards inside #parentIframe (Slickgrid card-stack)
             frame = page.frame_locator("#parentIframe")
             frame.locator(_CARD_SELECTOR).first.wait_for(timeout=30000)
 
