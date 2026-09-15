@@ -35,10 +35,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **Python 3.14 pinned as minimum version (issue N).** The Docker base image
-  was already `python:3.14-slim`; `pyproject.toml`'s `requires-python` and the
-  README now reflect this. A `.python-version` file is added for pyenv users so
-  local and container environments match exactly.
+- **CI and local dev now match Docker's Python 3.14 runtime (issue N).** The
+  Docker base image was already `python:3.14-slim` but CI workflows and the
+  README both said 3.12. CI workflows are updated to `python-version: "3.14"`;
+  a `.python-version` file is added for pyenv users; README updated. The package
+  metadata stays `requires-python = ">=3.12"` so pip installs on earlier Pythons
+  are not blocked for users who want to try.
 
 ## [0.63.0] — 2026-09-14
 

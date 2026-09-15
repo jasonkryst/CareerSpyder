@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "careerspyder"
 version = "0.64.0"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
