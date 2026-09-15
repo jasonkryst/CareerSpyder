@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from psycopg_pool import ConnectionPool
 
 from app import db
 from app.scheduler import create_scheduler
@@ -19,29 +20,31 @@ from app.web.security_headers import SecurityHeadersMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db_path = os.environ.get("CAREERSPYDER_DB_PATH", "/app/data/state.db")
+    dsn = os.environ.get("DATABASE_URL", "postgresql://careerspyder:dev@localhost:5432/careerspyder")
     sources_path = os.environ.get("CAREERSPYDER_SOURCES_PATH", "/app/config/sources.json")
     run_cron = os.environ.get("RUN_CRON", "0 7 * * *")
     tz = os.environ.get("TZ", "UTC")
 
-    conn = db.init_db(db_path)
-    db.seed_settings_if_empty(
-        conn,
-        os.environ.get("SMTP_HOST", ""),
-        int(os.environ.get("SMTP_PORT", "587")),
-        os.environ.get("SMTP_USER", ""),
-        os.environ.get("EMAIL_FROM", ""),
-        os.environ.get("EMAIL_TO", ""),
-    )
+    pool: ConnectionPool = db.init_db(dsn)
 
-    app.state.conn = conn
+    with pool.connection() as conn:
+        db.seed_settings_if_empty(
+            conn,
+            os.environ.get("SMTP_HOST", ""),
+            int(os.environ.get("SMTP_PORT", "587")),
+            os.environ.get("SMTP_USER", ""),
+            os.environ.get("EMAIL_FROM", ""),
+            os.environ.get("EMAIL_TO", ""),
+        )
+
+    app.state.pool = pool
     app.state.sources_path = sources_path
-    app.state.scheduler = create_scheduler(conn, sources_path, run_cron, tz)
+    app.state.scheduler = create_scheduler(pool, sources_path, run_cron, tz)
 
     yield
 
     app.state.scheduler.shutdown()
-    conn.close()
+    pool.close()
 
 
 app = FastAPI(title="CareerSpyder", lifespan=lifespan)

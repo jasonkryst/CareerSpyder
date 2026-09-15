@@ -51,18 +51,20 @@ def settings_redirect():
 
 @router.get("/settings/email", response_class=HTMLResponse)
 def show_settings(request: Request):
-    settings = db.get_settings(request.app.state.conn)
+    with request.app.state.pool.connection() as conn:
+        settings = db.get_settings(conn)
     return templates.TemplateResponse(request, "settings_email.html", {"settings": settings})
 
 
 @router.post("/settings/email")
 async def save_settings(request: Request):
     form = dict((await request.form()).items())
-    db.save_settings(
-        request.app.state.conn,
-        _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
-        _str_field(form, "email_from"),
-    )
+    with request.app.state.pool.connection() as conn:
+        db.save_settings(
+            conn,
+            _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
+            _str_field(form, "email_from"),
+        )
     return flash_redirect("/settings/email", "Email settings saved.")
 
 
@@ -73,7 +75,8 @@ def show_settings_data(request: Request):
 
 @router.get("/settings/preferences", response_class=HTMLResponse)
 def show_settings_preferences(request: Request):
-    settings = db.get_settings(request.app.state.conn)
+    with request.app.state.pool.connection() as conn:
+        settings = db.get_settings(conn)
     email_days_selected = set((settings["email_days"] if settings else "").split(","))
     email_to_list = _split_emails(settings["email_to"] if settings else "") or [""]
     digest_exclude_statuses_set = set(
@@ -110,7 +113,8 @@ async def save_preferences(request: Request):
 
     invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
     if invalid:
-        settings = db.get_settings(request.app.state.conn)
+        with request.app.state.pool.connection() as conn:
+            settings = db.get_settings(conn)
         digest_exclude_statuses_set = raw_exclude
         return templates.TemplateResponse(
             request, "settings_preferences.html",
@@ -125,17 +129,19 @@ async def save_preferences(request: Request):
         )
 
     email_to = ",".join(submitted_emails)
-    db.save_preferences(
-        request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
-        digest_max_per_company=digest_max_per_company,
-        digest_exclude_statuses=digest_exclude_statuses,
-    )
+    with request.app.state.pool.connection() as conn:
+        db.save_preferences(
+            conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+            digest_max_per_company=digest_max_per_company,
+            digest_exclude_statuses=digest_exclude_statuses,
+        )
     return flash_redirect("/settings/preferences", "Preferences saved.")
 
 
 @router.post("/settings/data/clear-cache")
 def clear_cache(request: Request):
-    db.clear_jobs(request.app.state.conn)
+    with request.app.state.pool.connection() as conn:
+        db.clear_jobs(conn)
     return flash_redirect(
         "/settings/data",
         "Job cache cleared. The next run will re-report every currently known job as new.",
@@ -148,9 +154,9 @@ DEFAULT_PREFERENCES = {
 }
 
 
-def _export_payload(request: Request) -> dict:
-    sources = config.load_sources(request.app.state.sources_path)
-    settings = db.get_settings(request.app.state.conn)
+def _export_payload(conn, sources_path: str) -> dict:
+    sources = config.load_sources(sources_path)
+    settings = db.get_settings(conn)
     if settings is None:
         preferences = dict(DEFAULT_PREFERENCES)
     else:
@@ -209,7 +215,8 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, st
 
 @router.get("/settings/data/export")
 def export_settings(request: Request):
-    payload = json.dumps(_export_payload(request), indent=2)
+    with request.app.state.pool.connection() as conn:
+        payload = json.dumps(_export_payload(conn, request.app.state.sources_path), indent=2)
     return Response(
         content=payload,
         media_type="application/json",
@@ -241,10 +248,11 @@ async def import_settings(request: Request):
     parsed_preferences = _parse_preferences_import(json.loads(raw))
     if parsed_preferences is not None:
         email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max, digest_excl = parsed_preferences
-        db.save_preferences(
-            request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
-            digest_max_per_company=digest_max, digest_exclude_statuses=digest_excl,
-        )
+        with request.app.state.pool.connection() as conn:
+            db.save_preferences(
+                conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+                digest_max_per_company=digest_max, digest_exclude_statuses=digest_excl,
+            )
 
     redirect_message = f"Imported {len(sources)} source(s)."
     if parsed_preferences is not None:
