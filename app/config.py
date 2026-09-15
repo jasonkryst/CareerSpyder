@@ -1,10 +1,16 @@
 import json
 import os
+import threading
 import uuid
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from pydantic import AfterValidator, BaseModel, Field
+
+# Serializes all read-modify-write cycles on sources.json within a process.
+# A single FastAPI process can receive concurrent requests (two browser tabs,
+# scheduler + UI), and load-then-save without a lock loses one write.
+_sources_lock = threading.Lock()
 
 
 def _require_http_scheme(url: str) -> str:
@@ -158,32 +164,36 @@ def export_sources_json(path: str) -> str:
 def import_sources_json(path: str, raw: bytes) -> list[SourceConfig]:
     data = json.loads(raw)
     sources = SourcesFile.model_validate(data).sources
-    save_sources(path, sources)
+    with _sources_lock:
+        save_sources(path, sources)
     return sources
 
 
 def add_source(path: str, source) -> None:
-    sources = load_sources(path)
-    sources.append(source)
-    save_sources(path, sources)
+    with _sources_lock:
+        sources = load_sources(path)
+        sources.append(source)
+        save_sources(path, sources)
 
 
 def update_source(path: str, source_id: str, updated) -> None:
-    sources = load_sources(path)
-    for i, s in enumerate(sources):
-        if s.id == source_id:
-            sources[i] = updated
-            save_sources(path, sources)
-            return
+    with _sources_lock:
+        sources = load_sources(path)
+        for i, s in enumerate(sources):
+            if s.id == source_id:
+                sources[i] = updated
+                save_sources(path, sources)
+                return
     raise KeyError(source_id)
 
 
 def delete_source(path: str, source_id: str) -> None:
-    sources = load_sources(path)
-    remaining = [s for s in sources if s.id != source_id]
-    if len(remaining) == len(sources):
-        raise KeyError(source_id)
-    save_sources(path, remaining)
+    with _sources_lock:
+        sources = load_sources(path)
+        remaining = [s for s in sources if s.id != source_id]
+        if len(remaining) == len(sources):
+            raise KeyError(source_id)
+        save_sources(path, remaining)
 
 
 def get_source(path: str, source_id: str):

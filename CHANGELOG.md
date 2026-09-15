@@ -5,6 +5,43 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.64.0] — 2026-09-14
+
+### Fixed
+
+- **SMTP port 465 (implicit TLS) now works (issue I).** The emailer previously
+  always used `STARTTLS`, which fails on port 465 because the server expects an
+  immediate TLS handshake. Port 465 now uses `smtplib.SMTP_SSL`; all other ports
+  continue to use `SMTP` + `STARTTLS`.
+
+- **Pydantic validation errors shown as clean field messages, not raw tracebacks
+  (issue J).** Source and import validation failures now display
+  `field: message` pairs (e.g. "board_token: String should have at least 1
+  character") instead of the raw pydantic error dump with internal type codes
+  and documentation URLs.
+
+- **"Status" filter label renamed to "Listing status" (issue K).** The filter
+  that selects Active / Removed jobs was labelled "Status", clashing with
+  the "Job status" filter (Applied / Ignored / etc.). It is now "Listing status".
+
+- **Validation banners now carry `role="alert"` (issue L).** Error `<div>`s in
+  the source form, settings/data, and settings/preferences pages now include
+  `role="alert"` so assistive technologies announce them immediately.
+
+- **sources.json writes are now protected by a threading lock (issue M).**
+  Concurrent requests (two browser tabs, scheduler + UI) could race on the
+  load → modify → save cycle and silently lose one write. A module-level
+  `threading.Lock` in `config.py` serializes all read-modify-write operations.
+
+### Changed
+
+- **CI and local dev now match Docker's Python 3.14 runtime (issue N).** The
+  Docker base image was already `python:3.14-slim` but CI workflows and the
+  README both said 3.12. CI workflows are updated to `python-version: "3.14"`;
+  a `.python-version` file is added for pyenv users; README updated. The package
+  metadata stays `requires-python = ">=3.12"` so pip installs on earlier Pythons
+  are not blocked for users who want to try.
+
 ## [0.63.0] — 2026-09-14
 
 ### Changed

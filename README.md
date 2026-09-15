@@ -258,7 +258,9 @@ Every pull request runs five GitHub Actions workflows: `lint` (Ruff), `typecheck
 
 ## Development
 
-Requirements: Python 3.12+.
+Requirements: Python 3.14 (matches the Docker base image and CI — a
+`.python-version` file is included for pyenv users). Python 3.12+ works but
+is not tested.
 
 ```bash
 pip install -e ".[dev]"
