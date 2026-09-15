@@ -11,474 +11,588 @@ def _configure(conn, email_days="mon,tue,wed,thu,fri,sat,sun", resend_jobs=False
     db.save_preferences(conn, email_days, resend_jobs, email_to)
 
 
-def test_run_and_notify_sends_email_when_digest_present(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_sends_email_when_digest_present(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_run_once.assert_called_once()
-    mock_digest.assert_called_once()
-    call_args, call_kwargs = mock_digest.call_args
-    assert call_args == ([], ["Bad Co"], "new job")
-    assert call_kwargs["statuses"] == {}
-    assert call_kwargs["jobs_url"] is None
-    assert "searched_at" in call_kwargs
-    mock_send.assert_called_once_with(
-        "smtp.example.com", 587, "user", "secret", "from@x.test", ["to@x.test"], "Subj", "<p>Body</p>",
-    )
+        mock_run_once.assert_called_once()
+        mock_digest.assert_called_once()
+        call_args, call_kwargs = mock_digest.call_args
+        assert call_args == ([], ["Bad Co"], "new job")
+        assert call_kwargs["statuses"] == {}
+        assert call_kwargs["jobs_url"] is None
+        assert "searched_at" in call_kwargs
+        mock_send.assert_called_once_with(
+            "smtp.example.com", 587, "user", "secret", "from@x.test", ["to@x.test"], "Subj", "<p>Body</p>",
+        )
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_skips_email_when_digest_is_none(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_skips_email_when_digest_is_none(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": []})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": []})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=None), \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=None), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_not_called()
+        mock_send.assert_not_called()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_swallows_email_send_failures(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_swallows_email_send_failures(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email", side_effect=RuntimeError("smtp exploded")):
-        scheduler.run_and_notify(conn, sources_path)  # must not raise
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email", side_effect=RuntimeError("smtp exploded")):
+            scheduler.run_and_notify(pool, sources_path)  # must not raise
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_does_not_crash_when_smtp_password_unset(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_does_not_crash_when_smtp_password_unset(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.delenv("SMTP_PASSWORD", raising=False)
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_called_once()
-    assert mock_send.call_args[0][3] == ""
+        mock_send.assert_called_once()
+        assert mock_send.call_args[0][3] == ""
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_scans_and_skips_only_email_when_no_settings_configured(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_scans_and_skips_only_email_when_no_settings_configured(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    # No db.save_settings/save_preferences call, so db.get_settings(conn) returns None.
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        # No db.save_settings/save_preferences call, so db.get_settings(conn) returns None.
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": ["Bad Co"], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)  # must not raise
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)  # must not raise
 
-    mock_run_once.assert_called_once()  # scan still happens, matching today's behavior
-    mock_send.assert_not_called()
+        mock_run_once.assert_called_once()  # scan still happens, matching today's behavior
+        mock_send.assert_not_called()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_skips_entire_run_when_no_days_selected(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_skips_entire_run_when_no_days_selected(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, email_days="")
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, email_days="")
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    with patch("app.scheduler.orchestrator.run_once") as mock_run_once, \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once") as mock_run_once, \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_run_once.assert_not_called()
-    mock_send.assert_not_called()
+        mock_run_once.assert_not_called()
+        mock_send.assert_not_called()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_force_bypasses_day_gate(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_force_bypasses_day_gate(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, email_days="")
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, email_days="")
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [], "failed_sources": []})()
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": []})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
-         patch("app.scheduler.digest.build_digest", return_value=None):
-        scheduler.run_and_notify(conn, sources_path, force=True)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary) as mock_run_once, \
+             patch("app.scheduler.digest.build_digest", return_value=None):
+            scheduler.run_and_notify(pool, sources_path, force=True)
 
-    mock_run_once.assert_called_once()
+        mock_run_once.assert_called_once()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_skips_email_when_no_recipients_configured(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_skips_email_when_no_recipients_configured(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, email_to="")
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, email_to="")
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
-    fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
+        fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+        fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_not_called()
+        mock_send.assert_not_called()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_splits_comma_separated_recipients(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_splits_comma_separated_recipients(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, email_to="a@x.test, b@x.test")
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, email_to="a@x.test, b@x.test")
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
-    fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
+        fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+        fake_summary = type("S", (), {"new_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    assert mock_send.call_args[0][5] == ["a@x.test", "b@x.test"]
+        assert mock_send.call_args[0][5] == ["a@x.test", "b@x.test"]
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, resend_jobs=True)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, resend_jobs=True)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
-    fake_summary = type("S", (), {
-        "new_jobs": [], "found_jobs": [fake_job], "failed_sources": [], "run_id": 1,
-    })()
+        fake_job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+        fake_summary = type("S", (), {
+            "new_jobs": [], "found_jobs": [fake_job], "failed_sources": [], "run_id": 1,
+        })()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    call_args, call_kwargs = mock_digest.call_args
-    assert call_args == ([fake_job], [], "job")
-    assert call_kwargs["statuses"] == {}
-    mock_send.assert_called_once()
+        call_args, call_kwargs = mock_digest.call_args
+        assert call_args == ([fake_job], [], "job")
+        assert call_kwargs["statuses"] == {}
+        mock_send.assert_called_once()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_passes_emailed_keys_to_digest_when_resend_enabled(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_passes_emailed_keys_to_digest_when_resend_enabled(pg_dsn, tmp_path, monkeypatch):
     """Regression: when resend=ON, build_digest must receive emailed_keys so it
     can split each company section into Newly/Already identified."""
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, resend_jobs=True)
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, resend_jobs=True)
 
-    # Save and mark job-a as previously emailed; job-b is new (never emailed).
-    run_id = db.start_run(conn)
-    old_job = Job(key="job-a", title="Old", url="https://x.test/a", source_name="s")
-    new_job = Job(key="job-b", title="New", url="https://x.test/b", source_name="s")
-    db.save_jobs(conn, [old_job, new_job], run_id)
-    db.mark_emailed(conn, ["job-a"])
+            # Save and mark job-a as previously emailed; job-b is new (never emailed).
+            run_id = db.start_run(conn)
+            old_job = Job(key="job-a", title="Old", url="https://x.test/a", source_name="s")
+            new_job = Job(key="job-b", title="New", url="https://x.test/b", source_name="s")
+            db.save_jobs(conn, [old_job, new_job], run_id)
+            db.mark_emailed(conn, ["job-a"])
 
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {
-        "new_jobs": [new_job],
-        "found_jobs": [old_job, new_job],
-        "failed_sources": [],
-        "run_id": run_id,
-    })()
+        fake_summary = type("S", (), {
+            "new_jobs": [new_job],
+            "found_jobs": [old_job, new_job],
+            "failed_sources": [],
+            "run_id": run_id,
+        })()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
 
-    _, call_kwargs = mock_digest.call_args
-    assert "emailed_keys" in call_kwargs
-    assert call_kwargs["emailed_keys"] == {"job-a"}
+        _, call_kwargs = mock_digest.call_args
+        assert "emailed_keys" in call_kwargs
+        assert call_kwargs["emailed_keys"] == {"job-a"}
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_passes_emailed_keys_none_when_resend_disabled(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_passes_emailed_keys_none_when_resend_disabled(pg_dsn, tmp_path, monkeypatch):
     """When resend=OFF, emailed_keys must be None so the flat layout is used."""
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, resend_jobs=False)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, resend_jobs=False)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
-    fake_summary = type("S", (), {
-        "new_jobs": [job], "found_jobs": [job], "failed_sources": [], "run_id": 1,
-    })()
+        job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+        fake_summary = type("S", (), {
+            "new_jobs": [job], "found_jobs": [job], "failed_sources": [], "run_id": 1,
+        })()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
 
-    _, call_kwargs = mock_digest.call_args
-    assert call_kwargs.get("emailed_keys") is None
+        _, call_kwargs = mock_digest.call_args
+        assert call_kwargs.get("emailed_keys") is None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    run_id = db.start_run(conn)
-    job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-    db.save_jobs(conn, [job], run_id)
-    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+            run_id = db.start_run(conn)
+            job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+            db.save_jobs(conn, [job], run_id)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
+        fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
 
-    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+        with pool.connection() as conn:
+            assert db.list_jobs(conn)[0]["emailed_at"] is not None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_does_not_mark_emailed_when_send_fails(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_does_not_mark_emailed_when_send_fails(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    run_id = db.start_run(conn)
-    job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-    db.save_jobs(conn, [job], run_id)
-    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+            run_id = db.start_run(conn)
+            job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+            db.save_jobs(conn, [job], run_id)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
+        fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email", side_effect=RuntimeError("smtp exploded")):
-        scheduler.run_and_notify(conn, sources_path)  # must not raise
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email", side_effect=RuntimeError("smtp exploded")):
+            scheduler.run_and_notify(pool, sources_path)  # must not raise
 
-    assert db.list_jobs(conn)[0]["emailed_at"] is None
+        with pool.connection() as conn:
+            assert db.list_jobs(conn)[0]["emailed_at"] is None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, resend_jobs=True)
-    run_id = db.start_run(conn)
-    old_job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-    db.save_jobs(conn, [old_job], run_id)
-    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, resend_jobs=True)
+            run_id = db.start_run(conn)
+            old_job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
+            db.save_jobs(conn, [old_job], run_id)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    # No new jobs this run, but resend is on -- the digest sends found_jobs, so
-    # mark_emailed must key off that, not summary.new_jobs (which is empty).
-    fake_summary = type("S", (), {
-        "new_jobs": [], "found_jobs": [old_job], "failed_sources": [], "run_id": run_id,
-    })()
+        # No new jobs this run, but resend is on -- the digest sends found_jobs, so
+        # mark_emailed must key off that, not summary.new_jobs (which is empty).
+        fake_summary = type("S", (), {
+            "new_jobs": [], "found_jobs": [old_job], "failed_sources": [], "run_id": run_id,
+        })()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
 
-    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+        with pool.connection() as conn:
+            assert db.list_jobs(conn)[0]["emailed_at"] is not None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_end_to_end_stays_silent_on_clean_run(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_end_to_end_stays_silent_on_clean_run(pg_dsn, tmp_path, monkeypatch):
     # Real orchestrator + real digest builder, only the network boundary
     # (adapter fetch, email send) is faked. Covers the "no new jobs, no
     # failures -> no email" path with real objects, not the fully-mocked
     # wiring the other tests in this file use.
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [])
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
-        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-    ]}))
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        ]}))
 
-    with patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_not_called()
+        mock_send.assert_not_called()
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_end_to_end_sends_real_digest_for_a_new_job(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_end_to_end_sends_real_digest_for_a_new_job(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     job = Job(key="gh:1", title="<Engineer>", url="https://acme.test/1", company="Acme", source_name="Acme")
     monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
-        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-    ]}))
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        ]}))
 
-    with patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_called_once()
-    html_body = mock_send.call_args[0][7]
-    assert "&lt;Engineer&gt;" in html_body  # real digest builder escapes it
-    assert "<Engineer>" not in html_body
-    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+        mock_send.assert_called_once()
+        html_body = mock_send.call_args[0][7]
+        assert "&lt;Engineer&gt;" in html_body  # real digest builder escapes it
+        assert "<Engineer>" not in html_body
+        with pool.connection() as conn:
+            assert db.list_jobs(conn)[0]["emailed_at"] is not None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_includes_source_and_existing_status_in_real_digest(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_includes_source_and_existing_status_in_real_digest(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn, resend_jobs=True)
-    run_id = db.start_run(conn)
-    job = Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")
-    db.save_jobs(conn, [job], run_id)
-    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    db.set_job_status(conn, "k1", "not_interested")
-    monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
-        {"id": "s1", "name": "Acme Board", "type": "greenhouse", "board_token": "acme"},
-    ]}))
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn, resend_jobs=True)
+            run_id = db.start_run(conn)
+            job = Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")
+            db.save_jobs(conn, [job], run_id)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+            db.set_job_status(conn, "k1", "not_interested")
+        monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+            {"id": "s1", "name": "Acme Board", "type": "greenhouse", "board_token": "acme"},
+        ]}))
 
-    with patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    mock_send.assert_called_once()
-    html_body = mock_send.call_args[0][7]
-    assert "Acme Board" in html_body
-    assert "Not Interested" in html_body
+        mock_send.assert_called_once()
+        html_body = mock_send.call_args[0][7]
+        assert "Acme Board" in html_body
+        assert "Not Interested" in html_body
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_includes_jobs_link_when_public_base_url_is_set(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_includes_jobs_link_when_public_base_url_is_set(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://careerspyder.example.com")
     job = Job(key="gh:1", title="Engineer", url="https://acme.test/1", company="Acme", source_name="Acme")
     monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
-        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-    ]}))
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        ]}))
 
-    with patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    html_body = mock_send.call_args[0][7]
-    assert 'href="https://careerspyder.example.com/jobs"' in html_body
+        html_body = mock_send.call_args[0][7]
+        assert 'href="https://careerspyder.example.com/jobs"' in html_body
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_omits_jobs_link_when_public_base_url_is_unset(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_omits_jobs_link_when_public_base_url_is_unset(pg_dsn, tmp_path, monkeypatch):
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
     job = Job(key="gh:1", title="Engineer", url="https://acme.test/1", company="Acme", source_name="Acme")
     monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text(json.dumps({"sources": [
-        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-    ]}))
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text(json.dumps({"sources": [
+            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        ]}))
 
-    with patch("app.scheduler.emailer.send_email") as mock_send:
-        scheduler.run_and_notify(conn, sources_path)
+        with patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool, sources_path)
 
-    html_body = mock_send.call_args[0][7]
-    assert "View all jobs" not in html_body
+        html_body = mock_send.call_args[0][7]
+        assert "View all jobs" not in html_body
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_rescues_jobs_dropped_by_a_prior_crash(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_rescues_jobs_dropped_by_a_prior_crash(pg_dsn, tmp_path, monkeypatch):
     """Jobs saved in a prior run but never emailed (crash window) must be included
     in the next digest even though they are not new."""
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    run_id = db.start_run(conn)
-    stranded = Job(key="stranded-1", title="Old Job", url="https://x.test/s", source_name="s")
-    db.save_jobs(conn, [stranded], run_id)
-    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    # Simulate crash: save_jobs committed, mark_emailed never ran.  emailed_at IS NULL.
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+            run_id = db.start_run(conn)
+            stranded = Job(key="stranded-1", title="Old Job", url="https://x.test/s", source_name="s")
+            db.save_jobs(conn, [stranded], run_id)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+            # Simulate crash: save_jobs committed, mark_emailed never ran.  emailed_at IS NULL.
 
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    # This run finds no new jobs.
-    fake_summary = type("S", (), {"new_jobs": [], "found_jobs": [], "failed_sources": [], "run_id": run_id})()
+        # This run finds no new jobs.
+        fake_summary = type("S", (), {"new_jobs": [], "found_jobs": [], "failed_sources": [], "run_id": run_id})()
 
-    captured: list = []
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
-        call_args, _ = mock_digest.call_args
-        captured.extend(call_args[0])
+        captured: list = []
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
+            call_args, _ = mock_digest.call_args
+            captured.extend(call_args[0])
 
-    assert any(j.key == "stranded-1" for j in captured)
-    # And it should now be marked emailed.
-    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+        assert any(j.key == "stranded-1" for j in captured)
+        # And it should now be marked emailed.
+        with pool.connection() as conn:
+            assert db.list_jobs(conn)[0]["emailed_at"] is not None
+    finally:
+        pool.close()
 
 
-def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(tmp_db_path, tmp_path, monkeypatch):
+def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(pg_dsn, tmp_path, monkeypatch):
     """New jobs from the current run should not appear twice even though
     get_unemailed_jobs also returns them."""
+    from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    conn = db.init_db(tmp_db_path)
-    _configure(conn)
-    run_id = db.start_run(conn)
-    new_job = Job(key="new-1", title="New Job", url="https://x.test/n", source_name="s")
-    db.save_jobs(conn, [new_job], run_id)
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            _configure(conn)
+            run_id = db.start_run(conn)
+            new_job = Job(key="new-1", title="New Job", url="https://x.test/n", source_name="s")
+            db.save_jobs(conn, [new_job], run_id)
 
-    sources_path = str(tmp_path / "sources.json")
-    (tmp_path / "sources.json").write_text('{"sources": []}')
+        sources_path = str(tmp_path / "sources.json")
+        (tmp_path / "sources.json").write_text('{"sources": []}')
 
-    fake_summary = type("S", (), {"new_jobs": [new_job], "found_jobs": [new_job], "failed_sources": [], "run_id": run_id})()
+        fake_summary = type("S", (), {"new_jobs": [new_job], "found_jobs": [new_job], "failed_sources": [], "run_id": run_id})()
 
-    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
-         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
-         patch("app.scheduler.emailer.send_email"):
-        scheduler.run_and_notify(conn, sources_path)
-        call_args, _ = mock_digest.call_args
+        with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+             patch("app.scheduler.emailer.send_email"):
+            scheduler.run_and_notify(pool, sources_path)
+            call_args, _ = mock_digest.call_args
 
-    sent_keys = [j.key for j in call_args[0]]
-    assert sent_keys.count("new-1") == 1
+        sent_keys = [j.key for j in call_args[0]]
+        assert sent_keys.count("new-1") == 1
+    finally:
+        pool.close()
 
 
-def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):
-    conn = db.init_db(tmp_db_path)
+def test_create_scheduler_registers_daily_cron_job(pg_conn, tmp_path):
+    conn = pg_conn
     sources_path = str(tmp_path / "sources.json")
 
     sched = scheduler.create_scheduler(conn, sources_path, run_cron="0 8 * * *", tz="UTC")
@@ -491,9 +605,9 @@ def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):
         sched.shutdown()
 
 
-def test_create_scheduler_raises_on_invalid_cron(tmp_db_path, tmp_path):
+def test_create_scheduler_raises_on_invalid_cron(pg_conn, tmp_path):
     import pytest
-    conn = db.init_db(tmp_db_path)
+    conn = pg_conn
     sources_path = str(tmp_path / "sources.json")
 
     with pytest.raises(ValueError):

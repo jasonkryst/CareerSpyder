@@ -47,8 +47,8 @@ def test_findly_adapter_is_registered():
     assert "findly" in ADAPTERS
 
 
-def test_run_once_geocodes_pending_locations_via_an_injected_geocoder(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_geocodes_pending_locations_via_an_injected_geocoder(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -64,8 +64,8 @@ def test_run_once_geocodes_pending_locations_via_an_injected_geocoder(tmp_db_pat
     assert row == ("resolved", "Chicago, IL, USA")
 
 
-def test_run_once_does_not_abort_when_the_geocoding_step_raises(tmp_db_path, monkeypatch):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_does_not_abort_when_the_geocoding_step_raises(pg_conn, monkeypatch):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -84,8 +84,8 @@ def test_run_once_does_not_abort_when_the_geocoding_step_raises(tmp_db_path, mon
     assert runs[0]["finished_at"] is not None
 
 
-def test_run_once_collects_new_jobs_and_isolates_failures(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_collects_new_jobs_and_isolates_failures(pg_conn):
+    conn = pg_conn
     good_source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
     bad_source = LeverSource(id="s2", name="Bad Co", type="lever", board_token="bad")
 
@@ -107,8 +107,8 @@ def test_run_once_collects_new_jobs_and_isolates_failures(tmp_db_path):
     assert runs[0]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.lever.co/bad"}]
 
 
-def test_run_once_does_not_report_previously_seen_jobs_as_new(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_does_not_report_previously_seen_jobs_as_new(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -122,8 +122,8 @@ def test_run_once_does_not_report_previously_seen_jobs_as_new(tmp_db_path):
     assert len(second.new_jobs) == 0
 
 
-def test_run_once_applies_keyword_filters(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_applies_keyword_filters(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good",
                                include_keywords=["engineer"])
 
@@ -139,8 +139,8 @@ def test_run_once_applies_keyword_filters(tmp_db_path):
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
 
 
-def test_run_once_dedupes_jobs_with_same_key_across_sources(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_dedupes_jobs_with_same_key_across_sources(pg_conn):
+    conn = pg_conn
     source_a = GreenhouseSource(id="s1", name="Source A", type="greenhouse", board_token="a")
     source_b = LeverSource(id="s2", name="Source B", type="lever", board_token="b")
 
@@ -153,8 +153,8 @@ def test_run_once_dedupes_jobs_with_same_key_across_sources(tmp_db_path):
     assert len(summary.new_jobs) == 1
 
 
-def test_run_once_handles_unknown_source_type_without_aborting_run(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_handles_unknown_source_type_without_aborting_run(pg_conn):
+    conn = pg_conn
     good_source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
     bad_source = LeverSource(id="s2", name="Bad Co", type="lever", board_token="bad")
 
@@ -170,8 +170,8 @@ def test_run_once_handles_unknown_source_type_without_aborting_run(tmp_db_path):
     assert runs[0]["finished_at"] is not None
 
 
-def test_run_once_found_jobs_includes_already_known_jobs(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_found_jobs_includes_already_known_jobs(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -186,8 +186,8 @@ def test_run_once_found_jobs_includes_already_known_jobs(tmp_db_path):
     assert [j.key for j in second.new_jobs] == []
 
 
-def test_run_once_sets_source_id_on_saved_jobs(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_sets_source_id_on_saved_jobs(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -201,8 +201,8 @@ def test_run_once_sets_source_id_on_saved_jobs(tmp_db_path):
     assert rows[0]["source_id"] == "s1"
 
 
-def test_run_once_marks_a_job_removed_when_it_stops_appearing(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_marks_a_job_removed_when_it_stops_appearing(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
     calls = []
 
@@ -221,8 +221,8 @@ def test_run_once_marks_a_job_removed_when_it_stops_appearing(tmp_db_path):
     assert rows["gh:1"]["removed_at"] is not None
 
 
-def test_run_once_reactivates_a_removed_job_that_reappears(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_reactivates_a_removed_job_that_reappears(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
     responses = [
         [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1",
@@ -244,8 +244,8 @@ def test_run_once_reactivates_a_removed_job_that_reappears(tmp_db_path):
     assert rows["gh:1"]["removed_at"] is None
 
 
-def test_run_once_does_not_mark_jobs_removed_for_a_source_that_failed_this_run(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_does_not_mark_jobs_removed_for_a_source_that_failed_this_run(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
     calls = []
 
@@ -264,8 +264,8 @@ def test_run_once_does_not_mark_jobs_removed_for_a_source_that_failed_this_run(t
     assert rows["gh:1"]["removed_at"] is None
 
 
-def test_run_once_marks_jobs_removed_when_their_source_is_deleted_between_runs(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_marks_jobs_removed_when_their_source_is_deleted_between_runs(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def fake_fetch(source):
@@ -280,8 +280,8 @@ def test_run_once_marks_jobs_removed_when_their_source_is_deleted_between_runs(t
     assert rows["gh:1"]["removed_at"] is not None
 
 
-def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_it(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_it(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good",
                                include_keywords=["engineer"])
 
@@ -302,8 +302,8 @@ def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_
     assert rows["gh:1"]["removed_at"] is None
 
 
-def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
 
     def slow_fetch(source):
@@ -329,8 +329,8 @@ def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported
 
 # --- Failed source URL tests (issue #93) ---
 
-def test_run_once_failed_source_includes_constructed_greenhouse_url(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_failed_source_includes_constructed_greenhouse_url(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
@@ -341,8 +341,8 @@ def test_run_once_failed_source_includes_constructed_greenhouse_url(tmp_db_path)
     assert summary.failed_sources[0].url == "https://boards.greenhouse.io/bad-co"
 
 
-def test_run_once_failed_source_includes_constructed_lever_url(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_failed_source_includes_constructed_lever_url(pg_conn):
+    conn = pg_conn
     source = LeverSource(id="s1", name="Lever Co", type="lever", board_token="lever-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"lever": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
@@ -352,8 +352,8 @@ def test_run_once_failed_source_includes_constructed_lever_url(tmp_db_path):
     assert summary.failed_sources[0].url == "https://jobs.lever.co/lever-co"
 
 
-def test_run_once_failed_source_url_is_stored_in_db(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_run_once_failed_source_url_is_stored_in_db(pg_conn):
+    conn = pg_conn
     source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):

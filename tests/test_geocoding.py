@@ -181,8 +181,8 @@ class _FakeGeocoder:
         return self.results.get(location)
 
 
-def test_geocode_pending_resolves_a_pending_location(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_geocode_pending_resolves_a_pending_location(pg_conn):
+    conn = pg_conn
     conn.execute("INSERT INTO geocoded_locations (location, status) VALUES ('Chicago, IL', 'pending')")
     conn.commit()
     geocoder = _FakeGeocoder(results={
@@ -199,8 +199,8 @@ def test_geocode_pending_resolves_a_pending_location(tmp_db_path):
     assert row == ("resolved", "Chicago, IL, USA", "Chicago", "Illinois", "USA", 41.8, -87.6, "fake")
 
 
-def test_geocode_pending_marks_a_location_failed_when_geocoder_returns_none(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_geocode_pending_marks_a_location_failed_when_geocoder_returns_none(pg_conn):
+    conn = pg_conn
     conn.execute("INSERT INTO geocoded_locations (location, status) VALUES ('Remote', 'pending')")
     conn.commit()
     geocoder = _FakeGeocoder(results={"Remote": None})
@@ -211,8 +211,8 @@ def test_geocode_pending_marks_a_location_failed_when_geocoder_returns_none(tmp_
     assert row == ("failed",)
 
 
-def test_geocode_pending_never_requeries_already_resolved_or_failed_rows(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_geocode_pending_never_requeries_already_resolved_or_failed_rows(pg_conn):
+    conn = pg_conn
     conn.execute(
         "INSERT INTO geocoded_locations (location, status) VALUES "
         "('Chicago, IL', 'resolved'), ('Remote', 'failed'), ('New York, NY', 'pending')"
@@ -228,8 +228,8 @@ def test_geocode_pending_never_requeries_already_resolved_or_failed_rows(tmp_db_
     assert geocoder.calls == ["New York, NY"]
 
 
-def test_geocode_pending_catches_a_per_location_exception_and_marks_it_failed(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_geocode_pending_catches_a_per_location_exception_and_marks_it_failed(pg_conn):
+    conn = pg_conn
     conn.execute(
         "INSERT INTO geocoded_locations (location, status) VALUES "
         "('Boom Town', 'pending'), ('Chicago, IL', 'pending')"
@@ -249,10 +249,10 @@ def test_geocode_pending_catches_a_per_location_exception_and_marks_it_failed(tm
     assert chicago_row == ("resolved",)
 
 
-def test_geocode_pending_leaves_pending_on_transient_network_error(tmp_db_path):
+def test_geocode_pending_leaves_pending_on_transient_network_error(pg_conn):
     """A GeocoderTransientError must leave status='pending' so the location is
     retried on the next geocoding pass rather than permanently marked failed."""
-    conn = db.init_db(tmp_db_path)
+    conn = pg_conn
     conn.execute(
         "INSERT INTO geocoded_locations (location, status) VALUES "
         "('Network Town', 'pending'), ('Chicago, IL', 'pending')"
