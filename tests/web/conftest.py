@@ -4,6 +4,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(autouse=True)
+def _clear_geocode_zip_cache():
+    """The _geocode_zip lru_cache persists across tests; clear it so each test
+    gets a fresh geocode call rather than a stale cached result."""
+    from app.web.routes_jobs import _geocode_zip
+    _geocode_zip.cache_clear()
+    yield
+    _geocode_zip.cache_clear()
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("CAREERSPYDER_DB_PATH", str(tmp_path / "state.db"))
