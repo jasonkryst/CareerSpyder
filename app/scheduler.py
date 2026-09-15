@@ -50,6 +50,13 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
 
     secondary_source_ids = {s.id for s in sources if s.secondary}
     statuses = db.get_job_statuses(conn, [j.key for j in jobs_to_send])
+
+    exclude_statuses = {
+        s for s in ((settings or {}).get("digest_exclude_statuses") or "").split(",") if s
+    }
+    if exclude_statuses:
+        jobs_to_send = [j for j in jobs_to_send if statuses.get(j.key) not in exclude_statuses]
+
     public_base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     jobs_url = f"{public_base_url}/jobs" if public_base_url else None
 
@@ -62,6 +69,7 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
         statuses=statuses, searched_at=datetime.now(UTC), jobs_url=jobs_url,
         secondary_source_ids=secondary_source_ids,
         emailed_keys=emailed_keys,
+        max_per_company=(settings or {}).get("digest_max_per_company", 0),
     )
     if d is None:
         return

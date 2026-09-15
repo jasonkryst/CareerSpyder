@@ -350,6 +350,38 @@ def test_save_preferences_can_turn_off_hide_not_interested_on_map(tmp_db_path):
     assert settings["hide_not_interested_on_map"] is False
 
 
+def test_save_preferences_stores_digest_max_per_company(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test", digest_max_per_company=10)
+
+    settings = db.get_settings(conn)
+    assert settings["digest_max_per_company"] == 10
+
+
+def test_save_preferences_defaults_digest_max_per_company_to_zero(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["digest_max_per_company"] == 0
+
+
+def test_save_preferences_stores_digest_exclude_statuses(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test", digest_exclude_statuses="not_interested,rejected")
+
+    settings = db.get_settings(conn)
+    assert settings["digest_exclude_statuses"] == "not_interested,rejected"
+
+
+def test_save_preferences_defaults_digest_exclude_statuses_to_empty(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_preferences(conn, "mon", False, "a@x.test")
+
+    settings = db.get_settings(conn)
+    assert settings["digest_exclude_statuses"] == ""
+
+
 def test_init_db_adds_new_columns_to_a_pre_existing_database(tmp_db_path):
     import sqlite3
 
@@ -373,6 +405,8 @@ def test_init_db_adds_new_columns_to_a_pre_existing_database(tmp_db_path):
     assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
     assert settings["resend_jobs"] is False
     assert settings["hide_not_interested_on_map"] is True
+    assert settings["digest_max_per_company"] == 0
+    assert settings["digest_exclude_statuses"] == ""
 
 
 def test_init_db_is_idempotent_on_an_already_migrated_database(tmp_db_path):

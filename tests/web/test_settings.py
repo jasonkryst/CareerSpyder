@@ -131,7 +131,7 @@ def test_settings_preferences_page_shows_a_blank_recipient_row_when_none_stored(
 def test_settings_preferences_page_wraps_sections_in_cards(client):
     resp = client.get("/settings/preferences")
 
-    assert resp.text.count('class="card"') == 5
+    assert resp.text.count('class="card"') == 6
 
 
 def test_post_preferences_saves_days_resend_and_recipients(client):
@@ -317,6 +317,8 @@ def test_get_export_settings_returns_sources_and_preferences_as_download(client)
         "resend_jobs": False,
         "email_to": ["to@x.test"],
         "hide_not_interested_on_map": True,
+        "digest_max_per_company": 0,
+        "digest_exclude_statuses": [],
     }
 
 

@@ -159,6 +159,8 @@ def init_db(path: str) -> sqlite3.Connection:
     _add_column_if_missing(conn, "email_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun'")
     _add_column_if_missing(conn, "resend_jobs INTEGER NOT NULL DEFAULT 0")
     _add_column_if_missing(conn, "hide_not_interested_on_map INTEGER NOT NULL DEFAULT 1")
+    _add_column_if_missing(conn, "digest_max_per_company INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(conn, "digest_exclude_statuses TEXT NOT NULL DEFAULT ''")
     _add_column_if_missing(conn, "kind TEXT NOT NULL DEFAULT 'scrape'", table="runs")
     conn.commit()
     _migrate_jobs_table(conn)
@@ -282,7 +284,8 @@ def count_runs(conn: sqlite3.Connection, *, failures: str | None = None) -> int:
 def get_settings(conn: sqlite3.Connection) -> dict | None:
     row = conn.execute(
         "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs, "
-        "hide_not_interested_on_map FROM settings WHERE id = 1"
+        "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses "
+        "FROM settings WHERE id = 1"
     ).fetchone()
     if row is None:
         return None
@@ -291,6 +294,8 @@ def get_settings(conn: sqlite3.Connection) -> dict | None:
         "email_from": row[3], "email_to": row[4],
         "email_days": row[5], "resend_jobs": bool(row[6]),
         "hide_not_interested_on_map": bool(row[7]),
+        "digest_max_per_company": row[8] or 0,
+        "digest_exclude_statuses": row[9] or "",
     }
 
 
@@ -310,14 +315,21 @@ def save_settings(conn: sqlite3.Connection, smtp_host: str, smtp_port: int, smtp
 def save_preferences(
     conn: sqlite3.Connection, email_days: str, resend_jobs: bool, email_to: str,
     hide_not_interested_on_map: bool = True,
+    digest_max_per_company: int = 0,
+    digest_exclude_statuses: str = "",
 ) -> None:
     conn.execute(
-        "INSERT INTO settings (id, email_days, resend_jobs, email_to, hide_not_interested_on_map) "
-        "VALUES (1, ?, ?, ?, ?) "
+        "INSERT INTO settings "
+        "(id, email_days, resend_jobs, email_to, hide_not_interested_on_map, "
+        "digest_max_per_company, digest_exclude_statuses) "
+        "VALUES (1, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET "
         "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, email_to=excluded.email_to, "
-        "hide_not_interested_on_map=excluded.hide_not_interested_on_map",
-        (email_days, int(resend_jobs), email_to, int(hide_not_interested_on_map)),
+        "hide_not_interested_on_map=excluded.hide_not_interested_on_map, "
+        "digest_max_per_company=excluded.digest_max_per_company, "
+        "digest_exclude_statuses=excluded.digest_exclude_statuses",
+        (email_days, int(resend_jobs), email_to, int(hide_not_interested_on_map),
+         digest_max_per_company, digest_exclude_statuses),
     )
     conn.commit()
 

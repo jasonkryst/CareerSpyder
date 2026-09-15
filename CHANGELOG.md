@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.65.0] — 2026-09-15
+
+### Added
+
+- **Digest size controls in Preferences — per-company job cap and status exclusions.**
+  Gmail collapses large digests as "quoted text" when consecutive emails share many
+  identical job listings. Two new optional filters on the Preferences page reduce
+  digest size before the email is assembled:
+
+  - **Max jobs per company (0 = unlimited).** When set, each company section is
+    capped at that many listings; a "… and N more — view all" note (linking to
+    the Jobs page when `PUBLIC_BASE_URL` is set) is appended so nothing is silently
+    dropped.
+
+  - **Don't include jobs with status.** Checkboxes for each user-settable status
+    (Not Interested, Rejected, Ignored, Applied, Accepted) let you exclude jobs
+    you have already acted on from future digests.
+
+  Both settings are stored in the `settings` table, exported/imported with
+  settings.json, and take effect on the next scheduled (or manual) run with no
+  restart needed.
+
+  Note: duplicate jobs and listings removed from job boards are already excluded
+  from every digest regardless of these settings.
+
 ## [0.64.0] — 2026-09-14
 
 ### Fixed

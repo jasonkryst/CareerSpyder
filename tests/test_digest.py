@@ -328,3 +328,82 @@ def test_emailed_keys_does_not_affect_subject_line():
     result = build_digest(jobs, [], job_label="job", emailed_keys={"1"})
 
     assert "2 job(s)" in result.subject
+
+
+# --- max_per_company truncation tests ---
+
+def test_max_per_company_zero_shows_all_jobs():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(10)]
+
+    result = build_digest(jobs, [], max_per_company=0)
+
+    for i in range(10):
+        assert f"Role {i}" in result.html_body
+    assert "more" not in result.html_body
+
+
+def test_max_per_company_truncates_and_shows_overflow_count():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(5)]
+
+    result = build_digest(jobs, [], max_per_company=3)
+
+    assert "Role 0" in result.html_body
+    assert "Role 2" in result.html_body
+    assert "Role 3" not in result.html_body
+    assert "… and 2 more" in result.html_body
+
+
+def test_max_per_company_at_exact_limit_does_not_add_overflow_note():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(3)]
+
+    result = build_digest(jobs, [], max_per_company=3)
+
+    for i in range(3):
+        assert f"Role {i}" in result.html_body
+    assert "more" not in result.html_body
+
+
+def test_max_per_company_overflow_note_includes_jobs_url_link():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(5)]
+
+    result = build_digest(jobs, [], max_per_company=2, jobs_url="https://cs.example.com/jobs")
+
+    assert "… and 3 more" in result.html_body
+    assert 'href="https://cs.example.com/jobs"' in result.html_body
+    assert "view all" in result.html_body
+
+
+def test_max_per_company_overflow_note_without_jobs_url():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(5)]
+
+    result = build_digest(jobs, [], max_per_company=2)
+
+    assert "… and 3 more not shown." in result.html_body
+    assert "<a " not in result.html_body.split("… and 3 more")[1].split("</p>")[0]
+
+
+def test_max_per_company_applies_independently_per_company():
+    jobs = [
+        _make_job("a1", "Acme A1", company="Acme"),
+        _make_job("a2", "Acme A2", company="Acme"),
+        _make_job("a3", "Acme A3", company="Acme"),
+        _make_job("b1", "Beta B1", company="Beta"),
+        _make_job("b2", "Beta B2", company="Beta"),
+    ]
+
+    result = build_digest(jobs, [], max_per_company=2)
+
+    assert "Acme A1" in result.html_body
+    assert "Acme A2" in result.html_body
+    assert "Acme A3" not in result.html_body
+    assert "Beta B1" in result.html_body
+    assert "Beta B2" in result.html_body
+    assert result.html_body.count("… and 1 more") == 1
+
+
+def test_max_per_company_subject_reflects_full_count_not_truncated():
+    jobs = [_make_job(str(i), f"Role {i}") for i in range(10)]
+
+    result = build_digest(jobs, [], max_per_company=3)
+
+    assert "10 new job" in result.subject
