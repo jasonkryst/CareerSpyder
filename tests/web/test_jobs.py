@@ -790,7 +790,7 @@ def test_location_override_returns_400_when_geocode_returns_none(client):
 
 
 def test_location_override_returns_400_on_geocoder_exception(client):
-    """NominatimGeocoder swallows RequestException and returns None, which maps to the same 400."""
+    """NominatimGeocoder raises GeocoderTransientError on RequestException; the route treats it as 400."""
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
 

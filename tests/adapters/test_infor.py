@@ -301,8 +301,11 @@ def _make_page_mock(*, cell_count=1, disabled=False):
 
     frame = MagicMock()
 
+    slick_row_locator = MagicMock()  # wait_for() returns None by default — that's fine
+
     def frame_locator_side_effect(selector):
         return {
+            infor._V1_SLICK_ROW: slick_row_locator,
             infor._CARD_SELECTOR: card_locator,
             infor._NEXT_SELECTOR: next_locator,
             "p.listview-heading": v2_heading,
@@ -361,7 +364,7 @@ def _make_v2_page_mock(*, cell_count=2, has_load_more=False, cell_count_after_lo
     def page_locator_side_effect(selector):
         return {
             "#jobListScreen": job_list_screen_locator,
-            infor._V2_CARD: v2_card_locator,
+            infor._V2_CONTENT_READY: v2_card_locator,
             "#gridBottom": load_more_locator,
             "div.gridContent": grid_content_locator,
         }.get(selector, MagicMock())
