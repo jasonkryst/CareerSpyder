@@ -616,3 +616,26 @@ def test_secondary_true_persisted_when_checkbox_checked(client):
     with open(sources_path) as f:
         data = json.load(f)
     assert data["sources"][0]["secondary"] is True
+
+
+def test_source_validation_error_shows_clean_message_not_raw_pydantic(client):
+    resp = client.post("/sources/new", data={
+        "type": "greenhouse", "name": "Acme", "board_token": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    assert "board_token" in resp.text
+    assert "pydantic.dev" not in resp.text
+    assert "string_too_short" not in resp.text
+    assert "For further information" not in resp.text
+
+
+def test_source_form_validation_error_has_role_alert(client):
+    resp = client.post("/sources/new", data={
+        "type": "greenhouse", "name": "Acme", "board_token": "",
+        "include_keywords": "", "exclude_keywords": "",
+    })
+
+    assert resp.status_code == 400
+    assert 'role="alert"' in resp.text

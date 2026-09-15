@@ -352,3 +352,67 @@ def test_sources_json_file_bytes_are_valid_utf8(tmp_path):
     # Must decode without error and round-trip the name via JSON-escaped form
     text = raw.decode("utf-8")
     assert "Soci" in text  # partial check — full name is JSON-escaped (é)
+
+
+def test_concurrent_add_source_does_not_lose_writes(tmp_path):
+    """Two threads simultaneously adding a source must each persist their write."""
+    import threading
+
+    path = str(tmp_path / "sources.json")
+    a = config.GreenhouseSource(id="a1", name="Alpha", type="greenhouse", board_token="alpha")
+    b = config.GreenhouseSource(id="b2", name="Beta", type="greenhouse", board_token="beta")
+
+    errors: list[Exception] = []
+
+    def add(source):
+        try:
+            config.add_source(path, source)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    t1 = threading.Thread(target=add, args=(a,))
+    t2 = threading.Thread(target=add, args=(b,))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert errors == []
+    ids = {s.id for s in config.load_sources(path)}
+    assert ids == {"a1", "b2"}
+
+
+def test_concurrent_add_and_delete_source_do_not_corrupt(tmp_path):
+    """An add and a delete running simultaneously must each complete cleanly."""
+    import threading
+
+    path = str(tmp_path / "sources.json")
+    existing = config.GreenhouseSource(id="e1", name="Existing", type="greenhouse", board_token="e1")
+    config.add_source(path, existing)
+    new_src = config.GreenhouseSource(id="n2", name="New", type="greenhouse", board_token="n2")
+
+    errors: list[Exception] = []
+
+    def add():
+        try:
+            config.add_source(path, new_src)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    def delete():
+        try:
+            config.delete_source(path, "e1")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    t1 = threading.Thread(target=add)
+    t2 = threading.Thread(target=delete)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert errors == []
+    ids = {s.id for s in config.load_sources(path)}
+    assert "n2" in ids
+    assert "e1" not in ids
