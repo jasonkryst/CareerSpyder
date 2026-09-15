@@ -133,31 +133,44 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
 
             # v2 portals (post-2025 Infor list-view SPA) render job cards
             # directly in div#jobListScreen → div.gridContent in the main page
-            # body.  The iframe used by v1 (Slickgrid card-stack) is absent or
-            # frozen at blank.html and holds no cards in v2.
+            # body.  The iframe is absent or frozen at blank.html with no cards.
+            #
+            # Lawson-hybrid portals (e.g. RUMC/Rush Oak Park) also have
+            # #jobListScreen in the outer shell but their actual job cards live
+            # inside #parentIframe as a Slickgrid card-stack.  By the time
+            # networkidle fires, the iframe's job XHR has already completed and
+            # Slickgrid rows are present — so a zero-wait count probe is enough
+            # to distinguish them from true v2 portals.
             if page.locator("#jobListScreen").count() > 0:
-                # Wait for ANY child of gridContent rather than li[job-req]
-                # specifically — different Infor portal builds use different
-                # card-element names, but all populate the same container.
-                page.locator(_V2_CONTENT_READY).first.wait_for(timeout=30000)
+                iframe_rows = (
+                    page.locator("#parentIframe").count() > 0
+                    and page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0
+                )
+                if not iframe_rows:
+                    # True v2: wait for any child inside the job list's grid
+                    # container.  Use the specific container to avoid strict-mode
+                    # errors (the page has multiple div.gridContent siblings).
+                    _v2_ready = "#jobListScreen .gridContent > *"
+                    page.locator(_v2_ready).first.wait_for(timeout=30000)
 
-                for _ in range(page_number - 1):
-                    load_more = page.locator("#gridBottom")
-                    if load_more.count() == 0 or not load_more.is_visible():
-                        return None
-                    prev_count = page.locator(_V2_CONTENT_READY).count()
-                    load_more.click()
-                    deadline = time.monotonic() + 15.0
-                    while time.monotonic() < deadline:
-                        if page.locator(_V2_CONTENT_READY).count() > prev_count:
-                            break
-                        time.sleep(0.5)
-                    else:
-                        return None
+                    for _ in range(page_number - 1):
+                        load_more = page.locator("#gridBottom")
+                        if load_more.count() == 0 or not load_more.is_visible():
+                            return None
+                        prev_count = page.locator(_v2_ready).count()
+                        load_more.click()
+                        deadline = time.monotonic() + 15.0
+                        while time.monotonic() < deadline:
+                            if page.locator(_v2_ready).count() > prev_count:
+                                break
+                            time.sleep(0.5)
+                        else:
+                            return None
 
-                if page.locator(_V2_CONTENT_READY).count() == 0:
-                    return None
-                return page.locator("div.gridContent").inner_html()
+                    if page.locator(_v2_ready).count() == 0:
+                        return None
+                    return page.locator("#jobListScreen .gridContent").first.inner_html()
+                # else: Lawson hybrid — fall through to v1 iframe handling below.
 
             # v1: job cards inside #parentIframe (Slickgrid card-stack).
             # Wait for .slick-row (the Slickgrid row container) rather than the
