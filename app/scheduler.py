@@ -45,10 +45,15 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
     public_base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     jobs_url = f"{public_base_url}/jobs" if public_base_url else None
 
+    # When resend is on, the email includes both new and re-seen jobs; split them
+    # into "Newly identified" / "Already identified" sections per company.
+    emailed_keys = db.get_emailed_keys(conn, [j.key for j in jobs_to_send]) if resend else None
+
     d = digest.build_digest(
         jobs_to_send, summary.failed_sources, job_label,
         statuses=statuses, searched_at=datetime.now(UTC), jobs_url=jobs_url,
         secondary_source_ids=secondary_source_ids,
+        emailed_keys=emailed_keys,
     )
     if d is None:
         return

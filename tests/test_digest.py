@@ -241,3 +241,90 @@ def test_workday_returns_career_site_url():
                            career_site_url="https://corp.wd5.myworkdayjobs.com/careers")
 
     assert get_source_url(source) == "https://corp.wd5.myworkdayjobs.com/careers"
+
+
+# --- emailed_keys split-section tests (resend=ON) ---
+
+def _make_job(key, title, company="Acme"):
+    return Job(key=key, title=title, url=f"https://x.test/{key}", company=company, source_name="s")
+
+
+def test_emailed_keys_none_produces_flat_layout():
+    """Default (resend=OFF) — no subsection headers, jobs listed flat."""
+    jobs = [_make_job("1", "Engineer")]
+
+    result = build_digest(jobs, [], emailed_keys=None)
+
+    assert "Newly identified" not in result.html_body
+    assert "Already identified" not in result.html_body
+    assert "Engineer" in result.html_body
+
+
+def test_emailed_keys_empty_set_shows_all_jobs_as_newly_identified():
+    """resend=ON, none previously emailed — all jobs land in Newly identified."""
+    jobs = [_make_job("1", "Backend"), _make_job("2", "Frontend")]
+
+    result = build_digest(jobs, [], emailed_keys=set())
+
+    assert "Newly identified" in result.html_body
+    assert "Already identified" in result.html_body
+    assert "Backend" in result.html_body
+    assert "Frontend" in result.html_body
+    assert "No newly identified jobs" not in result.html_body
+    assert "No previously identified jobs" in result.html_body
+
+
+def test_emailed_keys_splits_per_company_by_prior_email_status():
+    """resend=ON — job 1 was emailed before, job 2 is new; should land in opposite sections."""
+    jobs = [_make_job("1", "Old Role"), _make_job("2", "New Role")]
+
+    result = build_digest(jobs, [], emailed_keys={"1"})
+
+    # Both section headers appear
+    assert result.html_body.index("Newly identified") < result.html_body.index("Already identified")
+    # New Role appears before Already identified header
+    ni_end = result.html_body.index("<h4>Already identified</h4>")
+    assert "New Role" in result.html_body[:ni_end]
+    assert "Old Role" in result.html_body[ni_end:]
+
+
+def test_emailed_keys_all_jobs_previously_emailed_shows_empty_newly_identified():
+    """All jobs in the email have been seen before — Newly identified is empty."""
+    jobs = [_make_job("1", "Old Role")]
+
+    result = build_digest(jobs, [], emailed_keys={"1"})
+
+    assert "No newly identified jobs" in result.html_body
+    assert "Old Role" in result.html_body
+
+
+def test_emailed_keys_split_shown_per_company_separately():
+    """Split sections appear independently for each company."""
+    jobs = [
+        _make_job("a1", "Acme New", company="Acme"),
+        _make_job("b1", "Beta Old", company="Beta"),
+    ]
+
+    result = build_digest(jobs, [], emailed_keys={"b1"})
+
+    # Both companies have both subsection headers
+    assert result.html_body.count("Newly identified") == 2
+    assert result.html_body.count("Already identified") == 2
+
+
+def test_emailed_keys_empty_state_text_is_html_escaped():
+    """Placeholder text must not contain raw HTML."""
+    jobs = [_make_job("1", "Role")]
+
+    result = build_digest(jobs, [], emailed_keys=set())
+
+    assert "<em>No previously identified jobs.</em>" in result.html_body
+
+
+def test_emailed_keys_does_not_affect_subject_line():
+    """Subject line still counts total jobs, not the new/seen split."""
+    jobs = [_make_job("1", "R1"), _make_job("2", "R2")]
+
+    result = build_digest(jobs, [], job_label="job", emailed_keys={"1"})
+
+    assert "2 job(s)" in result.subject
