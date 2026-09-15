@@ -195,6 +195,62 @@ def test_run_and_notify_uses_found_jobs_and_generic_label_when_resend_enabled(tm
     mock_send.assert_called_once()
 
 
+def test_run_and_notify_passes_emailed_keys_to_digest_when_resend_enabled(tmp_db_path, tmp_path, monkeypatch):
+    """Regression: when resend=ON, build_digest must receive emailed_keys so it
+    can split each company section into Newly/Already identified."""
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn, resend_jobs=True)
+
+    # Save and mark job-a as previously emailed; job-b is new (never emailed).
+    run_id = db.start_run(conn)
+    old_job = Job(key="job-a", title="Old", url="https://x.test/a", source_name="s")
+    new_job = Job(key="job-b", title="New", url="https://x.test/b", source_name="s")
+    db.save_jobs(conn, [old_job, new_job], run_id)
+    db.mark_emailed(conn, ["job-a"])
+
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    fake_summary = type("S", (), {
+        "new_jobs": [new_job],
+        "found_jobs": [old_job, new_job],
+        "failed_sources": [],
+        "run_id": run_id,
+    })()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+
+    _, call_kwargs = mock_digest.call_args
+    assert "emailed_keys" in call_kwargs
+    assert call_kwargs["emailed_keys"] == {"job-a"}
+
+
+def test_run_and_notify_passes_emailed_keys_none_when_resend_disabled(tmp_db_path, tmp_path, monkeypatch):
+    """When resend=OFF, emailed_keys must be None so the flat layout is used."""
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn, resend_jobs=False)
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    job = Job(key="job-a", title="A", url="https://x.test/a", source_name="s")
+    fake_summary = type("S", (), {
+        "new_jobs": [job], "found_jobs": [job], "failed_sources": [], "run_id": 1,
+    })()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+
+    _, call_kwargs = mock_digest.call_args
+    assert call_kwargs.get("emailed_keys") is None
+
+
 def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(tmp_db_path, tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     conn = db.init_db(tmp_db_path)
