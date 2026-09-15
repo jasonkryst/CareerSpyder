@@ -99,9 +99,9 @@ async def save_preferences(request: Request):
     hide_not_interested_on_map = "hide_not_interested_on_map" in form
     submitted_emails = [addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip()]
 
-    raw_max = form.get("digest_max_per_company", "0")
+    raw_max = form.get("digest_max_per_company")
     try:
-        digest_max_per_company = max(0, int(raw_max) if raw_max else 0)
+        digest_max_per_company = max(0, int(raw_max) if isinstance(raw_max, str) else 0)
     except ValueError:
         digest_max_per_company = 0
 
@@ -167,7 +167,7 @@ def _export_payload(request: Request) -> dict:
     return {"sources": [s.model_dump() for s in sources], "preferences": preferences}
 
 
-def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool] | None:
+def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, str] | None:
     preferences = data.get("preferences")
     if preferences is None:
         return None
