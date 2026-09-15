@@ -5,6 +5,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.65.1] — 2026-09-15
+
+### Fixed
+
+- **Lawson-hybrid Infor portal detection (RUMC, Rush Oak Park).** The iframe probe
+  that distinguishes Lawson-hybrid portals from true v2 portals now catches
+  `playwright.sync_api.TimeoutError` explicitly (fixes ruff `BLE001`) and waits up
+  to 15 s for `.slick-row` to appear inside `#parentIframe` (up from 5 s). The
+  longer window prevents Rush Oak Park from being mis-classified as v2 in CI, where
+  cold runner start-up slows the iframe XHR response.
+
+### Added
+
+- **Live integration tests for RUMC and Rush Oak Park Infor portals.** Two
+  `@pytest.mark.integration` tests (`tests/integration/test_infor_live.py`) hit the
+  real portals with a full Playwright browser. They skip automatically when the
+  required env vars are absent (fork PRs stay green) and run in CI when the
+  `INFOR_TEST_URL_RUMC` / `INFOR_TEST_URL_RUSH_OAK_PARK` GitHub Actions secrets are
+  configured.
+
 ## [0.65.0] — 2026-09-15
 
 ### Added
