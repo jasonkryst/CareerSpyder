@@ -144,9 +144,9 @@ def test_nominatim_geocode_returns_none_for_no_results():
 def test_nominatim_geocode_raises_transient_error_on_request_exception():
     import requests
 
-    with patch("app.geocoding.nominatim.requests.get", side_effect=requests.RequestException("boom")):
-        with pytest.raises(GeocoderTransientError):
-            NominatimGeocoder().geocode("Chicago, IL")
+    with patch("app.geocoding.nominatim.requests.get", side_effect=requests.RequestException("boom")), \
+         pytest.raises(GeocoderTransientError):
+        NominatimGeocoder().geocode("Chicago, IL")
 
 
 def test_get_geocoder_defaults_to_nominatim(monkeypatch):
