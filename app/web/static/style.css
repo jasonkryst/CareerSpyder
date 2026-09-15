@@ -358,9 +358,14 @@ label:has(> input[type="radio"]) {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+}
+
+.filter-bar select[multiple] {
+  min-height: 4.5rem;
+  overflow-y: auto;
 }
 
 th a {

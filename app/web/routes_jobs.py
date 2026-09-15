@@ -1,5 +1,6 @@
 import functools
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
@@ -53,8 +54,11 @@ def _geocode_zip(zip_code: str) -> tuple[float, float] | None:
 def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
-    company: str = "", source: str = "", removed: str = "active", emailed: str = "", status: str = "",
-    location: str = "", duplicates: str = "", state: str = "",
+    company: str = "", source: Annotated[list[str], Query()] = [],  # noqa: B006
+    removed: str = "active", emailed: str = "",
+    status: Annotated[list[str], Query()] = [],  # noqa: B006
+    location: str = "", duplicates: str = "",
+    state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -69,18 +73,22 @@ def jobs(
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
         else:
             zip_error = True
-    filters = {
-        "company": company or None, "source_name": source or None,
-        "removed": removed or None, "emailed": emailed or None, "status": status or None,
-        "location": location or None, "duplicates": duplicates or None,
-        "state": state or None,
-    }
-    total = db.count_jobs(conn, **filters,
-                          zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles)
+    source_name = source or None
+    status_filter = status or None
+    state_filter = state or None
+    total = db.count_jobs(
+        conn, company=company or None, source_name=source_name,
+        removed=removed or None, emailed=emailed or None, status=status_filter,
+        location=location or None, duplicates=duplicates or None, state=state_filter,
+        zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+    )
     pagination = paginate(total, page, PAGE_SIZE)
     rows = db.list_jobs(
         conn, limit=PAGE_SIZE, offset=pagination.offset, sort=sort, direction=direction,
-        **filters, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        company=company or None, source_name=source_name,
+        removed=removed or None, emailed=emailed or None, status=status_filter,
+        location=location or None, duplicates=duplicates or None, state=state_filter,
+        zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
     )
     secondary_ids = _secondary_source_ids(request.app.state.sources_path)
     history = db.get_job_status_history(conn, [row["key"] for row in rows])
@@ -110,8 +118,10 @@ def jobs(
 @router.get("/jobs/map", response_class=HTMLResponse)
 def jobs_map(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "active",
-    emailed: str = "", status: str = "", state: str = "",
+    company: str = "", source: Annotated[list[str], Query()] = [],  # noqa: B006
+    location: str = "", removed: str = "active", emailed: str = "",
+    status: Annotated[list[str], Query()] = [],  # noqa: B006
+    state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -131,8 +141,10 @@ def jobs_map(
 @router.get("/jobs/map/data")
 def jobs_map_data(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "active",
-    emailed: str = "", status: str = "", state: str = "",
+    company: str = "", source: Annotated[list[str], Query()] = [],  # noqa: B006
+    location: str = "", removed: str = "active", emailed: str = "",
+    status: Annotated[list[str], Query()] = [],  # noqa: B006
+    state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -146,7 +158,7 @@ def jobs_map_data(
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
     settings = db.get_settings(conn)
     hide_not_interested = settings is None or settings["hide_not_interested_on_map"]
-    exclude_status = "not_interested" if hide_not_interested and status != "not_interested" else None
+    exclude_status = "not_interested" if hide_not_interested and "not_interested" not in status else None
     rows = db.list_mappable_jobs(
         conn, company=company or None, source_name=source or None, location=location or None,
         removed=removed or None, emailed=emailed or None, status=status or None,

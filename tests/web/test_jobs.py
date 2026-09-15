@@ -1479,7 +1479,7 @@ def test_status_select_has_no_inline_onchange(client):
 def test_jobs_page_has_state_dropdown(client):
     resp = client.get("/jobs")
     assert 'name="state"' in resp.text
-    assert "All states" in resp.text
+    assert 'multiple' in resp.text
 
 
 def test_jobs_page_state_option_marked_selected_when_active(client):
@@ -1537,7 +1537,7 @@ def test_jobs_page_no_zip_error_warning_when_zip_not_provided(client):
 def test_jobs_map_page_has_state_dropdown(client):
     resp = client.get("/jobs/map")
     assert 'name="state"' in resp.text
-    assert "All states" in resp.text
+    assert 'multiple' in resp.text
 
 
 def test_jobs_map_page_has_zip_input(client):

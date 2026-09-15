@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.63.0] — 2026-09-14
+
+### Changed
+
+- **Multi-select filter dropdowns for Source, State, and Job status (closes #100).** The
+  **Search name**, **State**, and **Job status** filter dropdowns on the Jobs list and Map
+  views now accept multiple selections simultaneously (hold Ctrl/Cmd to select more than one).
+  URL params use repeated keys (`?source=A&source=B`). The database layer uses `IN (…)` for
+  source and state, and `(IS NULL OR IN (…))` when "No status" is combined with other
+  status values. The "All sources / All states" default options are removed — leaving nothing
+  selected is equivalent to "show all".
+
 ## [0.62.0] — 2026-09-14
 
 ### Changed
