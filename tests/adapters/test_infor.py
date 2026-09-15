@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 from app.adapters import infor
@@ -395,3 +396,19 @@ def test_default_frame_fetcher_validates_url_before_launching_browser():
 
     mock_assert.assert_called_once_with("http://169.254.169.254/")
     mock_sync_playwright.assert_not_called()
+
+
+def test_default_frame_fetcher_raises_when_portal_requires_authentication():
+    sync_playwright_cm, _, page, _, _ = _make_page_mock()
+
+    # Simulate SSO auth wall: portal JS calls $('#parentIframe').remove()
+    # for unauthenticated visitors, so the locator finds nothing.
+    auth_wall_locator = MagicMock()
+    auth_wall_locator.count.return_value = 0
+    page.locator.return_value = auth_wall_locator
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        with pytest.raises(RuntimeError, match="requires authentication"):
+            default_frame_fetcher("https://rush.test/careers", page_number=1)
