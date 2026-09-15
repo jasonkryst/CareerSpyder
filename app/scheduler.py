@@ -32,8 +32,16 @@ def run_and_notify(conn, sources_path: str, tz: str = "UTC", force: bool = False
     summary = orchestrator.run_once(conn, sources)
 
     resend = bool(settings and settings["resend_jobs"])
-    jobs_to_send = summary.found_jobs if resend else summary.new_jobs
+    jobs_to_send = list(summary.found_jobs if resend else summary.new_jobs)
     job_label = "job" if resend else "new job"
+
+    # Rescue jobs saved in a prior run but never emailed because the process
+    # crashed between save_jobs committing and mark_emailed running.
+    current_keys = {j.key for j in jobs_to_send}
+    for rescued in db.get_unemailed_jobs(conn):
+        if rescued.key not in current_keys:
+            jobs_to_send.append(rescued)
+            current_keys.add(rescued.key)
 
     duplicate_keys = {
         row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only")

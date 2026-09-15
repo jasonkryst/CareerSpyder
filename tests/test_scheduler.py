@@ -421,6 +421,62 @@ def test_run_and_notify_omits_jobs_link_when_public_base_url_is_unset(tmp_db_pat
     assert "View all jobs" not in html_body
 
 
+def test_run_and_notify_rescues_jobs_dropped_by_a_prior_crash(tmp_db_path, tmp_path, monkeypatch):
+    """Jobs saved in a prior run but never emailed (crash window) must be included
+    in the next digest even though they are not new."""
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    run_id = db.start_run(conn)
+    stranded = Job(key="stranded-1", title="Old Job", url="https://x.test/s", source_name="s")
+    db.save_jobs(conn, [stranded], run_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+    # Simulate crash: save_jobs committed, mark_emailed never ran.  emailed_at IS NULL.
+
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    # This run finds no new jobs.
+    fake_summary = type("S", (), {"new_jobs": [], "found_jobs": [], "failed_sources": [], "run_id": run_id})()
+
+    captured: list = []
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+        call_args, _ = mock_digest.call_args
+        captured.extend(call_args[0])
+
+    assert any(j.key == "stranded-1" for j in captured)
+    # And it should now be marked emailed.
+    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+
+
+def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(tmp_db_path, tmp_path, monkeypatch):
+    """New jobs from the current run should not appear twice even though
+    get_unemailed_jobs also returns them."""
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    conn = db.init_db(tmp_db_path)
+    _configure(conn)
+    run_id = db.start_run(conn)
+    new_job = Job(key="new-1", title="New Job", url="https://x.test/n", source_name="s")
+    db.save_jobs(conn, [new_job], run_id)
+
+    sources_path = str(tmp_path / "sources.json")
+    (tmp_path / "sources.json").write_text('{"sources": []}')
+
+    fake_summary = type("S", (), {"new_jobs": [new_job], "found_jobs": [new_job], "failed_sources": [], "run_id": run_id})()
+
+    with patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+         patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest, \
+         patch("app.scheduler.emailer.send_email"):
+        scheduler.run_and_notify(conn, sources_path)
+        call_args, _ = mock_digest.call_args
+
+    sent_keys = [j.key for j in call_args[0]]
+    assert sent_keys.count("new-1") == 1
+
+
 def test_create_scheduler_registers_daily_cron_job(tmp_db_path, tmp_path):
     conn = db.init_db(tmp_db_path)
     sources_path = str(tmp_path / "sources.json")

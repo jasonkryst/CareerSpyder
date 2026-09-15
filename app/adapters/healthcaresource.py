@@ -1,7 +1,11 @@
+import logging
+
 import requests
 
 from app.config import HealthcareSource
 from app.models import Job
+
+logger = logging.getLogger(__name__)
 
 _SEARCH_BODY = {
     "query": {
@@ -21,18 +25,21 @@ def fetch(source: HealthcareSource, http_post=requests.post) -> list[Job]:
     data = resp.json()
     jobs = []
     for hit in data.get("hits", {}).get("hits", []):
-        src = hit["_source"]
-        job_id = hit["_id"].split("_")[-1]
-        hiring_org = src.get("hiringOrganization") or {}
-        address = (src.get("jobLocation") or {}).get("address") or {}
-        jobs.append(Job(
-            key=f"healthcaresource:{hit['_id']}",
-            title=src["title"],
-            url=f"https://pm.healthcaresource.com/CS/{source.site_id}/#/job/{job_id}",
-            company=hiring_org.get("name") or source.company,
-            location=address.get("addressLocalityRegion"),
-            posted_date=src.get("datePosted"),
-            source_name=source.name,
-            source_id=source.id,
-        ))
+        try:
+            src = hit["_source"]
+            job_id = hit["_id"].split("_")[-1]
+            hiring_org = src.get("hiringOrganization") or {}
+            address = (src.get("jobLocation") or {}).get("address") or {}
+            jobs.append(Job(
+                key=f"healthcaresource:{hit['_id']}",
+                title=src["title"],
+                url=f"https://pm.healthcaresource.com/CS/{source.site_id}/#/job/{job_id}",
+                company=hiring_org.get("name") or source.company,
+                location=address.get("addressLocalityRegion"),
+                posted_date=src.get("datePosted"),
+                source_name=source.name,
+                source_id=source.id,
+            ))
+        except (KeyError, TypeError, AttributeError):
+            logger.warning("healthcaresource: skipping malformed record from %s: %r", source.name, hit)
     return jobs

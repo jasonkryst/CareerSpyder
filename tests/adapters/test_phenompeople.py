@@ -118,3 +118,20 @@ def test_fetch_returns_empty_list_when_no_jobs():
     jobs = phenompeople.fetch(make_source(), http_post=fake_post)
 
     assert jobs == []
+
+
+def test_fetch_skips_malformed_record_and_keeps_valid_ones():
+    hits = [
+        make_hit(job_id="111", title="Good Job"),
+        {"title": "No jobId here"},  # malformed: missing 'jobId' → KeyError
+        make_hit(job_id="333", title="Another Good"),
+    ]
+
+    def fake_post(url, json, timeout):
+        return FakeResponse(make_envelope(hits))
+
+    jobs = phenompeople.fetch(make_source(), http_post=fake_post)
+
+    assert len(jobs) == 2
+    assert jobs[0].key == "phenompeople:111"
+    assert jobs[1].key == "phenompeople:333"

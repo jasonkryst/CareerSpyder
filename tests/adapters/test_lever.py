@@ -78,3 +78,22 @@ def test_fetch_summary_is_none_when_no_description_present():
     jobs = lever.fetch(source, http_get=fake_get)
 
     assert jobs[0].summary is None
+
+
+def test_fetch_skips_malformed_record_and_keeps_valid_ones():
+    payload = [
+        {"id": "abc", "text": "Good Job", "hostedUrl": "https://jobs.lever.co/acme/abc"},
+        {"text": "No id or url here"},  # malformed: missing 'id' → KeyError
+        {"id": "xyz", "text": "Another Good", "hostedUrl": "https://jobs.lever.co/acme/xyz"},
+    ]
+
+    def fake_get(url, timeout):
+        return FakeResponse(payload)
+
+    source = LeverSource(id="s1", name="Acme", type="lever", board_token="acme")
+
+    jobs = lever.fetch(source, http_get=fake_get)
+
+    assert len(jobs) == 2
+    assert jobs[0].key == "lever:abc"
+    assert jobs[1].key == "lever:xyz"

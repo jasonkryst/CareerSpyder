@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app import db
-from app.geocoding.base import GeocodeResult
+from app.geocoding.base import GeocodeResult, GeocoderTransientError
 from app.geocoding.factory import get_geocoder
 from app.geocoding.nominatim import NominatimGeocoder
 from app.geocoding.service import geocode_pending
@@ -141,13 +141,12 @@ def test_nominatim_geocode_returns_none_for_no_results():
     assert result is None
 
 
-def test_nominatim_geocode_returns_none_on_request_exception():
+def test_nominatim_geocode_raises_transient_error_on_request_exception():
     import requests
 
     with patch("app.geocoding.nominatim.requests.get", side_effect=requests.RequestException("boom")):
-        result = NominatimGeocoder().geocode("Chicago, IL")
-
-    assert result is None
+        with pytest.raises(GeocoderTransientError):
+            NominatimGeocoder().geocode("Chicago, IL")
 
 
 def test_get_geocoder_defaults_to_nominatim(monkeypatch):
@@ -247,4 +246,36 @@ def test_geocode_pending_catches_a_per_location_exception_and_marks_it_failed(tm
     boom_row = conn.execute("SELECT status FROM geocoded_locations WHERE location = 'Boom Town'").fetchone()
     chicago_row = conn.execute("SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'").fetchone()
     assert boom_row == ("failed",)
+    assert chicago_row == ("resolved",)
+
+
+def test_geocode_pending_leaves_pending_on_transient_network_error(tmp_db_path):
+    """A GeocoderTransientError must leave status='pending' so the location is
+    retried on the next geocoding pass rather than permanently marked failed."""
+    conn = db.init_db(tmp_db_path)
+    conn.execute(
+        "INSERT INTO geocoded_locations (location, status) VALUES "
+        "('Network Town', 'pending'), ('Chicago, IL', 'pending')"
+    )
+    conn.commit()
+
+    class _TransientGeocoder:
+        name = "fake"
+        min_interval_seconds = 0.0
+
+        def geocode(self, location):
+            if location == "Network Town":
+                raise GeocoderTransientError("connection refused")
+            return GeocodeResult(display_name="Chicago, IL, USA", city="Chicago",
+                                 region="Illinois", country="USA", lat=41.8, lng=-87.6)
+
+    geocode_pending(conn, _TransientGeocoder())
+
+    network_row = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Network Town'"
+    ).fetchone()
+    chicago_row = conn.execute(
+        "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
+    ).fetchone()
+    assert network_row == ("pending",)
     assert chicago_row == ("resolved",)

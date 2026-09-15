@@ -1,7 +1,11 @@
+import logging
+
 import requests
 
 from app.config import FindlySource
 from app.models import Job
+
+logger = logging.getLogger(__name__)
 
 _API_URL = "https://jobsapi-internal.m-cloud.io/api/job"
 _PAGE_SIZE = 500
@@ -31,16 +35,19 @@ def fetch(source: FindlySource, http_get=requests.get) -> list[Job]:
         records = resp.json().get("queryResult") or []
 
         for record in records:
-            all_jobs.append(Job(
-                key=f"findly:{record['id']}",
-                title=record["title"],
-                url=record["url"],
-                company=record.get("company_name") or source.company,
-                location=_location(record),
-                posted_date=record.get("open_date"),
-                source_name=source.name,
-                source_id=source.id,
-            ))
+            try:
+                all_jobs.append(Job(
+                    key=f"findly:{record['id']}",
+                    title=record["title"],
+                    url=record["url"],
+                    company=record.get("company_name") or source.company,
+                    location=_location(record),
+                    posted_date=record.get("open_date"),
+                    source_name=source.name,
+                    source_id=source.id,
+                ))
+            except (KeyError, TypeError, AttributeError):
+                logger.warning("findly: skipping malformed record from %s: %r", source.name, record)
 
         if len(records) < _PAGE_SIZE:
             break

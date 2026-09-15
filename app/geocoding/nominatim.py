@@ -2,7 +2,7 @@ import re
 
 import requests
 
-from app.geocoding.base import GeocodeResult
+from app.geocoding.base import GeocodeResult, GeocoderTransientError
 
 _SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 _USER_AGENT = "CareerSpyder/1.0 (+https://github.com/jasonkryst/CareerSpyder)"
@@ -36,8 +36,8 @@ class NominatimGeocoder:
             )
             response.raise_for_status()
             results = response.json()
-        except requests.RequestException:
-            return None
+        except requests.RequestException as exc:
+            raise GeocoderTransientError(str(exc)) from exc
 
         if not results:
             return None

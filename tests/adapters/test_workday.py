@@ -123,3 +123,19 @@ def test_fetch_respects_max_pages_as_a_hard_cap():
 
     assert calls == [0, 20]
     assert len(jobs) == 2
+
+
+def test_fetch_skips_malformed_record_and_keeps_valid_ones():
+    good1 = make_posting(req_id="JR001", title="Good One")
+    malformed = {"externalPath": "/job/bad"}  # missing 'title' → KeyError
+    good2 = make_posting(req_id="JR002", title="Good Two")
+    payload = {"total": 3, "jobPostings": [good1, malformed, good2]}
+
+    def fake_post(url, json, timeout):
+        return FakeResponse(payload)
+
+    jobs = workday.fetch(make_source(), http_post=fake_post)
+
+    assert len(jobs) == 2
+    assert jobs[0].title == "Good One"
+    assert jobs[1].title == "Good Two"
