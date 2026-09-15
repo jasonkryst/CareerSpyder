@@ -7,53 +7,105 @@ from app.config import InforSource
 from app.models import Job
 from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
 
+# CSS selectors for two known Infor job board UI generations.
+# v1 = Slickgrid card-stack (older).  v2 = list-view SPA (newer, e.g. Rush post-2025).
+_V1_CARD = ".inforCardstackCell"
+_V2_CARD = "li[job-req]"
+_CARD_SELECTOR = f"{_V2_CARD}, {_V1_CARD}"   # load-sentinel + presence check
+_NEXT_SELECTOR = "button.nextPage, a.nextPage"  # both UI generations use nextPage
+
+
+def _parse_v1_card(card, source: InforSource) -> Job | None:
+    heading = card.select_one(".inforCardstackHeading")
+    if heading is None:
+        return None
+    title = heading.get_text(strip=True)
+
+    posted_date = None
+    posted_div = card.select_one(".PostedDiv")
+    if posted_div is not None:
+        value = posted_div.select_one(".inforCardstackValue")
+        if value is not None:
+            posted_date = value.get_text(strip=True)
+
+    location = None
+    location_lbl = card.select_one(".LocationLbl")
+    if location_lbl is not None:
+        value = location_lbl.find_next_sibling(class_="inforCardstackValue")
+        if value is not None:
+            location = value.get_text(strip=True)
+
+    return Job(
+        key=f"infor:{source.company}:{title}:{location}",
+        title=title,
+        url=source.url,
+        company=source.company,
+        location=location,
+        posted_date=posted_date,
+        source_name=source.name,
+        source_id=source.id,
+    )
+
+
+def _parse_v2_card(card, source: InforSource) -> Job | None:
+    heading = card.select_one("p.listview-heading")
+    if heading is None:
+        return None
+    title = heading.get_text(strip=True)
+
+    # Location: first span whose text has no colon (not a "Label: Value" pair).
+    # Posted date: last span whose text contains a colon.
+    # Category spans like "Department: Radiology" also have colons but appear
+    # earlier in the DOM, so the last colon-span is reliably the posted date.
+    location = None
+    posted_date = None
+    for span in card.select("span.listview-subheading"):
+        text = span.get_text(strip=True)
+        if not text:
+            continue
+        if ":" in text:
+            posted_date = text
+        elif location is None:
+            location = text
+
+    return Job(
+        key=f"infor:{source.company}:{title}:{location}",
+        title=title,
+        url=source.url,
+        company=source.company,
+        location=location,
+        posted_date=posted_date,
+        source_name=source.name,
+        source_id=source.id,
+    )
+
 
 def _parse_page(html: str, source: InforSource) -> list[Job]:
     soup = BeautifulSoup(html, "html.parser")
-    jobs = []
-    for card in soup.select(".inforCardstackCell"):
-        heading = card.select_one(".inforCardstackHeading")
-        if heading is None:
-            continue
-        title = heading.get_text(strip=True)
-
-        posted_date = None
-        posted_div = card.select_one(".PostedDiv")
-        if posted_div is not None:
-            value = posted_div.select_one(".inforCardstackValue")
-            if value is not None:
-                posted_date = value.get_text(strip=True)
-
-        location = None
-        location_lbl = card.select_one(".LocationLbl")
-        if location_lbl is not None:
-            value = location_lbl.find_next_sibling(class_="inforCardstackValue")
-            if value is not None:
-                location = value.get_text(strip=True)
-
-        jobs.append(Job(
-            key=f"infor:{source.company}:{title}:{location}",
-            title=title,
-            url=source.url,
-            company=source.company,
-            location=location,
-            posted_date=posted_date,
-            source_name=source.name,
-            source_id=source.id,
-        ))
-    return jobs
+    # Prefer v2 list-view selectors; fall back to v1 card-stack.
+    v2_cards = soup.select(_V2_CARD)
+    if v2_cards:
+        return [j for card in v2_cards if (j := _parse_v2_card(card, source)) is not None]
+    return [j for card in soup.select(_V1_CARD) if (j := _parse_v1_card(card, source)) is not None]
 
 
 def _title_changed(current: str | None, previous: str | None) -> bool:
     return current != previous
 
 
+def _first_title(frame) -> str | None:
+    """Returns the first job title visible in the frame, regardless of UI generation."""
+    for selector in ("p.listview-heading", ".inforCardstackHeading"):
+        loc = frame.locator(selector)
+        if loc.count() > 0:
+            return loc.first.text_content()
+    return None
+
+
 def _wait_for_new_first_title(frame, previous_title: str | None, timeout_s: float = 15.0) -> None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        headings = frame.locator(".inforCardstackHeading")
-        current = headings.first.text_content() if headings.count() > 0 else None
-        if _title_changed(current, previous_title):
+        if _title_changed(_first_title(frame), previous_title):
             return
         time.sleep(0.5)
 
@@ -67,17 +119,17 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
             install_ssrf_guard(page)
             page.goto(url, wait_until="networkidle", timeout=30000)
             frame = page.frame_locator("#parentIframe")
-            frame.locator(".slick-row").first.wait_for(timeout=30000)
+            frame.locator(_CARD_SELECTOR).first.wait_for(timeout=30000)
 
             for _ in range(page_number - 1):
-                next_button = frame.locator("button.nextPage")
-                if next_button.is_disabled():
+                next_button = frame.locator(_NEXT_SELECTOR)
+                if next_button.count() == 0 or next_button.is_disabled():
                     return None
-                previous_title = frame.locator(".inforCardstackHeading").first.text_content()
+                previous_title = _first_title(frame)
                 next_button.click()
                 _wait_for_new_first_title(frame, previous_title)
 
-            if frame.locator(".inforCardstackCell").count() == 0:
+            if frame.locator(_CARD_SELECTOR).count() == 0:
                 return None
 
             return frame.locator("body").inner_html()
