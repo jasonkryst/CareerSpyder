@@ -5,6 +5,41 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.64.0] — 2026-09-14
+
+### Fixed
+
+- **SMTP port 465 (implicit TLS) now works (issue I).** The emailer previously
+  always used `STARTTLS`, which fails on port 465 because the server expects an
+  immediate TLS handshake. Port 465 now uses `smtplib.SMTP_SSL`; all other ports
+  continue to use `SMTP` + `STARTTLS`.
+
+- **Pydantic validation errors shown as clean field messages, not raw tracebacks
+  (issue J).** Source and import validation failures now display
+  `field: message` pairs (e.g. "board_token: String should have at least 1
+  character") instead of the raw pydantic error dump with internal type codes
+  and documentation URLs.
+
+- **"Status" filter label renamed to "Listing status" (issue K).** The filter
+  that selects Active / Removed jobs was labelled "Status", clashing with
+  the "Job status" filter (Applied / Ignored / etc.). It is now "Listing status".
+
+- **Validation banners now carry `role="alert"` (issue L).** Error `<div>`s in
+  the source form, settings/data, and settings/preferences pages now include
+  `role="alert"` so assistive technologies announce them immediately.
+
+- **sources.json writes are now protected by a threading lock (issue M).**
+  Concurrent requests (two browser tabs, scheduler + UI) could race on the
+  load → modify → save cycle and silently lose one write. A module-level
+  `threading.Lock` in `config.py` serializes all read-modify-write operations.
+
+### Changed
+
+- **Python 3.14 pinned as minimum version (issue N).** The Docker base image
+  was already `python:3.14-slim`; `pyproject.toml`'s `requires-python` and the
+  README now reflect this. A `.python-version` file is added for pyenv users so
+  local and container environments match exactly.
+
 ## [0.63.0] — 2026-09-14
 
 ### Changed

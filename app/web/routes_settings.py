@@ -9,6 +9,7 @@ from starlette.datastructures import UploadFile
 from app import config, db
 from app.web.flash import flash_redirect
 from app.web.templating import templates
+from app.web.validation import fmt_validation_error
 
 router = APIRouter()
 
@@ -186,9 +187,14 @@ async def import_settings(request: Request):
     raw = await upload.read()
     try:
         sources = config.import_sources_json(request.app.state.sources_path, raw)
-    except (json.JSONDecodeError, ValidationError) as exc:
+    except json.JSONDecodeError as exc:
         return templates.TemplateResponse(
             request, "settings_data.html", {"error": f"Import failed: {exc}"}, status_code=400,
+        )
+    except ValidationError as exc:
+        return templates.TemplateResponse(
+            request, "settings_data.html",
+            {"error": f"Import failed: {fmt_validation_error(exc)}"}, status_code=400,
         )
 
     parsed_preferences = _parse_preferences_import(json.loads(raw))

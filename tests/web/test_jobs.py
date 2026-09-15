@@ -1576,3 +1576,20 @@ def test_geocode_zip_cache_calls_nominatim_only_once_for_same_zip(client):
     assert mock_get.call_count == 1, (
         f"expected Nominatim called once (cached), got {mock_get.call_count}"
     )
+
+
+def test_jobs_filter_bar_labels_status_as_listing_status(client):
+    resp = client.get("/jobs")
+
+    assert "Listing status" in resp.text
+
+
+def test_jobs_filter_bar_listing_status_not_labelled_plain_status(client):
+    resp = client.get("/jobs")
+
+    # "Job status" (the per-job workflow state) should still be present;
+    # the ambiguous bare "Status" label for the removed filter is the one renamed.
+    assert "Job status" in resp.text
+    # Verify the old bare label is gone from the filter bar select labels.
+    # Use a narrow pattern so we don't false-positive on column headers or JS.
+    assert "<label>Status" not in resp.text

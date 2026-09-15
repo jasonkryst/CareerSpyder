@@ -632,3 +632,43 @@ def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_so
 
     assert resp.status_code == 400
     assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
+
+
+def test_import_settings_invalid_source_error_has_role_alert(client):
+    import json
+
+    payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "unknown_type"}]}).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("bad.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 400
+    assert 'role="alert"' in resp.text
+
+
+def test_import_settings_validation_error_message_clean_not_raw_pydantic(client):
+    import json
+
+    payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "unknown_type"}]}).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("bad.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 400
+    assert "pydantic.dev" not in resp.text
+    assert "string_too_short" not in resp.text
+
+
+def test_preferences_invalid_email_error_has_role_alert(client):
+    resp = client.post(
+        "/settings/preferences",
+        data={"email_to": "not-an-email", "email_days": "mon"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 400
+    assert 'role="alert"' in resp.text

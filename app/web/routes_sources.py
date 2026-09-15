@@ -10,6 +10,7 @@ from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.source_form import echo_source, source_from_form
 from app.web.templating import templates
+from app.web.validation import fmt_validation_error
 
 router = APIRouter()
 
@@ -67,7 +68,7 @@ async def create_source(request: Request):
         return templates.TemplateResponse(
             request,
             "source_form.html",
-            {"source": echo_source(form), "action": "/sources/new", "error": str(exc)},
+            {"source": echo_source(form), "action": "/sources/new", "error": fmt_validation_error(exc)},
             status_code=400,
         )
     config.add_source(request.app.state.sources_path, source)
@@ -95,7 +96,7 @@ async def update_source(request: Request, source_id: str):
         return templates.TemplateResponse(
             request,
             "source_form.html",
-            {"source": echo_source(form), "action": action, "error": str(exc)},
+            {"source": echo_source(form), "action": action, "error": fmt_validation_error(exc)},
             status_code=400,
         )
     # The id is determined by the URL path, not by whatever the (hidden)
@@ -115,7 +116,7 @@ async def test_source_preview(request: Request):
     try:
         source = source_from_form(form)
     except ValidationError as exc:
-        return {"error": str(exc)}
+        return {"error": fmt_validation_error(exc)}
     try:
         # Adapters raise heterogeneous exceptions (requests, BeautifulSoup
         # selectors, Playwright) — this endpoint's job is to report any of
