@@ -133,7 +133,7 @@ def get_source_url(source: SourceConfig) -> str | None:
 def load_sources(path: str) -> list[SourceConfig]:
     if not os.path.exists(path):
         return []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return SourcesFile.model_validate(data).sources
 
@@ -144,7 +144,7 @@ def save_sources(path: str, sources: list) -> None:
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
     tmp_path = path + ".tmp"
-    with open(tmp_path, "w") as f:
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
     os.replace(tmp_path, path)
 

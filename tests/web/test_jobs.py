@@ -1561,3 +1561,18 @@ def test_jobs_map_clear_filters_shown_when_zip_active(client):
                return_value=_fake_geocode_response()):
         resp = client.get("/jobs/map?zip=60148")
     assert "Clear filters" in resp.text
+
+
+def test_geocode_zip_cache_calls_nominatim_only_once_for_same_zip(client):
+    """Regression for Performance H2 / Security N1: repeated page loads with
+    the same zip code must hit Nominatim exactly once, not on every render."""
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get",
+               return_value=_fake_geocode_response()) as mock_get:
+        client.get("/jobs?zip=60148&radius=25")
+        client.get("/jobs?zip=60148&radius=25")
+        client.get("/jobs?zip=60148&radius=25")
+
+    assert mock_get.call_count == 1, (
+        f"expected Nominatim called once (cached), got {mock_get.call_count}"
+    )

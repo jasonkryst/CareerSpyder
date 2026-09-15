@@ -14,6 +14,7 @@ def fetch(source: GenericHtmlSource, http_get=safe_get, html_renderer=render_htm
     else:
         resp = http_get(source.url, timeout=15)
         resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or "utf-8"
         html = resp.text
 
     soup = BeautifulSoup(html, "html.parser")

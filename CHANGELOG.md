@@ -5,6 +5,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-09-14
+
+### Fixed
+
+- **Indeed dedup key normalization (audit Core-func M3 / DB C7).** The dedup
+  key for Indeed job postings was built from the full href including rotating
+  tracking params (`fccid`, `vjs`, `from`, `tk`, …), causing the same posting
+  to be re-reported as new whenever a param changed. The key is now
+  `indeed:{jk}` — the stable Indeed job ID only — matching how `linkedin.py`
+  already strips its query string. ⚠️ Existing Indeed jobs will appear "new"
+  once on the next run after this upgrade, then stabilize.
+- **Zip-code geocoding now cached (audit Perf H2 / Security N1).** The `/jobs`
+  and `/jobs/map/data` filter routes were calling Nominatim on every page render
+  with no caching. A process-lifetime `lru_cache` wrapper now ensures the same
+  zip code hits Nominatim exactly once.
+- **Encoding correctness (audit i18n M1/M2).** `sources.json` reads and writes
+  now use explicit `encoding="utf-8"` (was platform-default, CP1252 on Windows).
+  `generic_html.py` sets `resp.encoding = resp.apparent_encoding` before reading
+  `resp.text`, replacing the RFC-mandated ISO-8859-1 fallback with
+  charset-normalizer detection for pages that omit a Content-Type charset.
+
 ## [0.60.0] — 2026-09-14
 
 ### Fixed

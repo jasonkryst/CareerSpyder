@@ -1,3 +1,4 @@
+import functools
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -36,6 +37,18 @@ def _wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
 
 
+@functools.lru_cache(maxsize=256)
+def _geocode_zip(zip_code: str) -> tuple[float, float] | None:
+    """Cached ZIP→(lat, lng). ZIP codes are stable, so caching process-wide
+    avoids a Nominatim round-trip on every page render when a zip filter is
+    active (issue #B from 2026-09-04 audit, Performance H2 / Security N1)."""
+    try:
+        result = get_geocoder().geocode(zip_code)
+    except Exception:  # noqa: BLE001
+        return None
+    return (result.lat, result.lng) if result else None
+
+
 @router.get("/jobs", response_class=HTMLResponse)
 def jobs(
     request: Request, page: str = "1", sort: str = "",
@@ -50,13 +63,9 @@ def jobs(
     radius_miles: float | None = None
     zip_error = False
     if zip_code:
-        geocoder = get_geocoder()
-        try:
-            result = geocoder.geocode(zip_code)
-        except Exception:  # noqa: BLE001
-            result = None
-        if result:
-            zip_lat, zip_lng = result.lat, result.lng
+        coords = _geocode_zip(zip_code)
+        if coords:
+            zip_lat, zip_lng = coords
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
         else:
             zip_error = True
@@ -131,13 +140,9 @@ def jobs_map_data(
     zip_lng: float | None = None
     radius_miles: float | None = None
     if zip_code:
-        geocoder = get_geocoder()
-        try:
-            result = geocoder.geocode(zip_code)
-        except Exception:  # noqa: BLE001
-            result = None
-        if result:
-            zip_lat, zip_lng = result.lat, result.lng
+        coords = _geocode_zip(zip_code)
+        if coords:
+            zip_lat, zip_lng = coords
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
     settings = db.get_settings(conn)
     hide_not_interested = settings is None or settings["hide_not_interested_on_map"]

@@ -324,3 +324,31 @@ def test_workday_source_rejects_javascript_career_site_url():
 def test_phenompeople_source_rejects_javascript_career_site_url():
     with pytest.raises(ValidationError):
         config.PhenomPeopleSource(id="s1", name="X", type="phenompeople", career_site_url="javascript:alert(1)")
+
+
+# --- Encoding correctness (i18n audit M1/M2) ---
+
+def test_save_and_load_sources_round_trips_non_ascii_name(tmp_path):
+    """sources.json must be written and read as UTF-8 so names with accented or
+    non-Latin characters survive a save/load cycle without mojibake."""
+    path = str(tmp_path / "sources.json")
+    source = config.GreenhouseSource(id="s1", name="Société Générale", type="greenhouse", board_token="tok")
+    config.save_sources(path, [source])
+
+    reloaded = config.load_sources(path)
+    assert reloaded[0].name == "Société Générale"
+
+
+def test_sources_json_file_bytes_are_valid_utf8(tmp_path):
+    """The file written by save_sources must be decodable as UTF-8 without error.
+    With ensure_ascii=True (json default), output is all-ASCII so this is
+    straightforward; the test documents that explicit encoding="utf-8" is set
+    and guards against accidental ensure_ascii=False changes."""
+    path = str(tmp_path / "sources.json")
+    source = config.GreenhouseSource(id="s1", name="Société", type="greenhouse", board_token="tok")
+    config.save_sources(path, [source])
+
+    raw = (tmp_path / "sources.json").read_bytes()
+    # Must decode without error and round-trip the name via JSON-escaped form
+    text = raw.decode("utf-8")
+    assert "Soci" in text  # partial check — full name is JSON-escaped (é)

@@ -6,8 +6,10 @@ from app.security.ssrf_guard import safe_get
 
 
 class FakeResponse:
-    def __init__(self, text):
+    def __init__(self, text, apparent_encoding=None):
         self.text = text
+        self.apparent_encoding = apparent_encoding
+        self.encoding: str | None = None
 
     def raise_for_status(self):
         pass
@@ -113,3 +115,36 @@ def test_missing_title_or_link_is_skipped_not_crashed():
 def test_fetch_default_http_get_is_the_ssrf_guarded_safe_get():
     sig = inspect.signature(generic_html.fetch)
     assert sig.parameters["http_get"].default is safe_get
+
+
+def test_fetch_uses_apparent_encoding_when_server_declares_no_charset():
+    """Regression for i18n M2: resp.encoding must be set to apparent_encoding
+    before reading resp.text, so a server that omits a Content-Type charset gets
+    charset-normalizer detection instead of the RFC-mandated ISO-8859-1 default."""
+    recorded = {}
+
+    class TrackingResponse(FakeResponse):
+        def __init__(self):
+            super().__init__("<html><body><div class='job'><span class='t'>T</span><a href='http://x.test/1'>x</a></div></body></html>",
+                             apparent_encoding="utf-8")
+
+        @property  # type: ignore[override]
+        def encoding(self):
+            return self._encoding
+
+        @encoding.setter
+        def encoding(self, value):
+            recorded["set_to"] = value
+            self._encoding = value
+
+    def fake_get(url, timeout):
+        return TrackingResponse()
+
+    source = GenericHtmlSource(id="s1", name="X", type="generic_html",
+                                url="https://x.test/careers", selectors=selectors())
+    generic_html.fetch(source, http_get=fake_get)
+
+    assert recorded.get("set_to") == "utf-8", (
+        "expected encoding set to apparent_encoding ('utf-8'), "
+        f"got {recorded.get('set_to')!r}"
+    )
