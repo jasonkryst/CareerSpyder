@@ -4,6 +4,8 @@ from app.adapters import infor
 from app.adapters.infor import _title_changed, default_frame_fetcher
 from app.config import InforSource
 
+# ── v1 (Slickgrid card-stack) HTML fixtures ──────────────────────────────────
+
 PAGE_1_HTML = """
 <div class="inforCardstackCell">
   <span class="inforCardstackHeading">Anesthesia Tech 1</span>
@@ -46,6 +48,63 @@ CARD_MISSING_POSTED_AND_LOCATION = """
 </div>
 """
 
+# ── v2 (list-view SPA) HTML fixtures ─────────────────────────────────────────
+
+V2_PAGE_1_HTML = """
+<ul>
+  <li style="position: relative;" job-req="10001" job-post="20001">
+    <div>
+      <p class="listview-heading">Radiation Therapist</p>
+      <div class="listview-subheading">
+        <span class="listview-subheading">Department: Radiology</span>
+      </div>
+      <div class="listview-subheading">
+        <span class="listview-subheading">Chicago, IL</span>
+      </div>
+    </div>
+    <div>
+      <span class="listview-subheading">Posted: 08/12/2026</span>
+    </div>
+  </li>
+  <li style="position: relative;" job-req="10002" job-post="20002">
+    <div>
+      <p class="listview-heading">MRI Technologist</p>
+      <div class="listview-subheading">
+        <span class="listview-subheading">Department: Imaging</span>
+      </div>
+      <div class="listview-subheading">
+        <span class="listview-subheading">Oak Park, IL</span>
+      </div>
+    </div>
+    <div>
+      <span class="listview-subheading">Posted: 08/11/2026</span>
+    </div>
+  </li>
+</ul>
+"""
+
+V2_CARD_NO_SUBCATEGORY = """
+<li style="position: relative;" job-req="10003" job-post="20003">
+  <div>
+    <p class="listview-heading">CT Tech</p>
+    <div class="listview-subheading">
+      <span class="listview-subheading">Evanston, IL</span>
+    </div>
+  </div>
+  <div>
+    <span class="listview-subheading">Posted: 08/09/2026</span>
+  </div>
+</li>
+"""
+
+V2_CARD_MISSING_TITLE = """
+<li style="position: relative;" job-req="10004" job-post="20004">
+  <div>
+    <span class="listview-subheading">Chicago, IL</span>
+  </div>
+</li>
+"""
+
 
 def make_source(max_pages=3):
     return InforSource(
@@ -54,7 +113,9 @@ def make_source(max_pages=3):
     )
 
 
-def test_fetch_parses_single_page_of_cards():
+# ── v1 parsing tests ──────────────────────────────────────────────────────────
+
+def test_fetch_parses_single_page_of_v1_cards():
     def fake_fetcher(url, page_number):
         assert url == "https://rush.test/careers"
         return PAGE_1_HTML if page_number == 1 else None
@@ -81,7 +142,7 @@ def test_fetch_paginates_up_to_max_pages():
             return PAGE_1_HTML
         if page_number == 2:
             return PAGE_2_HTML
-        return None  # would be page 3, but max_pages=2 stops us first
+        return None
 
     jobs = infor.fetch(make_source(max_pages=2), frame_fetcher=fake_fetcher)
 
@@ -95,7 +156,7 @@ def test_fetch_stops_early_when_frame_fetcher_returns_none():
 
     jobs = infor.fetch(make_source(max_pages=5), frame_fetcher=fake_fetcher)
 
-    assert len(jobs) == 2  # only page 1's cards, even though max_pages allows up to 5
+    assert len(jobs) == 2
 
 
 def test_fetch_stops_when_a_page_has_zero_cards():
@@ -109,7 +170,7 @@ def test_fetch_stops_when_a_page_has_zero_cards():
     assert len(jobs) == 2
 
 
-def test_card_missing_posted_and_location_still_yields_a_job_with_none_fields():
+def test_v1_card_missing_posted_and_location_still_yields_a_job_with_none_fields():
     def fake_fetcher(url, page_number):
         return CARD_MISSING_POSTED_AND_LOCATION if page_number == 1 else None
 
@@ -128,12 +189,74 @@ def test_job_key_is_stable_across_identical_cards_and_differs_for_different_ones
     jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
 
     assert jobs[0].key != jobs[1].key
-    # Re-fetching the identical page must produce the identical key (dedup relies on this).
     jobs_again = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
     assert jobs[0].key == jobs_again[0].key
 
 
-# --- Pagination/polling branch logic (issue #136) ---
+# ── v2 parsing tests ──────────────────────────────────────────────────────────
+
+def test_fetch_parses_v2_listview_cards():
+    def fake_fetcher(url, page_number):
+        return V2_PAGE_1_HTML if page_number == 1 else None
+
+    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+
+    assert len(jobs) == 2
+    assert jobs[0].title == "Radiation Therapist"
+    assert jobs[0].location == "Chicago, IL"
+    assert jobs[0].posted_date == "Posted: 08/12/2026"
+    assert jobs[0].company == "Rush University Medical Center"
+    assert jobs[0].url == "https://rush.test/careers"
+    assert jobs[1].title == "MRI Technologist"
+    assert jobs[1].location == "Oak Park, IL"
+
+
+def test_v2_card_without_subcategory_parses_correctly():
+    def fake_fetcher(url, page_number):
+        return V2_CARD_NO_SUBCATEGORY if page_number == 1 else None
+
+    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+
+    assert len(jobs) == 1
+    assert jobs[0].title == "CT Tech"
+    assert jobs[0].location == "Evanston, IL"
+    assert jobs[0].posted_date == "Posted: 08/09/2026"
+
+
+def test_v2_card_missing_p_listview_heading_is_skipped():
+    def fake_fetcher(url, page_number):
+        return V2_CARD_MISSING_TITLE if page_number == 1 else None
+
+    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+
+    assert len(jobs) == 0
+
+
+def test_v2_takes_priority_over_v1_when_both_selectors_present():
+    mixed_html = V2_PAGE_1_HTML + PAGE_1_HTML
+
+    def fake_fetcher(url, page_number):
+        return mixed_html if page_number == 1 else None
+
+    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+
+    # v2 cards are found first; v1 cards are ignored
+    assert all(j.title in ("Radiation Therapist", "MRI Technologist") for j in jobs)
+    assert len(jobs) == 2
+
+
+def test_v2_key_is_stable_and_differs_between_cards():
+    def fake_fetcher(url, page_number):
+        return V2_PAGE_1_HTML if page_number == 1 else None
+
+    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs_again = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+
+    assert jobs[0].key != jobs[1].key
+    assert jobs[0].key == jobs_again[0].key
+
+
+# ── Pagination/polling branch logic ───────────────────────────────────────────
 
 def test_title_changed_true_when_different():
     assert _title_changed("New Title", "Old Title") is True
@@ -148,23 +271,28 @@ def test_title_changed_true_when_previous_is_none():
 
 
 def _make_page_mock(*, cell_count=1, disabled=False):
-    """Builds a fake Playwright `page`/`frame` chain deep enough for
-    default_frame_fetcher's branch logic. Each `.text_content()` call
-    returns a new, distinct title so _wait_for_new_first_title's real
-    polling loop always sees a change on its very first check -- without
-    this, the mocked title would never change and the loop would burn its
-    full 15s real-time deadline per click (only time.sleep is mocked, not
-    time.monotonic)."""
-    heading_locator = MagicMock()
-    heading_locator.count.return_value = 1
+    """Builds a fake Playwright page/frame chain for default_frame_fetcher tests.
+
+    _first_title() tries "p.listview-heading" first (v2), then ".inforCardstackHeading"
+    (v1). The mock returns count=0 for the v2 selector so the polling loop falls
+    through to v1 — each call returns a new unique title so _wait_for_new_first_title
+    always sees a change on its first iteration without burning real-time on the
+    15-second deadline (only time.sleep is mocked, not time.monotonic).
+    """
+    v2_heading = MagicMock()
+    v2_heading.count.return_value = 0
+
+    v1_heading = MagicMock()
+    v1_heading.count.return_value = 1
     titles = (f"Title {i}" for i in range(1000))
-    heading_locator.first.text_content.side_effect = lambda: next(titles)
+    v1_heading.first.text_content.side_effect = lambda: next(titles)
 
-    next_button = MagicMock()
-    next_button.is_disabled.return_value = disabled
+    card_locator = MagicMock()
+    card_locator.count.return_value = cell_count
 
-    cardstack_cell = MagicMock()
-    cardstack_cell.count.return_value = cell_count
+    next_locator = MagicMock()
+    next_locator.count.return_value = 1
+    next_locator.is_disabled.return_value = disabled
 
     body_locator = MagicMock()
     body_locator.inner_html.return_value = "<div class='inforCardstackCell'></div>"
@@ -173,10 +301,10 @@ def _make_page_mock(*, cell_count=1, disabled=False):
 
     def locator_side_effect(selector):
         return {
-            ".inforCardstackHeading": heading_locator,
-            "button.nextPage": next_button,
-            ".slick-row": MagicMock(first=MagicMock(wait_for=MagicMock())),
-            ".inforCardstackCell": cardstack_cell,
+            infor._CARD_SELECTOR: card_locator,
+            infor._NEXT_SELECTOR: next_locator,
+            "p.listview-heading": v2_heading,
+            ".inforCardstackHeading": v1_heading,
             "body": body_locator,
         }[selector]
 
@@ -195,11 +323,23 @@ def _make_page_mock(*, cell_count=1, disabled=False):
     sync_playwright_cm.__enter__.return_value = p
     sync_playwright_cm.__exit__.return_value = False
 
-    return sync_playwright_cm, pw_browser, page, next_button, cardstack_cell
+    return sync_playwright_cm, pw_browser, page, next_locator, card_locator
 
 
 def test_default_frame_fetcher_returns_none_when_next_button_is_disabled():
-    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(disabled=True)
+    sync_playwright_cm, *_ = _make_page_mock(disabled=True)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
+
+    assert result is None
+
+
+def test_default_frame_fetcher_returns_none_when_no_next_button():
+    sync_playwright_cm, _, _, next_locator, _ = _make_page_mock()
+    next_locator.count.return_value = 0
 
     with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
          patch("app.adapters.infor.assert_safe_url"), \
@@ -210,7 +350,7 @@ def test_default_frame_fetcher_returns_none_when_next_button_is_disabled():
 
 
 def test_default_frame_fetcher_returns_none_when_zero_cards():
-    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(cell_count=0)
+    sync_playwright_cm, *_ = _make_page_mock(cell_count=0)
 
     with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
          patch("app.adapters.infor.assert_safe_url"), \
@@ -221,7 +361,7 @@ def test_default_frame_fetcher_returns_none_when_zero_cards():
 
 
 def test_default_frame_fetcher_clicks_next_page_number_minus_one_times():
-    sync_playwright_cm, _pw_browser, _page, next_button, _cardstack_cell = _make_page_mock(cell_count=1)
+    sync_playwright_cm, _, _, next_locator, _ = _make_page_mock(cell_count=1)
 
     with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
          patch("app.adapters.infor.assert_safe_url"), \
@@ -229,11 +369,11 @@ def test_default_frame_fetcher_clicks_next_page_number_minus_one_times():
          patch("app.adapters.infor.time.sleep"):
         default_frame_fetcher("https://rush.test/careers", page_number=3)
 
-    assert next_button.click.call_count == 2
+    assert next_locator.click.call_count == 2
 
 
 def test_default_frame_fetcher_returns_html_when_cards_present():
-    sync_playwright_cm, _pw_browser, _page, _next_button, _cardstack_cell = _make_page_mock(cell_count=1)
+    sync_playwright_cm, *_ = _make_page_mock(cell_count=1)
 
     with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
          patch("app.adapters.infor.assert_safe_url"), \
