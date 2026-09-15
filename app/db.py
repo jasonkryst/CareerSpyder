@@ -342,9 +342,9 @@ _JOB_SORT_COLUMNS = {
 
 
 def _job_filters_sql(
-    company: str | None, source_name: str | None, removed: str | None, emailed: str | None,
-    status: str | None = None, location: str | None = None, duplicates: str | None = None,
-    state: str | None = None,
+    company: str | None, source_name: list[str] | None, removed: str | None, emailed: str | None,
+    status: list[str] | None = None, location: str | None = None, duplicates: str | None = None,
+    state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
 ) -> tuple[str, list]:
     clauses = []
@@ -353,8 +353,9 @@ def _job_filters_sql(
         clauses.append("LOWER(jobs.company) LIKE ?")
         params.append(f"%{company.lower()}%")
     if source_name:
-        clauses.append("jobs.source_name = ?")
-        params.append(source_name)
+        ph = ",".join("?" * len(source_name))
+        clauses.append(f"jobs.source_name IN ({ph})")
+        params.extend(source_name)
     if removed == "active":
         clauses.append("jobs.removed_at IS NULL")
     elif removed == "removed":
@@ -363,11 +364,19 @@ def _job_filters_sql(
         clauses.append("jobs.emailed_at IS NOT NULL")
     elif emailed == "not_sent":
         clauses.append("jobs.emailed_at IS NULL")
-    if status == "none":
-        clauses.append("jobs.status IS NULL")
-    elif status:
-        clauses.append("jobs.status = ?")
-        params.append(status)
+    if status:
+        none_selected = "none" in status
+        real = [s for s in status if s != "none"]
+        if none_selected and real:
+            ph = ",".join("?" * len(real))
+            clauses.append(f"(jobs.status IS NULL OR jobs.status IN ({ph}))")
+            params.extend(real)
+        elif none_selected:
+            clauses.append("jobs.status IS NULL")
+        else:
+            ph = ",".join("?" * len(real))
+            clauses.append(f"jobs.status IN ({ph})")
+            params.extend(real)
     if location == "__unresolved__":
         clauses.append("(geocoded_locations.status IS NULL OR geocoded_locations.status != 'resolved')")
     elif location:
@@ -378,8 +387,9 @@ def _job_filters_sql(
     elif duplicates != "include":
         clauses.append("jobs.is_duplicate = 0")
     if state:
-        clauses.append("geocoded_locations.region = ?")
-        params.append(state)
+        ph = ",".join("?" * len(state))
+        clauses.append(f"geocoded_locations.region IN ({ph})")
+        params.extend(state)
     if zip_lat is not None and zip_lng is not None and radius_miles is not None:
         clauses.append("haversine_miles(geocoded_locations.lat, geocoded_locations.lng, ?, ?) <= ?")
         params.extend([zip_lat, zip_lng, radius_miles])
@@ -390,10 +400,10 @@ def _job_filters_sql(
 def list_jobs(
     conn: sqlite3.Connection, limit: int = 25, offset: int = 0, *,
     sort: str = "", direction: str = "",
-    company: str | None = None, source_name: str | None = None,
-    removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    company: str | None = None, source_name: list[str] | None = None,
+    removed: str | None = None, emailed: str | None = None, status: list[str] | None = None,
     location: str | None = None, duplicates: str | None = None,
-    state: str | None = None,
+    state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
@@ -432,10 +442,10 @@ def list_jobs(
 
 def count_jobs(
     conn: sqlite3.Connection, *,
-    company: str | None = None, source_name: str | None = None,
-    removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    company: str | None = None, source_name: list[str] | None = None,
+    removed: str | None = None, emailed: str | None = None, status: list[str] | None = None,
     location: str | None = None, duplicates: str | None = None,
-    state: str | None = None,
+    state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
 ) -> int:
     where_sql, params = _job_filters_sql(
@@ -477,10 +487,10 @@ def list_job_states(conn: sqlite3.Connection) -> list[str]:
 
 def list_mappable_jobs(
     conn: sqlite3.Connection, *,
-    company: str | None = None, source_name: str | None = None, location: str | None = None,
-    removed: str | None = None, emailed: str | None = None, status: str | None = None,
+    company: str | None = None, source_name: list[str] | None = None, location: str | None = None,
+    removed: str | None = None, emailed: str | None = None, status: list[str] | None = None,
     exclude_status: str | None = None, duplicates: str | None = None,
-    state: str | None = None,
+    state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(

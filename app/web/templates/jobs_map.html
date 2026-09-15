@@ -16,10 +16,9 @@
 <form method="get" action="/jobs/map" class="filter-bar">
   <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
   <label>Search name
-    <select name="source">
-      <option value="">All sources</option>
+    <select name="source" multiple>
       {% for name in source_names %}
-      <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ name }}</option>
+      <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
       {% endfor %}
     </select>
   </label>
@@ -33,10 +32,9 @@
     </select>
   </label>
   <label>State
-    <select name="state">
-      <option value="">All states</option>
+    <select name="state" multiple>
       {% for s in states %}
-      <option value="{{ s }}" {% if filters.state == s %}selected{% endif %}>{{ s }}</option>
+      <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
   </label>

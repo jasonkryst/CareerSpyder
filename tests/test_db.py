@@ -645,9 +645,21 @@ def test_list_jobs_filters_by_source_name(tmp_db_path):
     db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id)
     db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id)
 
-    rows = db.list_jobs(conn, source_name="Zeta Board")
+    rows = db.list_jobs(conn, source_name=["Zeta Board"])
 
     assert [r["key"] for r in rows] == ["b"]
+
+
+def test_list_jobs_multi_source_name_returns_union(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id)
+    db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id)
+    db.save_jobs(conn, [_job("c", source_name="Other Board")], run_id)
+
+    rows = db.list_jobs(conn, source_name=["Acme Board", "Zeta Board"])
+
+    assert {r["key"] for r in rows} == {"a", "b"}
 
 
 def test_list_jobs_filters_by_removed_status(tmp_db_path):
@@ -678,7 +690,7 @@ def test_list_jobs_combines_filters(tmp_db_path):
     db.save_jobs(conn, [_job("a", company="Acme", source_name="Acme Board")], run_id)
     db.save_jobs(conn, [_job("b", company="Acme", source_name="Zeta Board")], run_id)
 
-    rows = db.list_jobs(conn, company="acme", source_name="Zeta Board")
+    rows = db.list_jobs(conn, company="acme", source_name=["Zeta Board"])
 
     assert [r["key"] for r in rows] == ["b"]
 
@@ -843,11 +855,32 @@ def test_list_jobs_filters_by_status(tmp_db_path):
     db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn))
     db.set_job_status(conn, "a", "applied")
 
-    applied = db.list_jobs(conn, status="applied")
-    none_status = db.list_jobs(conn, status="none")
+    applied = db.list_jobs(conn, status=["applied"])
+    none_status = db.list_jobs(conn, status=["none"])
 
     assert [r["key"] for r in applied] == ["a"]
     assert [r["key"] for r in none_status] == ["b"]
+
+
+def test_list_jobs_multi_status_returns_union(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn))
+    db.set_job_status(conn, "a", "applied")
+    db.set_job_status(conn, "b", "rejected")
+
+    rows = db.list_jobs(conn, status=["applied", "rejected"])
+
+    assert {r["key"] for r in rows} == {"a", "b"}
+
+
+def test_list_jobs_multi_status_with_none_returns_union_including_no_status(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn))
+    db.set_job_status(conn, "a", "applied")
+
+    rows = db.list_jobs(conn, status=["applied", "none"])
+
+    assert {r["key"] for r in rows} == {"a", "b", "c"}
 
 
 def test_count_jobs_respects_status_filter(tmp_db_path):
@@ -855,8 +888,8 @@ def test_count_jobs_respects_status_filter(tmp_db_path):
     db.save_jobs(conn, [_job("a")], db.start_run(conn))
     db.set_job_status(conn, "a", "rejected")
 
-    assert db.count_jobs(conn, status="rejected") == 1
-    assert db.count_jobs(conn, status="applied") == 0
+    assert db.count_jobs(conn, status=["rejected"]) == 1
+    assert db.count_jobs(conn, status=["applied"]) == 0
 
 
 def test_list_jobs_returns_status_field_defaulting_to_none(tmp_db_path):
@@ -1473,17 +1506,28 @@ def test_state_filter_narrows_to_matching_region(tmp_db_path):
     _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
     _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin")
 
-    rows = db.list_jobs(conn, state="Illinois")
+    rows = db.list_jobs(conn, state=["Illinois"])
 
     assert len(rows) == 1
     assert rows[0]["title"] == "IL Job"
+
+
+def test_state_filter_multi_returns_union(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
+    _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin")
+    _make_geocoded_job(conn, "k3", "TX Job", "Dallas, TX", "Texas")
+
+    rows = db.list_jobs(conn, state=["Illinois", "Wisconsin"])
+
+    assert {r["key"] for r in rows} == {"k1", "k2"}
 
 
 def test_state_filter_with_no_match_returns_empty(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
 
-    rows = db.list_jobs(conn, state="Texas")
+    rows = db.list_jobs(conn, state=["Texas"])
 
     assert rows == []
 
@@ -1493,8 +1537,8 @@ def test_count_jobs_with_state_filter(tmp_db_path):
     _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois")
     _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin")
 
-    assert db.count_jobs(conn, state="Illinois") == 1
-    assert db.count_jobs(conn, state="Wisconsin") == 1
+    assert db.count_jobs(conn, state=["Illinois"]) == 1
+    assert db.count_jobs(conn, state=["Wisconsin"]) == 1
     assert db.count_jobs(conn) == 2
 
 
@@ -1503,7 +1547,7 @@ def test_list_mappable_jobs_with_state_filter(tmp_db_path):
     _make_geocoded_job(conn, "k1", "IL Job", "Chicago, IL", "Illinois", lat=41.8, lng=-87.6)
     _make_geocoded_job(conn, "k2", "WI Job", "Milwaukee, WI", "Wisconsin", lat=43.0, lng=-87.9)
 
-    rows = db.list_mappable_jobs(conn, state="Illinois")
+    rows = db.list_mappable_jobs(conn, state=["Illinois"])
 
     assert len(rows) == 1
     assert rows[0]["key"] == "k1"

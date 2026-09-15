@@ -11,10 +11,9 @@
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
   <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
   <label>Search name
-    <select name="source">
-      <option value="">All sources</option>
+    <select name="source" multiple>
       {% for name in source_names %}
-      <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ name }}</option>
+      <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
       {% endfor %}
     </select>
   </label>
@@ -28,10 +27,9 @@
     </select>
   </label>
   <label>State
-    <select name="state">
-      <option value="">All states</option>
+    <select name="state" multiple>
       {% for s in states %}
-      <option value="{{ s }}" {% if filters.state == s %}selected{% endif %}>{{ s }}</option>
+      <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
   </label>
@@ -63,11 +61,10 @@
     </select>
   </label>
   <label>Job status
-    <select name="status">
-      <option value="">All</option>
-      <option value="none" {% if filters.status == "none" %}selected{% endif %}>No status</option>
+    <select name="status" multiple>
+      <option value="none" {% if "none" in filters.status %}selected{% endif %}>No status</option>
       {% for value, label in statuses.items() %}
-      <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      <option value="{{ value }}" {% if value in filters.status %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </label>

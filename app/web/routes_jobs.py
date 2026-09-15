@@ -53,8 +53,9 @@ def _geocode_zip(zip_code: str) -> tuple[float, float] | None:
 def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
-    company: str = "", source: str = "", removed: str = "active", emailed: str = "", status: str = "",
-    location: str = "", duplicates: str = "", state: str = "",
+    company: str = "", source: list[str] = Query(default=[]), removed: str = "active",
+    emailed: str = "", status: list[str] = Query(default=[]),
+    location: str = "", duplicates: str = "", state: list[str] = Query(default=[]),
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -110,8 +111,9 @@ def jobs(
 @router.get("/jobs/map", response_class=HTMLResponse)
 def jobs_map(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "active",
-    emailed: str = "", status: str = "", state: str = "",
+    company: str = "", source: list[str] = Query(default=[]), location: str = "",
+    removed: str = "active", emailed: str = "", status: list[str] = Query(default=[]),
+    state: list[str] = Query(default=[]),
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -131,8 +133,9 @@ def jobs_map(
 @router.get("/jobs/map/data")
 def jobs_map_data(
     request: Request,
-    company: str = "", source: str = "", location: str = "", removed: str = "active",
-    emailed: str = "", status: str = "", state: str = "",
+    company: str = "", source: list[str] = Query(default=[]), location: str = "",
+    removed: str = "active", emailed: str = "", status: list[str] = Query(default=[]),
+    state: list[str] = Query(default=[]),
     zip_code: str = Query("", alias="zip"), radius: str = "25",
 ):
     conn = request.app.state.conn
@@ -146,7 +149,7 @@ def jobs_map_data(
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
     settings = db.get_settings(conn)
     hide_not_interested = settings is None or settings["hide_not_interested_on_map"]
-    exclude_status = "not_interested" if hide_not_interested and status != "not_interested" else None
+    exclude_status = "not_interested" if hide_not_interested and "not_interested" not in status else None
     rows = db.list_mappable_jobs(
         conn, company=company or None, source_name=source or None, location=location or None,
         removed=removed or None, emailed=emailed or None, status=status or None,
