@@ -46,6 +46,28 @@
 
 <div class="card">
   <fieldset>
+    <legend>Digest</legend>
+    <label>
+      Max jobs per company (0 = unlimited)
+      <input type="number" name="digest_max_per_company" min="0"
+             value="{{ settings.digest_max_per_company if settings else 0 }}" style="width:6em">
+    </label>
+    <p>Don't include jobs with status:</p>
+    <label><input type="checkbox" name="digest_exclude_statuses" value="not_interested"
+      {% if "not_interested" in digest_exclude_statuses_set %}checked{% endif %}> Not Interested</label>
+    <label><input type="checkbox" name="digest_exclude_statuses" value="rejected"
+      {% if "rejected" in digest_exclude_statuses_set %}checked{% endif %}> Rejected</label>
+    <label><input type="checkbox" name="digest_exclude_statuses" value="ignored"
+      {% if "ignored" in digest_exclude_statuses_set %}checked{% endif %}> Ignored</label>
+    <label><input type="checkbox" name="digest_exclude_statuses" value="applied"
+      {% if "applied" in digest_exclude_statuses_set %}checked{% endif %}> Applied</label>
+    <label><input type="checkbox" name="digest_exclude_statuses" value="accepted"
+      {% if "accepted" in digest_exclude_statuses_set %}checked{% endif %}> Accepted</label>
+  </fieldset>
+</div>
+
+<div class="card">
+  <fieldset>
     <legend>Recipients</legend>
     <div id="email-recipients">
       {% for email in email_to_list %}

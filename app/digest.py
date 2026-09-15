@@ -54,6 +54,7 @@ def build_digest(
     jobs_url: str | None = None,
     secondary_source_ids: set[str] | None = None,
     emailed_keys: set[str] | None = None,
+    max_per_company: int = 0,
 ) -> Digest | None:
     """Build an email digest.
 
@@ -82,6 +83,10 @@ def build_digest(
         for job in new_jobs:
             by_company.setdefault(job.company or "Unknown", []).append(job)
         for company, jobs in by_company.items():
+            overflow = 0
+            if max_per_company > 0 and len(jobs) > max_per_company:
+                overflow = len(jobs) - max_per_company
+                jobs = jobs[:max_per_company]
             parts.append(f"<h3>{escape(company)}</h3>")
             if emailed_keys is not None:
                 unseen = [j for j in jobs if j.key not in emailed_keys]
@@ -92,6 +97,14 @@ def build_digest(
                 parts.extend(_render_job_list(seen, secondary_source_ids, statuses, "No previously identified jobs."))
             else:
                 parts.extend(_render_job_list(jobs, secondary_source_ids, statuses, ""))
+            if overflow:
+                if jobs_url:
+                    href = escape(jobs_url, quote=True)
+                    parts.append(
+                        f'<p><em>… and {overflow} more — <a href="{href}">view all</a></em></p>'
+                    )
+                else:
+                    parts.append(f"<p><em>… and {overflow} more not shown.</em></p>")
 
     if failed_sources:
         parts.append("<h3>Sources that failed this run</h3><ul>")

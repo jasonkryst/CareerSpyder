@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 from app import config, db
+from app.models import JOB_STATUSES
 from app.web.flash import flash_redirect
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -75,9 +76,17 @@ def show_settings_preferences(request: Request):
     settings = db.get_settings(request.app.state.conn)
     email_days_selected = set((settings["email_days"] if settings else "").split(","))
     email_to_list = _split_emails(settings["email_to"] if settings else "") or [""]
+    digest_exclude_statuses_set = set(
+        (settings["digest_exclude_statuses"] if settings else "").split(",")
+    ) - {""}
     return templates.TemplateResponse(
         request, "settings_preferences.html",
-        {"settings": settings, "email_days_selected": email_days_selected, "email_to_list": email_to_list},
+        {
+            "settings": settings,
+            "email_days_selected": email_days_selected,
+            "email_to_list": email_to_list,
+            "digest_exclude_statuses_set": digest_exclude_statuses_set,
+        },
     )
 
 
@@ -90,22 +99,37 @@ async def save_preferences(request: Request):
     hide_not_interested_on_map = "hide_not_interested_on_map" in form
     submitted_emails = [addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip()]
 
+    raw_max = form.get("digest_max_per_company", "0")
+    try:
+        digest_max_per_company = max(0, int(raw_max) if raw_max else 0)
+    except ValueError:
+        digest_max_per_company = 0
+
+    raw_exclude = set(_str_list_field(form, "digest_exclude_statuses")) & set(JOB_STATUSES)
+    digest_exclude_statuses = ",".join(s for s in JOB_STATUSES if s in raw_exclude)
+
     invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
     if invalid:
         settings = db.get_settings(request.app.state.conn)
+        digest_exclude_statuses_set = raw_exclude
         return templates.TemplateResponse(
             request, "settings_preferences.html",
             {
                 "settings": settings,
                 "email_days_selected": selected_days,
                 "email_to_list": submitted_emails or [""],
+                "digest_exclude_statuses_set": digest_exclude_statuses_set,
                 "error": f"Invalid email address: {invalid[0]}",
             },
             status_code=400,
         )
 
     email_to = ",".join(submitted_emails)
-    db.save_preferences(request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map)
+    db.save_preferences(
+        request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+        digest_max_per_company=digest_max_per_company,
+        digest_exclude_statuses=digest_exclude_statuses,
+    )
     return flash_redirect("/settings/preferences", "Preferences saved.")
 
 
@@ -120,6 +144,7 @@ def clear_cache(request: Request):
 
 DEFAULT_PREFERENCES = {
     "email_days": [], "resend_jobs": False, "email_to": [], "hide_not_interested_on_map": True,
+    "digest_max_per_company": 0, "digest_exclude_statuses": [],
 }
 
 
@@ -134,6 +159,10 @@ def _export_payload(request: Request) -> dict:
             "resend_jobs": settings["resend_jobs"],
             "email_to": [a for a in settings["email_to"].split(",") if a],
             "hide_not_interested_on_map": settings["hide_not_interested_on_map"],
+            "digest_max_per_company": settings["digest_max_per_company"],
+            "digest_exclude_statuses": [
+                s for s in (settings["digest_exclude_statuses"] or "").split(",") if s
+            ],
         }
     return {"sources": [s.model_dump() for s in sources], "preferences": preferences}
 
@@ -163,7 +192,19 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool] | None:
     if not isinstance(hide_not_interested_on_map, bool):
         hide_not_interested_on_map = True
 
-    return email_days, resend_jobs, email_to, hide_not_interested_on_map
+    digest_max_per_company = preferences.get("digest_max_per_company")
+    if not isinstance(digest_max_per_company, int) or digest_max_per_company < 0:
+        digest_max_per_company = 0
+
+    raw_statuses = preferences.get("digest_exclude_statuses")
+    if isinstance(raw_statuses, list):
+        digest_exclude_statuses = ",".join(
+            s for s in JOB_STATUSES if s in {x for x in raw_statuses if isinstance(x, str)}
+        )
+    else:
+        digest_exclude_statuses = ""
+
+    return email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses
 
 
 @router.get("/settings/data/export")
@@ -199,9 +240,10 @@ async def import_settings(request: Request):
 
     parsed_preferences = _parse_preferences_import(json.loads(raw))
     if parsed_preferences is not None:
-        email_days, resend_jobs, email_to, hide_not_interested_on_map = parsed_preferences
+        email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max, digest_excl = parsed_preferences
         db.save_preferences(
             request.app.state.conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+            digest_max_per_company=digest_max, digest_exclude_statuses=digest_excl,
         )
 
     redirect_message = f"Imported {len(sources)} source(s)."
