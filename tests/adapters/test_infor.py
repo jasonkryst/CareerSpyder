@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 from app.adapters import infor
 from app.adapters.infor import _title_changed, default_frame_fetcher
 from app.config import InforSource
@@ -623,7 +625,7 @@ def _make_v2_with_frozen_iframe_page_mock():
 
     # Slick-row probe inside the iframe raises TimeoutError — rows never appear.
     slick_row_probe = MagicMock()
-    slick_row_probe.first.wait_for.side_effect = Exception("Timeout 5000ms exceeded")
+    slick_row_probe.first.wait_for.side_effect = PlaywrightTimeoutError("Timeout 15000ms exceeded")
 
     frozen_frame = MagicMock()
     frozen_frame.locator.return_value = slick_row_probe

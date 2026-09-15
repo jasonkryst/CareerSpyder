@@ -1,6 +1,7 @@
 import time
 
 from bs4 import BeautifulSoup
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from app.config import InforSource
@@ -149,10 +150,10 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
                 if page.locator("#parentIframe").count() > 0:
                     try:
                         page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).first.wait_for(
-                            timeout=5000
+                            timeout=15000
                         )
                         iframe_rows = True
-                    except Exception:
+                    except PlaywrightTimeoutError:
                         iframe_rows = False
                 if not iframe_rows:
                     # True v2: wait for any child inside the job list's grid
