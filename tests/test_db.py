@@ -815,6 +815,29 @@ def test_get_job_statuses_with_empty_keys_list_returns_empty_dict(tmp_db_path):
     assert db.get_job_statuses(conn, []) == {}
 
 
+def test_get_emailed_keys_returns_only_keys_with_emailed_at_set(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+    db.mark_emailed(conn, ["k1"])
+
+    result = db.get_emailed_keys(conn, ["k1", "k2"])
+
+    assert result == {"k1"}
+
+
+def test_get_emailed_keys_returns_empty_set_when_none_emailed(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+
+    assert db.get_emailed_keys(conn, ["k1"]) == set()
+
+
+def test_get_emailed_keys_with_empty_list_returns_empty_set(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+
+    assert db.get_emailed_keys(conn, []) == set()
+
+
 def test_list_jobs_filters_by_status(tmp_db_path):
     conn = db.init_db(tmp_db_path)
     db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn))

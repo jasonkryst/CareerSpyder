@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.62.0] — 2026-09-14
+
+### Changed
+
+- **Email digest: per-company "Newly identified / Already identified" split (resend mode).** When
+  **Resend jobs** is enabled in settings, each company section in the digest email is now split
+  into two sub-sections: **Newly identified** (jobs that have never appeared in a prior digest)
+  and **Already identified** (jobs included in at least one previous email). Each sub-section
+  shows a placeholder message when empty ("No newly identified jobs." / "No previously identified
+  jobs."). When resend is disabled, the existing flat layout is unchanged — all jobs in that
+  mode are already new by definition.
+
 ## [0.61.0] — 2026-09-14
 
 ### Fixed

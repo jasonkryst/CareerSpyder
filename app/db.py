@@ -619,6 +619,17 @@ def get_job_statuses(conn: sqlite3.Connection, keys: list[str]) -> dict[str, str
     return {key: status for key, status in rows}
 
 
+def get_emailed_keys(conn: sqlite3.Connection, keys: list[str]) -> set[str]:
+    """Return the subset of `keys` that have been included in a prior digest email."""
+    if not keys:
+        return set()
+    placeholders = ",".join("?" * len(keys))
+    rows = conn.execute(
+        f"SELECT key FROM jobs WHERE key IN ({placeholders}) AND emailed_at IS NOT NULL", keys,
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
 def set_job_duplicate(conn: sqlite3.Connection, key: str, duplicate_of: str | None = None) -> None:
     cur = conn.execute(
         "UPDATE jobs SET is_duplicate = 1, duplicate_of = ? WHERE key = ?", (duplicate_of, key)
