@@ -606,3 +606,74 @@ def test_default_frame_fetcher_lawson_hybrid_uses_v1_iframe_path():
 
     assert result is not None
     assert "inforCardstackCell" in result
+
+
+def _make_v2_with_frozen_iframe_page_mock():
+    """Portals with #jobListScreen + a frozen #parentIframe (blank.html, no .slick-row).
+
+    This is the race-condition scenario: networkidle fires before the iframe XHR
+    completes and the .slick-row probe times out.  The fetcher should fall back to
+    the v2 path and read from .gridContent.
+    """
+    job_list_screen_locator = MagicMock()
+    job_list_screen_locator.count.return_value = 1
+
+    parent_iframe_locator = MagicMock()
+    parent_iframe_locator.count.return_value = 1
+
+    # Slick-row probe inside the iframe raises TimeoutError — rows never appear.
+    slick_row_probe = MagicMock()
+    slick_row_probe.first.wait_for.side_effect = Exception("Timeout 5000ms exceeded")
+
+    frozen_frame = MagicMock()
+    frozen_frame.locator.return_value = slick_row_probe
+
+    # v2 grid content is available in the main body.
+    v2_card_locator = MagicMock()
+    v2_card_locator.count.return_value = 2
+
+    grid_content_locator = MagicMock()
+    grid_content_locator.first.inner_html.return_value = (
+        "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
+    )
+
+    def page_locator_side_effect(selector):
+        return {
+            "#jobListScreen": job_list_screen_locator,
+            "#parentIframe": parent_iframe_locator,
+            "#jobListScreen .gridContent > *": v2_card_locator,
+            "#gridBottom": MagicMock(count=lambda: 0, is_visible=lambda: False),
+            "#jobListScreen .gridContent": grid_content_locator,
+        }.get(selector, MagicMock())
+
+    page = MagicMock()
+    page.locator.side_effect = page_locator_side_effect
+    page.frame_locator.return_value = frozen_frame
+
+    pw_browser = MagicMock()
+    pw_browser.new_page.return_value = page
+
+    p = MagicMock()
+    p.chromium.launch.return_value = pw_browser
+
+    sync_playwright_cm = MagicMock()
+    sync_playwright_cm.__enter__.return_value = p
+    sync_playwright_cm.__exit__.return_value = False
+
+    return sync_playwright_cm
+
+
+def test_default_frame_fetcher_lawson_probe_timeout_falls_back_to_v2():
+    """Regression: if networkidle fires before iframe XHR completes the probe
+    wait_for times out.  The fetcher must not then be marked failed — it should
+    fall back to the v2 path and return content from .gridContent.
+    """
+    sync_playwright_cm = _make_v2_with_frozen_iframe_page_mock()
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+
+    assert result is not None
+    assert "listview-heading" in result
