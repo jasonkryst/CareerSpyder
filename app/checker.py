@@ -1,5 +1,5 @@
 import logging
-import sqlite3
+import psycopg
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -11,7 +11,7 @@ _REMOVED_STATUSES = frozenset({404, 410})
 
 
 def check_job_urls(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     http_head: Callable = requests.head,
 ) -> int:
     """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs."""

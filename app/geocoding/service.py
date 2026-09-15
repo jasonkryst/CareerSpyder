@@ -1,5 +1,5 @@
 import logging
-import sqlite3
+import psycopg
 import time
 from datetime import UTC, datetime
 
@@ -12,7 +12,7 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def geocode_pending(conn: sqlite3.Connection, geocoder: Geocoder) -> None:
+def geocode_pending(conn: psycopg.Connection, geocoder: Geocoder) -> None:
     rows = conn.execute(
         "SELECT location FROM geocoded_locations WHERE status = 'pending'"
     ).fetchall()
