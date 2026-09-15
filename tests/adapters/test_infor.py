@@ -271,13 +271,15 @@ def test_title_changed_true_when_previous_is_none():
 
 
 def _make_page_mock(*, cell_count=1, disabled=False):
-    """Builds a fake Playwright page/frame chain for default_frame_fetcher tests.
+    """Builds a fake Playwright page/frame chain for v1 (Slickgrid) fetcher tests.
 
-    _first_title() tries "p.listview-heading" first (v2), then ".inforCardstackHeading"
-    (v1). The mock returns count=0 for the v2 selector so the polling loop falls
-    through to v1 — each call returns a new unique title so _wait_for_new_first_title
-    always sees a change on its first iteration without burning real-time on the
-    15-second deadline (only time.sleep is mocked, not time.monotonic).
+    page.locator("#jobListScreen") returns count=0 so the v1 iframe branch is
+    taken.  _first_title() tries "p.listview-heading" first (v2), then
+    ".inforCardstackHeading" (v1); the mock returns count=0 for the v2 selector
+    so it falls through to v1 — each call returns a new unique title so
+    _wait_for_new_first_title always sees a change on its first iteration without
+    burning real-time on the 15-second deadline (only time.sleep is mocked, not
+    time.monotonic).
     """
     v2_heading = MagicMock()
     v2_heading.count.return_value = 0
@@ -299,7 +301,7 @@ def _make_page_mock(*, cell_count=1, disabled=False):
 
     frame = MagicMock()
 
-    def locator_side_effect(selector):
+    def frame_locator_side_effect(selector):
         return {
             infor._CARD_SELECTOR: card_locator,
             infor._NEXT_SELECTOR: next_locator,
@@ -308,10 +310,15 @@ def _make_page_mock(*, cell_count=1, disabled=False):
             "body": body_locator,
         }[selector]
 
-    frame.locator.side_effect = locator_side_effect
+    frame.locator.side_effect = frame_locator_side_effect
+
+    # v2-detection locator: count=0 so code takes the v1 iframe branch
+    job_list_screen_locator = MagicMock()
+    job_list_screen_locator.count.return_value = 0
 
     page = MagicMock()
     page.frame_locator.return_value = frame
+    page.locator.side_effect = lambda sel: job_list_screen_locator if sel == "#jobListScreen" else MagicMock()
 
     pw_browser = MagicMock()
     pw_browser.new_page.return_value = page
@@ -324,6 +331,55 @@ def _make_page_mock(*, cell_count=1, disabled=False):
     sync_playwright_cm.__exit__.return_value = False
 
     return sync_playwright_cm, pw_browser, page, next_locator, card_locator
+
+
+def _make_v2_page_mock(*, cell_count=2, has_load_more=False, cell_count_after_load=None):
+    """Builds a fake Playwright page for v2 (list-view SPA) fetcher tests.
+
+    page.locator("#jobListScreen").count() returns 1, steering the fetcher into
+    the v2 branch.  cell_count_after_load lets pagination tests simulate the
+    count rising after a "load more" click.
+    """
+    job_list_screen_locator = MagicMock()
+    job_list_screen_locator.count.return_value = 1
+
+    v2_card_locator = MagicMock()
+    if cell_count_after_load is not None:
+        v2_card_locator.count.side_effect = [cell_count, cell_count_after_load] * 10
+    else:
+        v2_card_locator.count.return_value = cell_count
+
+    load_more_locator = MagicMock()
+    load_more_locator.count.return_value = 1 if has_load_more else 0
+    load_more_locator.is_visible.return_value = has_load_more
+
+    grid_content_locator = MagicMock()
+    grid_content_locator.inner_html.return_value = (
+        "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
+    )
+
+    def page_locator_side_effect(selector):
+        return {
+            "#jobListScreen": job_list_screen_locator,
+            infor._V2_CARD: v2_card_locator,
+            "#gridBottom": load_more_locator,
+            "div.gridContent": grid_content_locator,
+        }.get(selector, MagicMock())
+
+    page = MagicMock()
+    page.locator.side_effect = page_locator_side_effect
+
+    pw_browser = MagicMock()
+    pw_browser.new_page.return_value = page
+
+    p = MagicMock()
+    p.chromium.launch.return_value = pw_browser
+
+    sync_playwright_cm = MagicMock()
+    sync_playwright_cm.__enter__.return_value = p
+    sync_playwright_cm.__exit__.return_value = False
+
+    return sync_playwright_cm, pw_browser, page, load_more_locator, v2_card_locator
 
 
 def test_default_frame_fetcher_returns_none_when_next_button_is_disabled():
@@ -395,3 +451,53 @@ def test_default_frame_fetcher_validates_url_before_launching_browser():
 
     mock_assert.assert_called_once_with("http://169.254.169.254/")
     mock_sync_playwright.assert_not_called()
+
+
+def test_default_frame_fetcher_v2_returns_html_when_cards_present():
+    sync_playwright_cm, *_ = _make_v2_page_mock(cell_count=2)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+
+    assert result == "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
+
+
+def test_default_frame_fetcher_v2_returns_none_when_zero_cards():
+    sync_playwright_cm, *_ = _make_v2_page_mock(cell_count=0)
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+
+    assert result is None
+
+
+def test_default_frame_fetcher_v2_returns_none_when_no_load_more_button():
+    sync_playwright_cm, _, _, load_more_locator, _ = _make_v2_page_mock(
+        cell_count=2, has_load_more=False
+    )
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"):
+        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
+
+    assert result is None
+    load_more_locator.click.assert_not_called()
+
+
+def test_default_frame_fetcher_v2_clicks_load_more_page_number_minus_one_times():
+    sync_playwright_cm, _, _, load_more_locator, _ = _make_v2_page_mock(
+        cell_count=2, has_load_more=True, cell_count_after_load=4
+    )
+
+    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+         patch("app.adapters.infor.assert_safe_url"), \
+         patch("app.adapters.infor.install_ssrf_guard"), \
+         patch("app.adapters.infor.time.sleep"):
+        default_frame_fetcher("https://rush.test/careers", page_number=3)
+
+    assert load_more_locator.click.call_count == 2
