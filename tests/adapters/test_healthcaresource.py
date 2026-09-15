@@ -125,3 +125,20 @@ def test_fetch_returns_empty_list_when_no_hits():
     jobs = healthcaresource.fetch(make_source(), http_post=fake_post)
 
     assert jobs == []
+
+
+def test_fetch_skips_malformed_record_and_keeps_valid_ones():
+    payload = {"hits": {"total": {"value": 3}, "hits": [
+        make_hit(hit_id="1_001", title="Good One"),
+        {"_source": {}},  # malformed: no '_id' → KeyError
+        make_hit(hit_id="1_003", title="Good Three"),
+    ]}}
+
+    def fake_post(url, json, timeout):
+        return FakeResponse(payload)
+
+    jobs = healthcaresource.fetch(make_source(), http_post=fake_post)
+
+    assert len(jobs) == 2
+    assert jobs[0].key == "healthcaresource:1_001"
+    assert jobs[1].key == "healthcaresource:1_003"

@@ -11,8 +11,20 @@ from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
 # v1 = Slickgrid card-stack (older).  v2 = list-view SPA (newer, e.g. Rush post-2025).
 _V1_CARD = ".inforCardstackCell"
 _V2_CARD = "li[job-req]"
-_CARD_SELECTOR = f"{_V2_CARD}, {_V1_CARD}"   # load-sentinel + presence check
+_CARD_SELECTOR = f"{_V2_CARD}, {_V1_CARD}"   # presence check (BeautifulSoup)
 _NEXT_SELECTOR = "button.nextPage, a.nextPage"  # both UI generations use nextPage
+
+# Slickgrid renders .slick-row containers before the card-cell content inside
+# them is injected by the application JS.  Waiting for .slick-row is therefore
+# reliable as the "grid has initialised" signal; waiting directly for
+# .inforCardstackCell can race against the cell-render step and time out.
+_V1_SLICK_ROW = ".slick-row"
+
+# Generic "v2 grid has content" selector: waits for any child of gridContent
+# rather than li[job-req] specifically, so portals with different card markup
+# still work.  The actual card selectors (_V2_CARD, _V1_CARD) are tried by
+# _parse_page / BeautifulSoup after the HTML is retrieved.
+_V2_CONTENT_READY = "div.gridContent > *"
 
 
 def _parse_v1_card(card, source: InforSource) -> Job | None:
@@ -121,32 +133,52 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
 
             # v2 portals (post-2025 Infor list-view SPA) render job cards
             # directly in div#jobListScreen → div.gridContent in the main page
-            # body.  The iframe used by v1 (Slickgrid card-stack) is absent or
-            # frozen at blank.html and holds no cards in v2.
+            # body.  The iframe is absent or frozen at blank.html with no cards.
+            #
+            # Lawson-hybrid portals (e.g. RUMC/Rush Oak Park) also have
+            # #jobListScreen in the outer shell but their actual job cards live
+            # inside #parentIframe as a Slickgrid card-stack.  By the time
+            # networkidle fires, the iframe's job XHR has already completed and
+            # Slickgrid rows are present — so a zero-wait count probe is enough
+            # to distinguish them from true v2 portals.
             if page.locator("#jobListScreen").count() > 0:
-                page.locator(_V2_CARD).first.wait_for(timeout=30000)
+                iframe_rows = (
+                    page.locator("#parentIframe").count() > 0
+                    and page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0
+                )
+                if not iframe_rows:
+                    # True v2: wait for any child inside the job list's grid
+                    # container.  Use the specific container to avoid strict-mode
+                    # errors (the page has multiple div.gridContent siblings).
+                    _v2_ready = "#jobListScreen .gridContent > *"
+                    page.locator(_v2_ready).first.wait_for(timeout=30000)
 
-                for _ in range(page_number - 1):
-                    load_more = page.locator("#gridBottom")
-                    if load_more.count() == 0 or not load_more.is_visible():
+                    for _ in range(page_number - 1):
+                        load_more = page.locator("#gridBottom")
+                        if load_more.count() == 0 or not load_more.is_visible():
+                            return None
+                        prev_count = page.locator(_v2_ready).count()
+                        load_more.click()
+                        deadline = time.monotonic() + 15.0
+                        while time.monotonic() < deadline:
+                            if page.locator(_v2_ready).count() > prev_count:
+                                break
+                            time.sleep(0.5)
+                        else:
+                            return None
+
+                    if page.locator(_v2_ready).count() == 0:
                         return None
-                    prev_count = page.locator(_V2_CARD).count()
-                    load_more.click()
-                    deadline = time.monotonic() + 15.0
-                    while time.monotonic() < deadline:
-                        if page.locator(_V2_CARD).count() > prev_count:
-                            break
-                        time.sleep(0.5)
-                    else:
-                        return None
+                    return page.locator("#jobListScreen .gridContent").first.inner_html()
+                # else: Lawson hybrid — fall through to v1 iframe handling below.
 
-                if page.locator(_V2_CARD).count() == 0:
-                    return None
-                return page.locator("div.gridContent").inner_html()
-
-            # v1: job cards inside #parentIframe (Slickgrid card-stack)
+            # v1: job cards inside #parentIframe (Slickgrid card-stack).
+            # Wait for .slick-row (the Slickgrid row container) rather than the
+            # card-cell selector: Slickgrid injects the row shells first, then
+            # renders cell content asynchronously.  Waiting for the cell
+            # selector can therefore time out even on a healthy portal.
             frame = page.frame_locator("#parentIframe")
-            frame.locator(_CARD_SELECTOR).first.wait_for(timeout=30000)
+            frame.locator(_V1_SLICK_ROW).first.wait_for(timeout=30000)
 
             for _ in range(page_number - 1):
                 next_button = frame.locator(_NEXT_SELECTOR)

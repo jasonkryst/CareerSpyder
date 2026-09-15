@@ -1,8 +1,11 @@
+import logging
 from urllib.parse import urlparse
 
 from app.config import WorkdaySource
 from app.models import Job
 from app.security.ssrf_guard import safe_post
+
+logger = logging.getLogger(__name__)
 
 _PAGE_SIZE = 20
 
@@ -19,19 +22,22 @@ def _resolve(career_site_url: str) -> tuple[str, str]:
 def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) -> list[Job]:
     jobs = []
     for posting in postings:
-        bullet_fields = posting.get("bulletFields") or []
-        external_path = posting.get("externalPath", "")
-        requisition_id = bullet_fields[1] if len(bullet_fields) > 1 else external_path
-        jobs.append(Job(
-            key=f"workday:{requisition_id}",
-            title=posting["title"],
-            url=f"{origin}{external_path}",
-            company=source.company,
-            location=posting.get("locationsText"),
-            posted_date=posting.get("postedOn"),
-            source_name=source.name,
-            source_id=source.id,
-        ))
+        try:
+            bullet_fields = posting.get("bulletFields") or []
+            external_path = posting.get("externalPath", "")
+            requisition_id = bullet_fields[1] if len(bullet_fields) > 1 else external_path
+            jobs.append(Job(
+                key=f"workday:{requisition_id}",
+                title=posting["title"],
+                url=f"{origin}{external_path}",
+                company=source.company,
+                location=posting.get("locationsText"),
+                posted_date=posting.get("postedOn"),
+                source_name=source.name,
+                source_id=source.id,
+            ))
+        except (KeyError, TypeError, AttributeError):
+            logger.warning("workday: skipping malformed record from %s: %r", source.name, posting)
     return jobs
 
 

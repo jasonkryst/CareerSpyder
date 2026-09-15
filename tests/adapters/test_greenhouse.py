@@ -68,3 +68,24 @@ def test_fetch_summary_is_none_when_content_missing():
     jobs = greenhouse.fetch(source, http_get=fake_get)
 
     assert jobs[0].summary is None
+
+
+def test_fetch_skips_malformed_record_and_keeps_valid_ones():
+    payload = {
+        "jobs": [
+            {"id": 1, "title": "Good Job", "absolute_url": "https://boards.greenhouse.io/acme/jobs/1"},
+            {"title": "Missing id field"},  # malformed: no 'id' → KeyError
+            {"id": 3, "title": "Another Good", "absolute_url": "https://boards.greenhouse.io/acme/jobs/3"},
+        ]
+    }
+
+    def fake_get(url, timeout):
+        return FakeResponse(payload)
+
+    source = GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+
+    jobs = greenhouse.fetch(source, http_get=fake_get)
+
+    assert len(jobs) == 2
+    assert jobs[0].key == "greenhouse:1"
+    assert jobs[1].key == "greenhouse:3"

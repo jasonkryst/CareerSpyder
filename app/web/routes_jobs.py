@@ -7,6 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app import config, db
+from app.geocoding.base import GeocoderTransientError
 from app.geocoding.factory import get_geocoder
 from app.models import JOB_STATUSES as STATUSES
 from app.textutils import safe_url_scheme
@@ -273,7 +274,10 @@ async def update_location_override(request: Request):
         # Nominatim is a blocking `requests` call; run_in_threadpool keeps it
         # off the single asyncio event loop thread (see #133) the same way
         # /sources/test-preview already does for adapter fetches.
-        result = await run_in_threadpool(geocoder.geocode, location)
+        try:
+            result = await run_in_threadpool(geocoder.geocode, location)
+        except GeocoderTransientError:
+            result = None
         if result is None:
             raise HTTPException(status_code=400, detail="Location could not be resolved on the map")
         display_name, city, region, country = result.display_name, result.city, result.region, result.country

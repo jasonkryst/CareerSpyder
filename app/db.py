@@ -528,6 +528,24 @@ def mark_emailed(conn: sqlite3.Connection, keys: list[str]) -> None:
     conn.commit()
 
 
+def get_unemailed_jobs(conn: sqlite3.Connection) -> list[Job]:
+    """Return Job objects for active jobs that have never been included in a digest email.
+
+    Used to rescue jobs dropped by a crash between save_jobs committing and
+    mark_emailed running.  Only active (removed_at IS NULL) rows are returned so
+    we don't re-surface jobs that were posted, missed, and then taken down.
+    """
+    rows = conn.execute(
+        "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary "
+        "FROM jobs WHERE emailed_at IS NULL AND removed_at IS NULL"
+    ).fetchall()
+    return [
+        Job(key=r[0], title=r[1], company=r[2], location=r[3], url=r[4],
+            posted_date=r[5], source_name=r[6] or "", source_id=r[7], summary=r[8])
+        for r in rows
+    ]
+
+
 def reconcile_jobs(conn: sqlite3.Connection, configured_source_ids: set[str],
                     succeeded_source_ids: set[str], found_jobs: list[Job]) -> None:
     found_keys = {j.key for j in found_jobs}
@@ -550,7 +568,11 @@ def reconcile_jobs(conn: sqlite3.Connection, configured_source_ids: set[str],
     reactivate_keys = [key for (key,) in removed_rows if key in found_keys]
     if reactivate_keys:
         placeholders = ",".join("?" * len(reactivate_keys))
-        conn.execute(f"UPDATE jobs SET removed_at = NULL WHERE key IN ({placeholders})", reactivate_keys)
+        # Reset emailed_at so reactivated jobs are picked up by the next digest run.
+        conn.execute(
+            f"UPDATE jobs SET removed_at = NULL, emailed_at = NULL WHERE key IN ({placeholders})",
+            reactivate_keys,
+        )
 
     conn.commit()
 

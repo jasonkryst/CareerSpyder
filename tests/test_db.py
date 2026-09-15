@@ -1657,3 +1657,61 @@ def test_get_geocoded_location_ignores_a_pending_or_failed_row(tmp_db_path):
     conn.commit()
 
     assert db.get_geocoded_location(conn, "Remote") is None
+
+
+# ── issue #158: reactivated jobs reset emailed_at ─────────────────────────────
+
+def test_reconcile_jobs_clears_emailed_at_when_reactivating(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    job = make_job(key="k1", source_id="s1")
+    db.save_jobs(conn, [job], db.start_run(conn))
+    db.mark_emailed(conn, ["k1"])
+    assert db.list_jobs(conn)[0]["emailed_at"] is not None
+
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+
+    row = db.list_jobs(conn)[0]
+    assert row["removed_at"] is None
+    assert row["emailed_at"] is None
+
+
+# ── issue #157: get_unemailed_jobs ───────────────────────────────────────────
+
+def test_get_unemailed_jobs_returns_active_unemailed_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    j1 = make_job(key="k1")
+    j2 = make_job(key="k2")
+    db.save_jobs(conn, [j1, j2], run_id)
+    db.mark_emailed(conn, ["k2"])
+
+    result = db.get_unemailed_jobs(conn)
+
+    keys = {j.key for j in result}
+    assert keys == {"k1"}
+
+
+def test_get_unemailed_jobs_excludes_removed_jobs(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    job = make_job(key="k1", source_id="s1")
+    db.save_jobs(conn, [job], run_id)
+    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    assert db.list_jobs(conn)[0]["removed_at"] is not None
+
+    result = db.get_unemailed_jobs(conn)
+
+    assert result == []
+
+
+def test_get_unemailed_jobs_returns_empty_when_all_emailed(tmp_db_path):
+    conn = db.init_db(tmp_db_path)
+    run_id = db.start_run(conn)
+    job = make_job(key="k1")
+    db.save_jobs(conn, [job], run_id)
+    db.mark_emailed(conn, ["k1"])
+
+    assert db.get_unemailed_jobs(conn) == []

@@ -3,7 +3,7 @@ import sqlite3
 import time
 from datetime import UTC, datetime
 
-from app.geocoding.base import Geocoder
+from app.geocoding.base import Geocoder, GeocoderTransientError
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,9 @@ def geocode_pending(conn: sqlite3.Connection, geocoder: Geocoder) -> None:
             time.sleep(geocoder.min_interval_seconds)
         try:
             result = geocoder.geocode(location)
+        except GeocoderTransientError:
+            logger.warning("Transient geocoding error for %r; will retry next run", location)
+            continue
         except Exception:
             logger.exception("Geocoding failed for location %r", location)
             result = None
