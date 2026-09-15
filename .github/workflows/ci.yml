@@ -37,6 +37,26 @@ jobs:
       - run: playwright install --with-deps chromium
       - run: pytest -q --cov=app --cov-report=term-missing
 
+  integration-test:
+    runs-on: ubuntu-latest
+    # Runs even when unit tests fail so live-site regressions are always visible.
+    # The job skips silently if the required secrets are not configured — this
+    # keeps fork PRs and repos without secrets green without any special logic.
+    # To add the URLs: Settings → Secrets and variables → Actions → New secret:
+    #   INFOR_TEST_URL_RUMC            (e.g. https://rush.hirequest.com/careers/...)
+    #   INFOR_TEST_URL_RUSH_OAK_PARK   (e.g. https://...)
+    env:
+      INFOR_TEST_URL_RUMC: ${{ secrets.INFOR_TEST_URL_RUMC }}
+      INFOR_TEST_URL_RUSH_OAK_PARK: ${{ secrets.INFOR_TEST_URL_RUSH_OAK_PARK }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - run: pip install -e ".[dev]"
+      - run: playwright install --with-deps chromium
+      - run: pytest -m integration -v
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:

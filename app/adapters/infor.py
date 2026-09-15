@@ -1,6 +1,7 @@
 import time
 
 from bs4 import BeautifulSoup
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from app.config import InforSource
@@ -137,15 +138,23 @@ def default_frame_fetcher(url: str, page_number: int) -> str | None:
             #
             # Lawson-hybrid portals (e.g. RUMC/Rush Oak Park) also have
             # #jobListScreen in the outer shell but their actual job cards live
-            # inside #parentIframe as a Slickgrid card-stack.  By the time
-            # networkidle fires, the iframe's job XHR has already completed and
-            # Slickgrid rows are present — so a zero-wait count probe is enough
-            # to distinguish them from true v2 portals.
+            # inside #parentIframe as a Slickgrid card-stack.
+            #
+            # networkidle fires before the iframe's own XHR completes, so an
+            # instant count() probe on .slick-row returns 0 even on a healthy
+            # Lawson-hybrid portal.  Instead, wait up to 5 s for the rows: if
+            # they arrive it's a Lawson hybrid; if the wait times out the iframe
+            # is a frozen blank.html and this is a true v2 portal.
             if page.locator("#jobListScreen").count() > 0:
-                iframe_rows = (
-                    page.locator("#parentIframe").count() > 0
-                    and page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0
-                )
+                iframe_rows = False
+                if page.locator("#parentIframe").count() > 0:
+                    try:
+                        page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).first.wait_for(
+                            timeout=15000
+                        )
+                        iframe_rows = True
+                    except PlaywrightTimeoutError:
+                        iframe_rows = False
                 if not iframe_rows:
                     # True v2: wait for any child inside the job list's grid
                     # container.  Use the specific container to avoid strict-mode
