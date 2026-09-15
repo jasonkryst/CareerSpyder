@@ -5,6 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-09-14
+
+### Fixed
+
+- **Infor adapter v2 list-view UI support.** The Rush Infor job portal
+  (`rushprod-lm01.cloud.infor.com:1444`) upgraded from the old Slickgrid
+  card-stack UI to a new list-view SPA. The previous selectors
+  (`.inforCardstackCell`, `.slick-row`) no longer matched anything, causing
+  the RUMC and Rush Oak Park sources to time out on every run. The adapter now
+  auto-detects the UI generation: it tries `li[job-req]` / `.listview-heading`
+  (v2) first, then falls back to the original card-stack selectors (v1), so
+  both UI generations are supported without any config changes.
+
 ## [0.58.0] — 2026-09-07
 
 ### Added
