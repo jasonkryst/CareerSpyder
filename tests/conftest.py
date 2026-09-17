@@ -30,15 +30,15 @@ def pg_dsn(postgresql_proc):
     cfg.set_main_option(
         "sqlalchemy.url", dsn.replace("postgresql://", "postgresql+psycopg://", 1)
     )
-    command.upgrade(cfg, "head")
-
-    yield dsn
-
-    admin = psycopg.connect(
-        f"host={host} port={port} user={user} dbname=postgres", autocommit=True
-    )
-    admin.execute(f"DROP DATABASE IF EXISTS {dbname}")
-    admin.close()
+    try:
+        command.upgrade(cfg, "head")
+        yield dsn
+    finally:
+        admin = psycopg.connect(
+            f"host={host} port={port} user={user} dbname=postgres", autocommit=True
+        )
+        admin.execute(f"DROP DATABASE IF EXISTS {dbname}")
+        admin.close()
 
 
 @pytest.fixture
