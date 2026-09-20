@@ -31,9 +31,9 @@ def check_job_urls(
 
     if removed_keys:
         now = datetime.now(UTC).isoformat()
-        placeholders = ",".join("?" * len(removed_keys))
+        placeholders = ",".join(["%s"] * len(removed_keys))
         conn.execute(
-            f"UPDATE jobs SET removed_at = ? WHERE key IN ({placeholders})",  # noqa: S608
+            f"UPDATE jobs SET removed_at = %s WHERE key IN ({placeholders})",  # noqa: S608
             [now, *removed_keys],
         )
         conn.commit()
