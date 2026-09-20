@@ -38,7 +38,7 @@ def pg_dsn(postgresql_proc):
         admin = psycopg.connect(
             f"host={host} port={port} user={user} dbname=postgres", autocommit=True
         )
-        admin.execute(f"DROP DATABASE IF EXISTS {dbname}")
+        admin.execute(f"DROP DATABASE IF EXISTS {dbname} WITH (FORCE)")
         admin.close()
 
 

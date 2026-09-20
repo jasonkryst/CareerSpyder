@@ -1,8 +1,9 @@
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import create_engine, pool
+
+from alembic import context
 
 config = context.config
 if config.config_file_name is not None:
@@ -12,9 +13,12 @@ target_metadata = None
 
 
 def _get_url() -> str:
-    url = os.environ["DATABASE_URL"]
-    # SQLAlchemy requires the psycopg3 dialect prefix
-    return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    # Prefer sqlalchemy.url when set programmatically (e.g. test fixtures);
+    # fall back to DATABASE_URL env var for CLI / production use.
+    url = config.get_main_option("sqlalchemy.url")
+    if not url:
+        url = os.environ["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
 
 
 def run_migrations_online() -> None:
