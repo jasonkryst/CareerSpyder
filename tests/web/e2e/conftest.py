@@ -3,10 +3,15 @@ import os
 import socket
 import threading
 import time
+import uuid
 
+import psycopg
 import pytest
 import uvicorn
+from alembic.config import Config
 from playwright.sync_api import sync_playwright
+
+from alembic import command
 
 
 def _free_port() -> int:
@@ -16,13 +21,30 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="session")
-def live_server(tmp_path_factory):
+def live_server(tmp_path_factory, postgresql_proc):
     tmp_path = tmp_path_factory.mktemp("e2e")
+
+    dbname = f"cs_e2e_{uuid.uuid4().hex[:12]}"
+    host = postgresql_proc.host
+    port = postgresql_proc.port
+    user = postgresql_proc.user
+    dsn = f"postgresql://{user}@{host}:{port}/{dbname}"
+
+    admin = psycopg.connect(
+        f"host={host} port={port} user={user} dbname=postgres", autocommit=True
+    )
+    admin.execute(f"CREATE DATABASE {dbname}")
+    admin.close()
+
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", dsn.replace("postgresql://", "postgresql+psycopg://", 1))
+    command.upgrade(cfg, "head")
+
     sources_path = tmp_path / "sources.json"
     sources_path.write_text(json.dumps({"sources": []}))
 
     env_overrides = {
-        "CAREERSPYDER_DB_PATH": str(tmp_path / "state.db"),
+        "DATABASE_URL": dsn,
         "CAREERSPYDER_SOURCES_PATH": str(sources_path),
         "RUN_CRON": "0 8 * * *",
         "TZ": "UTC",
@@ -38,8 +60,8 @@ def live_server(tmp_path_factory):
 
     from app.web.main import app
 
-    port = _free_port()
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    server_port = _free_port()
+    config = uvicorn.Config(app, host="127.0.0.1", port=server_port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -49,7 +71,7 @@ def live_server(tmp_path_factory):
             break
         time.sleep(0.1)
 
-    yield f"http://127.0.0.1:{port}"
+    yield f"http://127.0.0.1:{server_port}"
 
     server.should_exit = True
     thread.join(timeout=5)
@@ -58,6 +80,12 @@ def live_server(tmp_path_factory):
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+    admin = psycopg.connect(
+        f"host={host} port={port} user={user} dbname=postgres", autocommit=True
+    )
+    admin.execute(f"DROP DATABASE IF EXISTS {dbname} WITH (FORCE)")
+    admin.close()
 
 
 @pytest.fixture(scope="session")

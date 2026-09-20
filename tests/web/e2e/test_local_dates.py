@@ -1,11 +1,13 @@
 import os
 
+import psycopg
+
 from app import db
 from app.models import Job
 
 
 def test_jobs_page_date_found_is_reformatted_from_raw_iso(live_server, page):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-local-dates", title="E2E Local Dates Job", url="https://example.com/job/e2e-local-dates")
     run_id = db.start_run(conn)
     db.save_jobs(conn, [job], run_id)

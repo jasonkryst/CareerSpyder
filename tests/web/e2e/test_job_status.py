@@ -1,11 +1,13 @@
 import os
 
+import psycopg
+
 from app import db
 from app.models import Job
 
 
 def test_marking_a_job_applied_shows_toast_and_history(live_server, page):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-status-job", title="E2E Status Job", url="https://example.com/job/e2e-status-job")
     run_id = db.start_run(conn)
     db.save_jobs(conn, [job], run_id)

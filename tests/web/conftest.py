@@ -31,5 +31,6 @@ def client(pg_dsn, tmp_path, monkeypatch):
 
     from app.web.main import app
 
-    with TestClient(app) as test_client:
+    with TestClient(app) as test_client, test_client.app.state.pool.connection() as conn:
+        test_client.app.state.conn = conn
         yield test_client
