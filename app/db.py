@@ -331,25 +331,28 @@ def count_jobs(
 
 def list_job_source_names(conn: psycopg.Connection) -> list[str]:
     rows = conn.execute(
-        "SELECT DISTINCT source_name FROM jobs ORDER BY LOWER(source_name)"
+        "SELECT source_name FROM (SELECT DISTINCT source_name FROM jobs) t "
+        "ORDER BY LOWER(source_name)"
     ).fetchall()
     return [r[0] for r in rows]
 
 
 def list_job_locations(conn: psycopg.Connection) -> list[str]:
     rows = conn.execute(
+        "SELECT display_name FROM ("
         "SELECT DISTINCT display_name FROM geocoded_locations "
-        "WHERE status = 'resolved' AND display_name IS NOT NULL "
-        "ORDER BY LOWER(display_name)"
+        "WHERE status = 'resolved' AND display_name IS NOT NULL"
+        ") t ORDER BY LOWER(display_name)"
     ).fetchall()
     return [r[0] for r in rows]
 
 
 def list_job_states(conn: psycopg.Connection) -> list[str]:
     rows = conn.execute(
+        "SELECT region FROM ("
         "SELECT DISTINCT region FROM geocoded_locations "
-        "WHERE status IN ('resolved', 'manual') AND region IS NOT NULL "
-        "ORDER BY LOWER(region)"
+        "WHERE status IN ('resolved', 'manual') AND region IS NOT NULL"
+        ") t ORDER BY LOWER(region)"
     ).fetchall()
     return [r[0] for r in rows]
 
