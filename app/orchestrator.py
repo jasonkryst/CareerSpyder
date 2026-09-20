@@ -1,7 +1,8 @@
 import logging
-import psycopg
 import threading
 from dataclasses import dataclass
+
+import psycopg
 
 from app import checker, db
 from app.adapters import ADAPTERS

@@ -30,22 +30,23 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int) -> None:
         return
     now = _now()
     locations = {j.location for j in jobs if j.location}
-    if locations:
-        conn.executemany(
-            "INSERT INTO geocoded_locations (location, status) VALUES (%s, 'pending') ON CONFLICT DO NOTHING",
-            [(loc,) for loc in locations],
+    with conn.cursor() as cur:
+        if locations:
+            cur.executemany(
+                "INSERT INTO geocoded_locations (location, status) VALUES (%s, 'pending') ON CONFLICT DO NOTHING",
+                [(loc,) for loc in locations],
+            )
+        cur.executemany(
+            "INSERT INTO jobs "
+            "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
+            "first_seen_run_id, first_seen_at) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            [
+                (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
+                 j.source_id, j.summary, run_id, now)
+                for j in jobs
+            ],
         )
-    conn.executemany(
-        "INSERT INTO jobs "
-        "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
-        "first_seen_run_id, first_seen_at) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
-        [
-            (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
-             j.source_id, j.summary, run_id, now)
-            for j in jobs
-        ],
-    )
     conn.commit()
 
 
@@ -129,7 +130,7 @@ def list_runs(
 def count_runs(conn: psycopg.Connection, *, failures: str | None = None) -> int:
     where_sql, params = _run_filters_sql(failures)
     row = conn.execute(f"SELECT COUNT(*) FROM runs {where_sql}", params).fetchone()
-    return row[0]
+    return row[0] if row else 0
 
 
 def get_settings(conn: psycopg.Connection) -> dict | None:
@@ -325,7 +326,7 @@ def count_jobs(
         f"ON jobs.location = geocoded_locations.location {where_sql}",
         params,
     ).fetchone()
-    return row[0]
+    return row[0] if row else 0
 
 
 def list_job_source_names(conn: psycopg.Connection) -> list[str]:

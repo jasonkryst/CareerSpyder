@@ -57,10 +57,9 @@ def _run_url_check(pool: ConnectionPool, run_id: int) -> None:
     # runs already serialize against each other (see #132) -- without this,
     # clicking "Check job URLs" mid-scrape writes through the shared
     # connection from two threads with no coordination.
-    with _run_lock:
-        with pool.connection() as conn:
-            removed = checker.check_job_urls(conn)
-            db.finish_run(conn, run_id, removed, [])
+    with _run_lock, pool.connection() as conn:
+        removed = checker.check_job_urls(conn)
+        db.finish_run(conn, run_id, removed, [])
 
 
 @router.post("/check-urls")

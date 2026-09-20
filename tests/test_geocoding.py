@@ -2,7 +2,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app import db
 from app.geocoding.base import GeocodeResult, GeocoderTransientError
 from app.geocoding.factory import get_geocoder
 from app.geocoding.nominatim import NominatimGeocoder

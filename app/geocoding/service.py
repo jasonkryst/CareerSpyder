@@ -1,7 +1,8 @@
 import logging
-import psycopg
 import time
 from datetime import UTC, datetime
+
+import psycopg
 
 from app.geocoding.base import Geocoder, GeocoderTransientError
 

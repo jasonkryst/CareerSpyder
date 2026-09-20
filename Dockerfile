@@ -13,6 +13,8 @@ WORKDIR /app
 
 COPY pyproject.toml .
 COPY app app
+COPY alembic.ini .
+COPY alembic alembic
 # Uninstalling pip after use drops its vendored copies of msgpack/setuptools
 # from the image -- pip itself isn't needed once deps are installed, and its
 # bundled versions of those two lag behind upstream security fixes (Trivy

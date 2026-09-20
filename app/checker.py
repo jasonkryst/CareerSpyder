@@ -1,8 +1,8 @@
 import logging
-import psycopg
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+import psycopg
 import requests
 
 logger = logging.getLogger(__name__)

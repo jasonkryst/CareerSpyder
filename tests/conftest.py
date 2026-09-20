@@ -2,9 +2,10 @@ import uuid
 
 import psycopg
 import pytest
-from alembic import command
 from alembic.config import Config
 from pytest_postgresql import factories
+
+from alembic import command
 
 # Session-scoped PostgreSQL process (shared across all tests in a session)
 postgresql_proc = factories.postgresql_proc(port=None)
