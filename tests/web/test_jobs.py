@@ -1597,3 +1597,122 @@ def test_jobs_filter_bar_listing_status_not_labelled_plain_status(client):
     # Verify the old bare label is gone from the filter bar select labels.
     # Use a narrow pattern so we don't false-positive on column headers or JS.
     assert "<label>Status" not in resp.text
+
+
+# --- Admin sees all users' jobs with User column; member sees only own ---
+
+def test_admin_jobs_page_shows_user_column(client, admin_user_id):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, user_id=admin_user_id)
+    db.save_jobs(conn, [make_job(key="j1", company="AdminCo")], run_id, user_id=admin_user_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert '<th scope="col">User</th>' in resp.text
+    assert 'data-label="User"' in resp.text
+    assert "admin" in resp.text
+
+
+def test_member_jobs_page_hides_user_column(member_client, member_user_id):
+    conn = member_client.app.state.conn
+    run_id = db.start_run(conn, user_id=member_user_id)
+    db.save_jobs(conn, [make_job(key="j1", company="MemberCo")], run_id, user_id=member_user_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+    resp = member_client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert '<th scope="col">User</th>' not in resp.text
+    assert 'data-label="User"' not in resp.text
+
+
+def test_admin_sees_all_users_jobs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.save_jobs(admin_conn, [make_job(key="a1", company="AdminCorp")], admin_run, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=1, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCorp")], member_run, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/jobs?removed=all")
+
+    assert "AdminCorp" in resp.text
+    assert "MemberCorp" in resp.text
+
+
+def test_member_sees_only_own_jobs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.save_jobs(admin_conn, [make_job(key="a1", company="AdminCorp")], admin_run, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=1, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCorp")], member_run, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=1, failed_sources=[])
+
+    resp = member_client.get("/jobs?removed=all")
+
+    assert "MemberCorp" in resp.text
+    assert "AdminCorp" not in resp.text
+
+
+def test_admin_user_column_shows_correct_username(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.save_jobs(admin_conn, [make_job(key="a1", company="AdminCorp")], admin_run, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=1, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCorp")], member_run, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/jobs?removed=all")
+
+    assert "admin" in resp.text
+    assert "member1" in resp.text
+
+
+def test_admin_job_count_includes_all_users(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    for i in range(15):
+        run_id = db.start_run(admin_conn, user_id=admin_user_id)
+        db.save_jobs(admin_conn, [make_job(key=f"a{i}", company=f"ACo{i}")], run_id, user_id=admin_user_id)
+        db.finish_run(admin_conn, run_id, new_job_count=1, failed_sources=[])
+    for i in range(15):
+        run_id = db.start_run(member_conn, user_id=member_user_id)
+        db.save_jobs(member_conn, [make_job(key=f"m{i}", company=f"MCo{i}")], run_id, user_id=member_user_id)
+        db.finish_run(member_conn, run_id, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/jobs?removed=all")
+
+    assert "Page 1 of 2" in resp.text
+
+
+def test_member_job_count_excludes_other_users(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    for i in range(30):
+        run_id = db.start_run(admin_conn, user_id=admin_user_id)
+        db.save_jobs(admin_conn, [make_job(key=f"a{i}", company=f"ACo{i}")], run_id, user_id=admin_user_id)
+        db.finish_run(admin_conn, run_id, new_job_count=1, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCo")], member_run, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=1, failed_sources=[])
+
+    resp = member_client.get("/jobs?removed=all")
+
+    assert "Page 1 of 1" in resp.text

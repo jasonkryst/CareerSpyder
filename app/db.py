@@ -25,7 +25,7 @@ def get_new_jobs(conn: psycopg.Connection, jobs: list[Job]) -> list[Job]:
     return [j for j in jobs if j.key not in known]
 
 
-def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int) -> None:
+def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: str | None = None) -> None:
     if not jobs:
         return
     now = _now()
@@ -39,11 +39,11 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int) -> None:
         cur.executemany(
             "INSERT INTO jobs "
             "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
-            "first_seen_run_id, first_seen_at) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            "first_seen_run_id, first_seen_at, user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
             [
                 (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
-                 j.source_id, j.summary, run_id, now)
+                 j.source_id, j.summary, run_id, now, user_id)
                 for j in jobs
             ],
         )
@@ -230,6 +230,7 @@ def _job_filters_sql(
     status: list[str] | None = None, location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
@@ -277,6 +278,9 @@ def _job_filters_sql(
     if zip_lat is not None and zip_lng is not None and radius_miles is not None:
         clauses.append("haversine_miles(geocoded_locations.lat, geocoded_locations.lng, %s, %s) <= %s")
         params.extend([zip_lat, zip_lng, radius_miles])
+    if user_id is not None:
+        clauses.append("jobs.user_id = %s")
+        params.append(user_id)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -289,22 +293,25 @@ def list_jobs(
     location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        user_id=user_id,
     )
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
-        "jobs.is_duplicate, jobs.duplicate_of "
+        "jobs.is_duplicate, jobs.duplicate_of, users.username "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
+        "LEFT JOIN users ON jobs.user_id = users.id "
         f"{where_sql} ORDER BY {order_column} {order_dir}, jobs.key {order_dir} LIMIT %s OFFSET %s"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
@@ -318,7 +325,7 @@ def list_jobs(
             "url": r[7],
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
-            "is_duplicate": bool(r[16]), "duplicate_of": r[17],
+            "is_duplicate": bool(r[16]), "duplicate_of": r[17], "username": r[18],
         }
         for r in rows
     ]
@@ -331,10 +338,12 @@ def count_jobs(
     location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> int:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        user_id=user_id,
     )
     row = conn.execute(
         "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "

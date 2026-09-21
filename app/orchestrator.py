@@ -57,7 +57,7 @@ def run_once(
         deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
 
         new_jobs = db.get_new_jobs(conn, deduped_jobs)
-        db.save_jobs(conn, new_jobs, run_id)
+        db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
 
         configured_source_ids = {s.id for s in sources}
         db.reconcile_jobs(conn, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
