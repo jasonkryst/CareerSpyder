@@ -91,6 +91,16 @@ def member_client(pg_dsn, monkeypatch):
 
 
 @pytest.fixture
+def member_user_id(member_client):
+    """Returns the UUID string of the seeded member user."""
+    from app import db
+    with member_client.app.state.pool.connection() as conn:
+        user = db.get_user_by_username(conn, "member1")
+    assert user is not None
+    return str(user["id"])
+
+
+@pytest.fixture
 def seed_source(client, admin_user_id):
     """Factory fixture: seed_source(source) → inserts source into DB for admin."""
     from app import db

@@ -11,6 +11,8 @@ _IMPLICIT_TLS_PORT = 465
 
 def send_email(smtp_host: str, smtp_port: int, smtp_user: str, smtp_password: str,
                 email_from: str, email_to: list[str], subject: str, html_body: str) -> None:
+    if not smtp_host:
+        raise ValueError(f"smtp_host is required (got {smtp_host!r}) — configure SMTP at /settings/email")
     msg = MIMEText(html_body, "html")
     msg["Subject"] = subject
     msg["From"] = email_from
