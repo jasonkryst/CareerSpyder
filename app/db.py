@@ -645,11 +645,13 @@ def deactivate_user(conn: psycopg.Connection, user_id: str) -> None:
 def create_invite(
     conn: psycopg.Connection, email: str, created_by: str, expires_in_days: int = 7,
 ) -> dict:
+    from datetime import UTC, datetime, timedelta
+    expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
     row = conn.execute(
         "INSERT INTO invite_tokens (email, created_by, expires_at) "
-        "VALUES (%s, %s, NOW() + INTERVAL '%s days') "
+        "VALUES (%s, %s, %s) "
         "RETURNING token, email, expires_at",
-        (email, created_by, expires_in_days),
+        (email, created_by, expires_at),
     ).fetchone()
     if row is None:
         raise RuntimeError("INSERT INTO invite_tokens did not produce a row")
@@ -690,11 +692,11 @@ def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
 # Sources (per-user, replaces sources.json)
 # ---------------------------------------------------------------------------
 
-def _source_row_to_model(config_data: dict):  # type: ignore[return]
-    from app.config import (  # local import to avoid top-level circular dep check
-        SourceConfig,
-    )
-    return SourceConfig.model_validate(config_data)  # type: ignore[attr-defined]
+def _source_row_to_model(config_data: dict):
+    from pydantic import TypeAdapter
+
+    from app.config import SourceConfig  # local import to avoid circular dep
+    return TypeAdapter(SourceConfig).validate_python(config_data)
 
 
 def list_sources(conn: psycopg.Connection, user_id: str) -> list:

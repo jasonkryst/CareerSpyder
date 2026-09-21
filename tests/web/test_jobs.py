@@ -293,9 +293,9 @@ def test_jobs_map_data_hides_not_interested_jobs_by_default(client):
     assert {j["key"] for j in resp.json()[0]["jobs"]} == {"a"}
 
 
-def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client):
+def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client, admin_user_id):
     conn = client.app.state.conn
-    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test", hide_not_interested_on_map=False)
+    db.save_preferences(conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test", hide_not_interested_on_map=False)
     run_id = db.start_run(conn)
     db.save_jobs(conn, [
         make_job(key="a", location="Chicago, IL"),

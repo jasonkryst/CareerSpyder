@@ -22,7 +22,7 @@ def _configure(conn, user_id, email_days="mon,tue,wed,thu,fri,sat,sun", resend_j
 def _seed_gh_source(conn, user_id):
     """Seed a single Greenhouse source for the given user."""
     from app.config import GreenhouseSource
-    source = GreenhouseSource(id="s1", name="Acme", board_token="acme")
+    source = GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
     db.add_source(conn, user_id, source)
     return source
 

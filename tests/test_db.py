@@ -4,6 +4,11 @@ import pytest
 
 from app import db
 from app.models import FailedSource, Job
+from app.web.auth import hash_password as _hash_password
+
+
+def _make_user(conn, username="u1"):
+    return db.create_user(conn, username, f"{username}@x.test", _hash_password("pw"))["id"]
 
 
 def make_job(key="k1", title="Engineer", source_id="s1", summary=None):
@@ -229,20 +234,21 @@ def test_count_runs_respects_failures_filter(pg_conn):
 
 def test_settings_seed_only_when_empty(pg_conn):
     conn = pg_conn
+    user_id = _make_user(conn)
+    db._seed_settings(conn, user_id, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    db._seed_settings(conn, user_id, "ignored.example.com", 25, "ignored", "i@x.test", "i2@x.test")
 
-    db.seed_settings_if_empty(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
-    db.seed_settings_if_empty(conn, "ignored.example.com", 25, "ignored", "i@x.test", "i2@x.test")
-
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["smtp_host"] == "smtp.example.com"
 
 
 def test_save_settings_overwrites(pg_conn):
     conn = pg_conn
-    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
-    db.save_settings(conn, "b.example.com", 465, "u2", "f2@x.test")
+    user_id = _make_user(conn)
+    db.save_settings(conn, user_id, "a.example.com", 587, "u1", "f@x.test")
+    db.save_settings(conn, user_id, "b.example.com", 465, "u2", "f2@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["smtp_host"] == "b.example.com"
     assert settings["smtp_port"] == 465
     assert settings["smtp_user"] == "u2"
@@ -251,11 +257,12 @@ def test_save_settings_overwrites(pg_conn):
 
 def test_save_settings_does_not_touch_preference_columns(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon,wed,fri", True, "a@x.test,b@x.test")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon,wed,fri", True, "a@x.test,b@x.test")
 
-    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
+    db.save_settings(conn, user_id, "a.example.com", 587, "u1", "f@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["email_days"] == "mon,wed,fri"
     assert settings["resend_jobs"] is True
     assert settings["email_to"] == "a@x.test,b@x.test"
@@ -263,10 +270,11 @@ def test_save_settings_does_not_touch_preference_columns(pg_conn):
 
 def test_save_preferences_overwrites(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test")
-    db.save_preferences(conn, "mon,wed,fri", True, "a@x.test,b@x.test")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test")
+    db.save_preferences(conn, user_id, "mon,wed,fri", True, "a@x.test,b@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["email_days"] == "mon,wed,fri"
     assert settings["resend_jobs"] is True
     assert settings["email_to"] == "a@x.test,b@x.test"
@@ -274,11 +282,12 @@ def test_save_preferences_overwrites(pg_conn):
 
 def test_save_preferences_does_not_touch_smtp_columns(pg_conn):
     conn = pg_conn
-    db.save_settings(conn, "a.example.com", 587, "u1", "f@x.test")
+    user_id = _make_user(conn)
+    db.save_settings(conn, user_id, "a.example.com", 587, "u1", "f@x.test")
 
-    db.save_preferences(conn, "mon", False, "a@x.test")
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["smtp_host"] == "a.example.com"
     assert settings["smtp_port"] == 587
     assert settings["smtp_user"] == "u1"
@@ -287,9 +296,10 @@ def test_save_preferences_does_not_touch_smtp_columns(pg_conn):
 
 def test_get_settings_defaults_days_and_resend_after_seeding(pg_conn):
     conn = pg_conn
-    db.seed_settings_if_empty(conn, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
+    user_id = _make_user(conn)
+    db._seed_settings(conn, user_id, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["email_days"] == "mon,tue,wed,thu,fri,sat,sun"
     assert settings["resend_jobs"] is False
     assert settings["email_to"] == "to@x.test"
@@ -298,55 +308,63 @@ def test_get_settings_defaults_days_and_resend_after_seeding(pg_conn):
 
 def test_save_preferences_defaults_hide_not_interested_on_map_to_true(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["hide_not_interested_on_map"] is True
 
 
 def test_save_preferences_can_turn_off_hide_not_interested_on_map(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test", hide_not_interested_on_map=False)
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test", hide_not_interested_on_map=False)
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["hide_not_interested_on_map"] is False
 
 
 def test_save_preferences_stores_digest_max_per_company(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test", digest_max_per_company=10)
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test", digest_max_per_company=10)
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["digest_max_per_company"] == 10
 
 
 def test_save_preferences_defaults_digest_max_per_company_to_zero(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["digest_max_per_company"] == 0
 
 
 def test_save_preferences_stores_digest_exclude_statuses(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test", digest_exclude_statuses="not_interested,rejected")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test", digest_exclude_statuses="not_interested,rejected")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["digest_exclude_statuses"] == "not_interested,rejected"
 
 
 def test_save_preferences_defaults_digest_exclude_statuses_to_empty(pg_conn):
     conn = pg_conn
-    db.save_preferences(conn, "mon", False, "a@x.test")
+    user_id = _make_user(conn)
+    db.save_preferences(conn, user_id, "mon", False, "a@x.test")
 
-    settings = db.get_settings(conn)
+    settings = db.get_settings(conn, user_id)
     assert settings["digest_exclude_statuses"] == ""
+
 
 def test_schema_is_idempotent_with_fresh_connection(pg_conn):
     # Alembic upgrade head is idempotent; pg_conn IS the already-migrated connection
     conn = pg_conn
-    assert db.get_settings(conn) is None
+    user_id = _make_user(conn)
+    assert db.get_settings(conn, user_id) is None
 
 def test_save_jobs_persists_source_id_and_summary(pg_conn):
     conn = pg_conn
