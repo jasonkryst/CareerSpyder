@@ -63,6 +63,10 @@ def upgrade() -> None:
     # Redesign settings: remove singleton PK, switch to user_id as PK.
     # Must drop the old primary key before adding the new one; the id column
     # served only to enforce the singleton and is not referenced externally.
+    # The existing singleton row (if any) would get user_id=NULL after the
+    # ADD COLUMN, which PostgreSQL rejects at ADD PRIMARY KEY time.  Delete it
+    # first — seed_admin_if_empty re-creates the admin's settings from env vars.
+    op.execute("DELETE FROM settings")
     op.execute("ALTER TABLE settings DROP CONSTRAINT settings_pkey")
     op.execute("ALTER TABLE settings DROP COLUMN id")
     op.execute("ALTER TABLE settings ADD COLUMN user_id UUID REFERENCES users(id)")
