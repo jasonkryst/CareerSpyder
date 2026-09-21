@@ -40,6 +40,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   four fields on every restart while leaving user-controlled preference columns
   (`email_to`, `email_days`, `resend_jobs`) untouched.
 
+
 ## [1.0.0] — 2026-09-20
 
 ### Added
