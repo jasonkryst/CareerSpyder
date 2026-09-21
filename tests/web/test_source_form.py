@@ -475,7 +475,7 @@ def _rendered_form_fields(html: str) -> dict:
     when submitting this form: every input regardless of CSS visibility,
     with unchecked checkboxes simply absent."""
     soup = BeautifulSoup(html, "html.parser")
-    form = soup.find("form")
+    form = soup.find(id="main").find("form")
     fields: dict[str, str] = {}
     for inp in form.find_all("input"):
         name = inp.get("name")

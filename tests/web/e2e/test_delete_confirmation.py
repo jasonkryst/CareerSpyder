@@ -3,7 +3,7 @@ def test_dismissing_modal_keeps_the_source(live_server, page):
     page.fill('input[name="name"]', "Acme (Greenhouse)")
     page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "acme")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
     page.wait_for_url("**/sources")
 
     page.click('tr:has-text("Acme (Greenhouse)") button:has-text("Delete")')
@@ -19,7 +19,7 @@ def test_confirming_modal_deletes_the_source(live_server, page):
     page.fill('input[name="name"]', "Beta (Greenhouse)")
     page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "beta")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
     page.wait_for_url("**/sources")
 
     page.click('tr:has-text("Beta (Greenhouse)") button:has-text("Delete")')
