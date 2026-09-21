@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Email settings restricted to admin.** The `/settings/email` page (SMTP
+  host/port/user and from-address) is now admin-only. Member-role users receive
+  403 and are not shown the Email tab in the settings navigation. The
+  `/settings` redirect now sends admins to `/settings/email` and members to
+  `/settings/preferences`.
+
 ## [1.0.0] — 2026-09-20
 
 ### Added

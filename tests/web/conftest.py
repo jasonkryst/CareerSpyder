@@ -74,6 +74,23 @@ def admin_user_id(client):
 
 
 @pytest.fixture
+def member_client(pg_dsn, monkeypatch):
+    """Authenticated test client logged in as a regular member (role='member')."""
+    tc = _make_client(pg_dsn, monkeypatch, authenticated=False)
+    from app import db
+    from app.web.auth import hash_password
+    with tc.app.state.pool.connection() as conn:
+        db.create_user(conn, "member1", "member1@test.local", hash_password("member123"))
+    resp = tc.post("/login", data={"username": "member1", "password": "member123"},
+                   follow_redirects=False)
+    assert resp.status_code in (302, 303), f"Member login failed: {resp.status_code}"
+    with tc.app.state.pool.connection() as conn:
+        tc.app.state.conn = conn
+        yield tc
+    tc.__exit__(None, None, None)
+
+
+@pytest.fixture
 def seed_source(client, admin_user_id):
     """Factory fixture: seed_source(source) → inserts source into DB for admin."""
     from app import db

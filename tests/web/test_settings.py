@@ -1,4 +1,4 @@
-def test_settings_redirects_to_email_tab(client):
+def test_settings_redirects_to_email_tab_for_admin(client):
     resp = client.get("/settings", follow_redirects=False)
     assert resp.status_code in (301, 302, 303, 307, 308)
     assert resp.headers["location"] == "/settings/email"
@@ -680,3 +680,35 @@ def test_preferences_invalid_email_error_has_role_alert(client):
 
     assert resp.status_code == 400
     assert 'role="alert"' in resp.text
+
+
+# --- admin-only email settings access control ---
+
+def test_member_cannot_get_email_settings(member_client):
+    resp = member_client.get("/settings/email")
+    assert resp.status_code == 403
+
+
+def test_member_cannot_post_email_settings(member_client):
+    resp = member_client.post("/settings/email", data={
+        "smtp_host": "evil.example.com", "smtp_port": "25",
+        "smtp_user": "attacker", "email_from": "evil@example.com",
+    })
+    assert resp.status_code == 403
+
+
+def test_member_settings_redirect_goes_to_preferences(member_client):
+    resp = member_client.get("/settings", follow_redirects=False)
+    assert resp.status_code in (301, 302, 303, 307, 308)
+    assert resp.headers["location"] == "/settings/preferences"
+
+
+def test_email_tab_visible_to_admin(client):
+    resp = client.get("/settings/preferences")
+    assert 'href="/settings/email"' in resp.text
+
+
+def test_email_tab_hidden_from_member(member_client):
+    resp = member_client.get("/settings/preferences")
+    assert resp.status_code == 200
+    assert 'href="/settings/email"' not in resp.text
