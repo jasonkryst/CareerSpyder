@@ -161,6 +161,17 @@ def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
     }
 
 
+def get_admin_smtp_settings(conn: psycopg.Connection) -> dict | None:
+    row = conn.execute(
+        "SELECT s.smtp_host, s.smtp_port, s.smtp_user, s.email_from "
+        "FROM settings s JOIN users u ON s.user_id = u.id "
+        "WHERE u.role = 'admin' LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+    return {"smtp_host": row[0], "smtp_port": row[1], "smtp_user": row[2], "email_from": row[3]}
+
+
 def save_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_port: int,
                    smtp_user: str, email_from: str) -> None:
     conn.execute(

@@ -83,14 +83,15 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
         logger.warning("Skipping digest email for run %s: no recipients configured", summary.run_id)
         return
 
-    if not settings.get("smtp_host"):
+    smtp = db.get_admin_smtp_settings(conn)
+    if not smtp or not smtp.get("smtp_host"):
         logger.warning("Skipping digest email for run %s: SMTP host not configured — set it at /settings/email", summary.run_id)
         return
 
     try:
         emailer.send_email(
-            settings["smtp_host"], settings["smtp_port"], settings["smtp_user"],
-            os.environ.get("SMTP_PASSWORD", ""), settings["email_from"], email_to,
+            smtp["smtp_host"], smtp["smtp_port"], smtp["smtp_user"],
+            os.environ.get("SMTP_PASSWORD", ""), smtp["email_from"], email_to,
             d.subject, d.html_body,
         )
         db.mark_emailed(conn, [j.key for j in jobs_to_send])
