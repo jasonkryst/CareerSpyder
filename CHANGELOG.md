@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-09-21
+
+### Fixed
+
+- **Digest emails now send for all users, not just the admin.** Member-role
+  users had empty SMTP fields in their settings row (seeded on invite
+  registration). The scheduler was reading `smtp_host` from the running user's
+  own row, so every member's digest was silently skipped. The scheduler now
+  fetches SMTP config from the admin user's settings and uses it for all
+  outgoing digests; each user's own preferences (recipients, schedule) are still
+  respected per-user.
+
 ## [1.1.0] — 2026-09-21
 
 ### Added
