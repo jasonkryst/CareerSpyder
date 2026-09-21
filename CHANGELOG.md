@@ -13,6 +13,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `/settings` redirect now sends admins to `/settings/email` and members to
   `/settings/preferences`.
 
+- **Admin dashboard shows all users' run history.** When the logged-in user is
+  an admin, the run history table on the dashboard shows every user's job
+  searches and URL checks across the whole instance. A **User** column identifies
+  who triggered each run. Members continue to see only their own runs with no
+  User column. Runs are attributed at creation time — both the scheduler
+  (per-user) and the manual "Check job URLs" button now record `user_id` on
+  each run row.
+
 ## [1.0.0] — 2026-09-20
 
 ### Added

@@ -8,6 +8,7 @@
     {{ sort_th(request, '/', 'finished_at', 'Finished') }}
     {{ sort_th(request, '/', 'new_job_count', 'New jobs') }}
     <th scope="col">Failed sources</th>
+    {% if is_admin %}<th scope="col">User</th>{% endif %}
   </tr>
   </thead>
   <tbody>
@@ -28,6 +29,7 @@
       </ul>
       {% endif %}
     </td>
+    {% if is_admin %}<td data-label="User">{{ run.username or "" }}</td>{% endif %}
   </tr>
   {% endfor %}
   </tbody>

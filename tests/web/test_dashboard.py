@@ -471,3 +471,109 @@ def test_check_urls_and_orchestrator_run_are_mutually_exclusive(client):
         t.join(timeout=2)
 
     assert not acquired, "expected _run_url_check to hold orchestrator._run_lock while checking URLs"
+
+
+# --- Admin sees all users' runs; member sees only their own (issue #136) ---
+
+def test_admin_sees_all_users_runs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=5, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=2, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert ">5<" in resp.text
+    assert ">2<" in resp.text
+
+
+def test_member_sees_only_own_runs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=7, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=3, failed_sources=[])
+
+    resp = member_client.get("/")
+
+    assert resp.status_code == 200
+    assert ">3<" in resp.text
+    assert ">7<" not in resp.text
+
+
+def test_admin_dashboard_shows_user_column(client, admin_user_id):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn, user_id=admin_user_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert '<th scope="col">User</th>' in resp.text
+    assert 'data-label="User"' in resp.text
+    assert "admin" in resp.text
+
+
+def test_member_dashboard_hides_user_column(member_client, member_user_id):
+    conn = member_client.app.state.conn
+    run_id = db.start_run(conn, user_id=member_user_id)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+    resp = member_client.get("/")
+
+    assert '<th scope="col">User</th>' not in resp.text
+    assert 'data-label="User"' not in resp.text
+
+
+def test_admin_user_column_shows_username_for_each_run(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.finish_run(admin_conn, admin_run, new_job_count=1, failed_sources=[])
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=2, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert "admin" in resp.text
+    assert "member1" in resp.text
+
+
+def test_admin_count_includes_all_users_runs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    for _ in range(20):
+        run_id = db.start_run(admin_conn, user_id=admin_user_id)
+        db.finish_run(admin_conn, run_id, new_job_count=0, failed_sources=[])
+    for _ in range(20):
+        run_id = db.start_run(member_conn, user_id=member_user_id)
+        db.finish_run(member_conn, run_id, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert "Page 1 of 2" in resp.text
+
+
+def test_member_count_includes_only_own_runs(client, member_client, admin_user_id, member_user_id):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    for _ in range(30):
+        run_id = db.start_run(admin_conn, user_id=admin_user_id)
+        db.finish_run(admin_conn, run_id, new_job_count=0, failed_sources=[])
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.finish_run(member_conn, member_run, new_job_count=0, failed_sources=[])
+
+    resp = member_client.get("/")
+
+    assert "Page 1 of 1" in resp.text

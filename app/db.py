@@ -55,10 +55,10 @@ def clear_jobs(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
-def start_run(conn: psycopg.Connection, kind: str = "scrape") -> int:
+def start_run(conn: psycopg.Connection, kind: str = "scrape", user_id: str | None = None) -> int:
     cur = conn.execute(
-        "INSERT INTO runs (started_at, kind) VALUES (%s, %s) RETURNING id",
-        (_now(), kind),
+        "INSERT INTO runs (started_at, kind, user_id) VALUES (%s, %s, %s) RETURNING id",
+        (_now(), kind, user_id),
     )
     row = cur.fetchone()
     if row is None:
@@ -91,44 +91,53 @@ def _deserialize_failed_sources(raw: str) -> list[dict]:
 
 
 _RUN_SORT_COLUMNS = {
-    "started_at": "started_at",
-    "finished_at": "finished_at",
-    "new_job_count": "new_job_count",
+    "started_at": "runs.started_at",
+    "finished_at": "runs.finished_at",
+    "new_job_count": "runs.new_job_count",
 }
 
 
-def _run_filters_sql(failures: str | None) -> tuple[str, list]:
+def _run_where_sql(failures: str | None, user_id: str | None) -> tuple[str, list]:
+    conditions: list[str] = []
+    params: list = []
     if failures == "only":
-        return "WHERE failed_sources != '[]'", []
-    if failures == "clean":
-        return "WHERE failed_sources = '[]'", []
-    return "", []
+        conditions.append("failed_sources != '[]'")
+    elif failures == "clean":
+        conditions.append("failed_sources = '[]'")
+    if user_id is not None:
+        conditions.append("runs.user_id = %s")
+        params.append(user_id)
+    return ("WHERE " + " AND ".join(conditions) if conditions else ""), params
 
 
 def list_runs(
     conn: psycopg.Connection, limit: int = 50, offset: int = 0, *,
     sort: str = "", direction: str = "", failures: str | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
-    order_column = _RUN_SORT_COLUMNS.get(sort, "id")
+    order_column = _RUN_SORT_COLUMNS.get(sort, "runs.id")
     order_dir = "ASC" if direction == "asc" else "DESC"
-    where_sql, params = _run_filters_sql(failures)
+    where_sql, params = _run_where_sql(failures, user_id)
     query = (
-        "SELECT id, started_at, finished_at, new_job_count, failed_sources, kind FROM runs "
-        f"{where_sql} ORDER BY {order_column} {order_dir}, id {order_dir} LIMIT %s OFFSET %s"
+        "SELECT runs.id, runs.started_at, runs.finished_at, runs.new_job_count, "
+        "runs.failed_sources, runs.kind, users.username "
+        "FROM runs LEFT JOIN users ON runs.user_id = users.id "
+        f"{where_sql} ORDER BY {order_column} {order_dir}, runs.id {order_dir} "
+        "LIMIT %s OFFSET %s"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
             "new_job_count": r[3], "failed_sources": _deserialize_failed_sources(r[4]),
-            "kind": r[5],
+            "kind": r[5], "username": r[6],
         }
         for r in rows
     ]
 
 
-def count_runs(conn: psycopg.Connection, *, failures: str | None = None) -> int:
-    where_sql, params = _run_filters_sql(failures)
+def count_runs(conn: psycopg.Connection, *, failures: str | None = None, user_id: str | None = None) -> int:
+    where_sql, params = _run_where_sql(failures, user_id)
     row = conn.execute(f"SELECT COUNT(*) FROM runs {where_sql}", params).fetchone()
     return row[0] if row else 0
 

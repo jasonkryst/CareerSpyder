@@ -29,7 +29,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     if not force and settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
         return
 
-    summary = orchestrator.run_once(conn, sources)
+    summary = orchestrator.run_once(conn, sources, user_id=user_id)
 
     resend = bool(settings and settings["resend_jobs"])
     jobs_to_send = list(summary.found_jobs if resend else summary.new_jobs)
