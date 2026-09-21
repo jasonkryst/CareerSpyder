@@ -18,6 +18,8 @@ dependencies = [
     "requests>=2.34.2",
     "beautifulsoup4>=4.15.0",
     "playwright>=1.62.0",
+    "passlib[bcrypt]>=1.7.4",
+    "itsdangerous>=2.1",
 ]
 
 [project.optional-dependencies]
