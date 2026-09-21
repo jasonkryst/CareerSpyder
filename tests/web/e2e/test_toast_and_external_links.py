@@ -1,5 +1,7 @@
 import os
 
+import psycopg
+
 from app import db
 from app.models import Job
 
@@ -36,7 +38,7 @@ def test_toast_auto_dismisses_without_manual_close(live_server, page):
 
 
 def test_clicking_job_title_opens_a_new_tab_to_the_job_url(live_server, page):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-external-link", title="E2E External Link Job",
               url="https://example.com/job/e2e-external-link")
     run_id = db.start_run(conn)

@@ -15,8 +15,8 @@ def _clear_geocode_zip_cache():
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("CAREERSPYDER_DB_PATH", str(tmp_path / "state.db"))
+def client(pg_dsn, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", pg_dsn)
     sources_path = tmp_path / "sources.json"
     sources_path.write_text(json.dumps({"sources": []}))
     monkeypatch.setenv("CAREERSPYDER_SOURCES_PATH", str(sources_path))
@@ -31,5 +31,6 @@ def client(tmp_path, monkeypatch):
 
     from app.web.main import app
 
-    with TestClient(app) as test_client:
+    with TestClient(app) as test_client, test_client.app.state.pool.connection() as conn:
+        test_client.app.state.conn = conn
         yield test_client

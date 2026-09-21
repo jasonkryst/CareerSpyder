@@ -1,10 +1,29 @@
 services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: careerspyder
+      POSTGRES_USER: careerspyder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - careerspyder_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerspyder"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   careerspyder:
     image: jasonkryst/careerspyder:latest
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "32600:8080"
     environment:
+      DATABASE_URL: postgresql://careerspyder:${POSTGRES_PASSWORD}@postgres:5432/careerspyder
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -15,12 +34,10 @@ services:
       TZ: ${TZ:-UTC}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
-      CAREERSPYDER_DB_PATH: /app/data/state.db
       CAREERSPYDER_SOURCES_PATH: /app/config/sources.json
     volumes:
       - careerspyder_config:/app/config
-      - careerspyder_data:/app/data
 
 volumes:
   careerspyder_config:
-  careerspyder_data:
+  careerspyder_pgdata:

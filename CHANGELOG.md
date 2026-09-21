@@ -5,6 +5,35 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.66.0] — 2026-09-15
+
+### Changed
+
+- **PostgreSQL 17 replaces SQLite as the database engine.** `psycopg3`
+  (`psycopg[pool]`) is the new driver; Alembic manages schema migrations.
+  `DATABASE_URL` (standard PostgreSQL DSN) replaces `CAREERSPYDER_DB_PATH`.
+  All public `db.py` function signatures are unchanged — callers pass a
+  `psycopg.Connection` acquired from the app's connection pool.
+
+- **Connection pool model.** `db.init_db(dsn)` now returns a
+  `psycopg_pool.ConnectionPool`. Route handlers and background tasks acquire
+  a connection per request via `with pool.connection() as conn:`.
+
+- **Alembic schema management.** The hand-rolled `_add_column_if_missing` /
+  `_migrate_jobs_table` inline migration system is removed. The initial
+  migration (`alembic/versions/0001_initial_schema.py`) creates all tables
+  and the PostgreSQL `haversine_miles` SQL function.
+
+- **Docker Compose** gains a `postgres:17` service. `docker-compose up`
+  now starts PostgreSQL and CareerSpyder together. `docker-entrypoint.sh`
+  runs `alembic upgrade head` before uvicorn starts (no-op when already at
+  head). The `careerspyder_data` volume is replaced by `careerspyder_pgdata`.
+
+### Migration note
+
+Clean start only — no data migration from existing SQLite databases. Export
+any data you need before upgrading.
+
 ## [0.65.1] — 2026-09-15
 
 ### Fixed

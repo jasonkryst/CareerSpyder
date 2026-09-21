@@ -26,8 +26,8 @@ def _head_raising(exc):
 
 # ── positive cases ──────────────────────────────────────────────────────────
 
-def test_check_job_urls_marks_removed_on_404(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_marks_removed_on_404(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(404))
@@ -36,8 +36,8 @@ def test_check_job_urls_marks_removed_on_404(tmp_db_path):
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
 
-def test_check_job_urls_marks_removed_on_410(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_marks_removed_on_410(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(410))
@@ -46,8 +46,8 @@ def test_check_job_urls_marks_removed_on_410(tmp_db_path):
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
 
-def test_check_job_urls_returns_count_of_removed(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_returns_count_of_removed(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job("k1"), make_job("k2"), make_job("k3")], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(404))
@@ -57,8 +57,8 @@ def test_check_job_urls_returns_count_of_removed(tmp_db_path):
 
 # ── negative cases ───────────────────────────────────────────────────────────
 
-def test_check_job_urls_leaves_active_job_untouched_on_200(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_leaves_active_job_untouched_on_200(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(200))
@@ -67,8 +67,8 @@ def test_check_job_urls_leaves_active_job_untouched_on_200(tmp_db_path):
     assert db.list_jobs(conn)[0]["removed_at"] is None
 
 
-def test_check_job_urls_leaves_active_job_untouched_on_301(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_leaves_active_job_untouched_on_301(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(301))
@@ -77,8 +77,8 @@ def test_check_job_urls_leaves_active_job_untouched_on_301(tmp_db_path):
     assert db.list_jobs(conn)[0]["removed_at"] is None
 
 
-def test_check_job_urls_leaves_active_job_untouched_on_500(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_leaves_active_job_untouched_on_500(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(500))
@@ -87,8 +87,8 @@ def test_check_job_urls_leaves_active_job_untouched_on_500(tmp_db_path):
     assert db.list_jobs(conn)[0]["removed_at"] is None
 
 
-def test_check_job_urls_leaves_active_job_untouched_when_request_raises(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_leaves_active_job_untouched_when_request_raises(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
 
     import requests
@@ -98,8 +98,8 @@ def test_check_job_urls_leaves_active_job_untouched_when_request_raises(tmp_db_p
     assert db.list_jobs(conn)[0]["removed_at"] is None
 
 
-def test_check_job_urls_skips_already_removed_jobs(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_skips_already_removed_jobs(pg_conn):
+    conn = pg_conn
     db.save_jobs(conn, [make_job()], db.start_run(conn))
     db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
     assert db.list_jobs(conn)[0]["removed_at"] is not None
@@ -114,16 +114,16 @@ def test_check_job_urls_skips_already_removed_jobs(tmp_db_path):
     assert calls == []  # already-removed job is not queried
 
 
-def test_check_job_urls_with_no_active_jobs_returns_zero(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_with_no_active_jobs_returns_zero(pg_conn):
+    conn = pg_conn
 
     count = checker.check_job_urls(conn, http_head=_head_returning(404))
 
     assert count == 0
 
 
-def test_check_job_urls_only_removes_jobs_that_return_404_or_410(tmp_db_path):
-    conn = db.init_db(tmp_db_path)
+def test_check_job_urls_only_removes_jobs_that_return_404_or_410(pg_conn):
+    conn = pg_conn
     jobs = [
         make_job("gone-404", url="https://example.com/1"),
         make_job("gone-410", url="https://example.com/2"),

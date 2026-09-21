@@ -7,8 +7,8 @@ known gaps, and [CHANGELOG.md](CHANGELOG.md) for what's shipped.
 ## What this is
 
 CareerSpyder: a single-process FastAPI + APScheduler app that scrapes
-configured job sources on a schedule, dedupes against SQLite, emails a
-digest of new postings, and serves a server-rendered web UI for managing
+configured job sources on a schedule, dedupes against PostgreSQL 17, emails
+a digest of new postings, and serves a server-rendered web UI for managing
 sources and settings. Python 3.12, no frontend build step.
 
 Two documents in `docs/superpowers/` are the authoritative origin of this
@@ -32,9 +32,11 @@ pytest tests/test_db.py -v    # run one file
 pytest --cov=app --cov-report=term-missing   # with coverage (CI runs this)
 ruff check app tests          # includes flake8-bandit ("S") security rules
 uvicorn app.web.main:app --reload --port 8080   # run the app locally
+# Local dev requires a running PostgreSQL instance and DATABASE_URL set in .env
+# On Windows: install libpq (via PostgreSQL installer) for psycopg3 to connect
 
 docker build -t careerspyder:latest .
-docker compose up -d          # requires a .env with at least SMTP_PASSWORD
+docker compose up -d          # requires .env with POSTGRES_PASSWORD + SMTP_PASSWORD
 docker compose logs -f
 docker compose down
 ```
@@ -49,7 +51,7 @@ These come from the design spec's Global Constraints and are enforced by
 existing tests — don't casually relax them:
 
 - **`SMTP_PASSWORD` is a container env var only.** Never write it to
-  SQLite, never add it to any pydantic settings model, never render it in
+  the database, never add it to any pydantic settings model, never render it in
   a template. Every other SMTP/email setting lives in the `settings`
   table and is editable via `/settings`.
 - **Tests must not make live network calls or launch a real browser.**
@@ -142,7 +144,7 @@ existing tests — don't casually relax them:
   automatically) or explicitly `await
   run_in_threadpool(...)`. See `/sources/test-preview` in
   `app/web/routes_sources.py` for the pattern.
-- **Shared mutable state needs a lock.** The SQLite connection and
+- **Shared mutable state needs a lock.** The database connection pool and
   `sources.json` are both touched from request threads, `BackgroundTasks`
   threads, and the APScheduler worker thread concurrently.
   `app/orchestrator.py::_run_lock` serializes the read-new/write-new

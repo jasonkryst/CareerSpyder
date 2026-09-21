@@ -447,7 +447,6 @@ def test_check_urls_and_orchestrator_run_are_mutually_exclusive(client):
     from app import orchestrator
     from app.web.routes_dashboard import _run_url_check
 
-    conn = client.app.state.conn
     started = threading.Event()
     release = threading.Event()
 
@@ -457,7 +456,7 @@ def test_check_urls_and_orchestrator_run_are_mutually_exclusive(client):
         return 0
 
     with patch("app.web.routes_dashboard.checker.check_job_urls", side_effect=blocking_check_urls):
-        t = threading.Thread(target=_run_url_check, args=(conn, 1))
+        t = threading.Thread(target=_run_url_check, args=(client.app.state.pool, 1))
         t.start()
         assert started.wait(timeout=2)
 

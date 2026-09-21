@@ -6,13 +6,15 @@ FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae
 # security patches released since. Trivy's scan in docker.yml is what
 # would catch a future regression here.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    wget gnupg ca-certificates \
+    wget gnupg ca-certificates libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY pyproject.toml .
 COPY app app
+COPY alembic.ini .
+COPY alembic alembic
 # Uninstalling pip after use drops its vendored copies of msgpack/setuptools
 # from the image -- pip itself isn't needed once deps are installed, and its
 # bundled versions of those two lag behind upstream security fixes (Trivy

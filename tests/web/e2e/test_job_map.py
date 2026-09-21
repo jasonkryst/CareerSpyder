@@ -1,12 +1,14 @@
 import os
 from urllib.parse import quote
 
+import psycopg
+
 from app import db
 from app.models import Job
 
 
 def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-map-job", title="E2E Map Job", url="https://example.com/job/e2e-map-job",
               company="Acme", source_name="Acme Board", location="E2E Test City")
     run_id = db.start_run(conn)
@@ -35,7 +37,7 @@ def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
 
 
 def test_job_map_popup_escapes_a_title_containing_html_and_quote_characters(live_server, page):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-map-xss-job", title='<img src=x onerror=alert(1)>"Weird" Title',
               url="https://example.com/job/e2e-map-xss-job", company="Acme",
               source_name="Acme Board", location="E2E XSS City")

@@ -1,12 +1,14 @@
 import json
 import os
 
+import psycopg
+
 from app import db
 from app.models import Job
 
 
 def _save_job(key, title, source_id="src-1", source_name="Acme Board"):
-    conn = db.init_db(os.environ["CAREERSPYDER_DB_PATH"])
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key=key, title=title, url=f"https://example.com/job/{key}",
                              source_name=source_name, source_id=source_id)], run_id)

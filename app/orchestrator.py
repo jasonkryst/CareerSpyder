@@ -1,7 +1,8 @@
 import logging
-import sqlite3
 import threading
 from dataclasses import dataclass
+
+import psycopg
 
 from app import checker, db
 from app.adapters import ADAPTERS
@@ -29,7 +30,7 @@ class RunSummary:
     url_removed_count: int = 0
 
 
-def run_once(conn: sqlite3.Connection, sources: list[SourceConfig], geocoder: Geocoder | None = None) -> RunSummary:
+def run_once(conn: psycopg.Connection, sources: list[SourceConfig], geocoder: Geocoder | None = None) -> RunSummary:
     with _run_lock:
         run_id = db.start_run(conn)
         all_jobs: list[Job] = []

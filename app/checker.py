@@ -1,8 +1,8 @@
 import logging
-import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+import psycopg
 import requests
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ _REMOVED_STATUSES = frozenset({404, 410})
 
 
 def check_job_urls(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     http_head: Callable = requests.head,
 ) -> int:
     """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs."""
@@ -31,9 +31,9 @@ def check_job_urls(
 
     if removed_keys:
         now = datetime.now(UTC).isoformat()
-        placeholders = ",".join("?" * len(removed_keys))
+        placeholders = ",".join(["%s"] * len(removed_keys))
         conn.execute(
-            f"UPDATE jobs SET removed_at = ? WHERE key IN ({placeholders})",  # noqa: S608
+            f"UPDATE jobs SET removed_at = %s WHERE key IN ({placeholders})",  # noqa: S608
             [now, *removed_keys],
         )
         conn.commit()
