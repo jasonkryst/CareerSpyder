@@ -4,8 +4,8 @@ CareerSpyder is a self-hosted job search assistant. It periodically checks a
 list of company career pages, ATS platforms, and job boards for new postings
 matching your interests, dedupes them against everything it's already seen,
 and emails you a digest of what's new. You maintain the list of sources
-through a small web UI (or by hand-editing a JSON file) — no code changes
-are needed to add a new source of a type CareerSpyder already supports.
+through a small web UI — no code changes are needed to add a new source of a
+type CareerSpyder already supports.
 
 It runs as a single long-lived Docker container: one process serves both
 the web UI and the daily background scrape, with no external cron
@@ -24,7 +24,7 @@ dependency and no separate frontend build.
   - `linkedin` / `indeed` — best-effort, Playwright-based scraping of public
     job search result pages. Explicitly fragile (blocking, layout changes,
     CAPTCHAs); isolated so their breakage never affects the other sources.
-  - See [Field reference](#sourcesjson) below for per-type required fields.
+  - See [Field reference](#sources) below for per-type required fields.
 - **Per-source keyword filters** — optional `include_keywords` /
   `exclude_keywords` on every source, matched case-insensitively against the
   job title.
@@ -60,9 +60,10 @@ dependency and no separate frontend build.
   job is resent in every digest or only ever emailed once, one or
   more digest recipient addresses, and whether Not Interested jobs are
   hidden from the jobs map (on by default).
-- **No database migration story to manage** — a single SQLite file holds
-  dedup state, run history, and settings; it lives on a persistent Docker
-  volume so it survives redeploys.
+- **PostgreSQL backend with Alembic migrations** — all state (jobs, runs,
+  settings, sources, users) lives in a PostgreSQL 17 database on a named
+  Docker volume. Schema changes are applied automatically at startup via
+  Alembic.
 
 ## Architecture
 
@@ -91,7 +92,7 @@ service. There is one container, one process.
 |---|---|---|
 | Adapters | `app/adapters/*.py` | Fetch + normalize one source type into `Job` objects. Every adapter has the shape `fetch(source, **injectable_io) -> list[Job]`, so tests can inject fakes instead of hitting the network or a real browser. |
 | Orchestrator | `app/orchestrator.py` | Runs every configured source, applies keyword filters, dedupes across sources within a run, dedupes against SQLite, and records run history. Serializes concurrent runs with a lock so an overlapping "Run now" and daily cron can't double-report jobs. |
-| Dedup store | `app/db.py` | SQLite: `jobs` (seen-before keys, status), `runs` (history), `settings` (SMTP host/port/from, recipient list, check days, resend flag, hide-Not-Interested-on-map flag — **not** the password, see [Secrets](#secrets)). |
+| Dedup store | `app/db.py` | PostgreSQL: `jobs` (seen-before keys, status), `runs` (history), `settings` (SMTP host/port/from, recipient list, check days, resend flag, hide-Not-Interested-on-map flag — **not** the password, see [Secrets](#secrets)), `sources` (per-user source list, stored as JSONB), `users` (login credentials, roles), `invite_tokens` (registration links). |
 | Digest | `app/digest.py` | Builds an HTML email body from "new jobs this run" (grouped by company, showing each job's status/source when set) and "sources that failed this run," plus the run's search timestamp and an optional "View all jobs" link. Returns `None` (no email sent) when there are no new jobs and no failures. All scraped text is HTML-escaped before landing in the email. |
 | Emailer | `app/emailer.py` | Sends the digest via SMTP (STARTTLS, 30s timeout). |
 | Scheduler | `app/scheduler.py` | APScheduler cron job, once daily at a configurable hour/timezone. Skips the scan and email entirely on days not selected in Preferences. Swallows and logs any email-send failure so a bad SMTP config can never crash the process or block future runs. |
@@ -128,76 +129,24 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 
 | Variable | Required | Purpose |
 |---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL DSN, e.g. `postgresql://user:pass@host:5432/careerspyder`. The provided `docker-compose.yml` builds this from `POSTGRES_PASSWORD`. |
+| `ADMIN_USERNAME` | Yes (first boot) | Username for the initial admin account. Ignored once an admin exists in the database. |
+| `ADMIN_PASSWORD` | Yes (first boot) | Password for the initial admin account (plain text; hashed with bcrypt before storage). Ignored once an admin exists. Alternatively, set `ADMIN_PASSWORD_HASH` with a pre-hashed bcrypt string. |
+| `ADMIN_EMAIL` | No | Email address for the initial admin account (defaults to `{ADMIN_USERNAME}@localhost` if unset). |
+| `SECRET_KEY` | Yes | A long random string used to sign session cookies. Generate with e.g. `python -c "import secrets; print(secrets.token_hex(32))"`. Changing this value invalidates all active sessions. Without it, a dev-only insecure default is used with a startup warning. |
 | `SMTP_PASSWORD` | Yes, to send email | The SMTP account password. **Container env var only** — never written to disk, never shown or editable in the UI. See [Secrets](#secrets). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `EMAIL_FROM`, `EMAIL_TO` | No | First-boot defaults only. They seed the `settings` table the very first time the database is empty; after that, `/settings` is the source of truth and these env vars are ignored. |
 | `RUN_CRON` | No (default `0 7 * * *`) | Cron expression (5 fields: `min hour dom month dow`) controlling when the daily scrape runs. `0 7 * * *` means 07:00 every day in `TZ`. See [crontab.guru](https://crontab.guru) for reference. |
 | `TZ` | No (default `UTC`) | Timezone the scheduler and `RUN_CRON` are interpreted in. |
-| `CAREERSPYDER_DB_PATH` | No (default `/app/data/state.db`) | SQLite file location. |
-| `CAREERSPYDER_SOURCES_PATH` | No (default `/app/config/sources.json`) | Source list location. |
 | `PUBLIC_BASE_URL` | No | The site's own public URL (e.g. `https://jobs.example.com`), used to build the "View all jobs" link in digest emails. Without it, the link is omitted. |
 | `GA_MEASUREMENT_ID` | No | A GA4 Measurement ID (format `G-XXXXXXXXXX`) to enable Google Analytics page-view tracking. Without it, no `gtag.js` script is loaded and the CSP stays locked down to just this site. |
 
-### `sources.json`
+### Sources
 
-Mounted at `/app/config/sources.json` (`./config/sources.json` in the
-provided `docker-compose.yml`). It's the single source of truth for what
-gets scraped — edit it by hand or through the `/sources` UI, and it's
-re-read on every run, no rebuild or restart needed. If the file doesn't
-exist yet, CareerSpyder treats it as an empty source list rather than
-failing.
-
-Every source has a generated `id` (used by the UI for edit/delete links),
-a `type` that determines which adapter handles it and which other fields
-are required, and two optional keyword filters:
-
-```json
-{
-  "sources": [
-    {
-      "id": "a1b2c3d4e5f6",
-      "name": "Acme Corp (Greenhouse)",
-      "company": "Acme Corp",
-      "type": "greenhouse",
-      "board_token": "acme",
-      "include_keywords": ["engineer"],
-      "exclude_keywords": ["senior", "staff"]
-    },
-    {
-      "id": "b2c3d4e5f6a7",
-      "name": "Beta Inc (Lever)",
-      "company": "Beta Inc",
-      "type": "lever",
-      "board_token": "beta"
-    },
-    {
-      "id": "c3d4e5f6a7b8",
-      "name": "Custom Co Careers",
-      "company": "Custom Co",
-      "type": "generic_html",
-      "url": "https://customco.com/careers?q=backend+engineer",
-      "render_js": false,
-      "selectors": {
-        "job_card": ".job-listing",
-        "title": ".job-title",
-        "link": "a.job-link",
-        "location": ".job-location"
-      }
-    },
-    {
-      "id": "d4e5f6a7b8c9",
-      "name": "LinkedIn - Backend Remote",
-      "type": "linkedin",
-      "url": "https://www.linkedin.com/jobs/search/?keywords=backend+engineer&f_WT=2"
-    },
-    {
-      "id": "e5f6a7b8c9d0",
-      "name": "Indeed - Backend Remote",
-      "type": "indeed",
-      "url": "https://www.indeed.com/jobs?q=backend+engineer&sc=0kf%3Aattr%28DSQF7%29%3B"
-    }
-  ]
-}
-```
+Sources are managed through the `/sources` UI and stored per-user in the
+PostgreSQL database. Each source has a generated `id` (used by the UI for
+edit/delete links), a `type` that determines which adapter handles it and
+which other fields are required, and two optional keyword filters.
 
 Field reference:
 
@@ -222,9 +171,9 @@ values) before saving.
 ### Secrets
 
 The SMTP **password** stays a container env var (`SMTP_PASSWORD`) only —
-never written to SQLite, never shown or editable in the UI. Every other
-setting (host, port, from/to addresses) is editable at runtime through
-`/settings`, persisted in the database, and survives restarts and
+never written to the database, never shown or editable in the UI. Every
+other setting (host, port, from/to addresses) is editable at runtime
+through `/settings`, persisted in the database, and survives restarts and
 redeploys.
 
 ## Web UI
@@ -240,12 +189,12 @@ displayed in your browser's local timezone.
 | `/jobs/map` | The same filtered jobs as clustered pins (via Leaflet + Leaflet.markercluster) with a per-location job list popup, plus a fixed home-location marker. The initial view fits itself to whatever's plotted. **Defaults to Active jobs only**, same as the table. Shares the same state and zip/radius filter controls as the Jobs table. Jobs marked Not Interested are excluded by default (toggle in `/settings/preferences`); jobs whose location couldn't be resolved are excluded from the map but still filterable/visible in the table under "Other / Unresolved". |
 | `/sources` | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
 | `/sources/new`, `/sources/{id}/edit` | A form for one source; the `type` field determines which other fields are shown. Includes a **Test this source** button that runs the adapter once against the in-progress (unsaved) form values and previews the jobs it currently finds — useful for validating `generic_html` selectors before committing. |
+| `/login`, `/logout` | Login form (username + password). Authenticated sessions are signed cookies; logging out invalidates the session. Unauthenticated access to any protected route redirects here. |
+| `/users` | Admin-only. Lists all users and their status; sends invite links (7-day expiry) to new users via a generated URL. Admins can deactivate any account except their own. |
+| `/register?token=…` | Invite-only registration. Accepts the token from a `/users` invite link; creates a new account on submission. |
 | `/settings/email` | SMTP host/port/from address. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
-| `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import `sources.json` (import replaces the entire source list, and asks for confirmation via a themed dialog before doing so). |
+| `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import the source list (import replaces all your sources, and asks for confirmation via a themed dialog before doing so). |
 | `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, one or more recipient addresses (server-stored, validated client- and server-side), and whether Not Interested jobs are hidden from `/jobs/map` (on by default). |
-
-There is no authentication in v1 — this is meant for a trusted home/private
-network only (see [ROADMAP.md](ROADMAP.md)).
 
 CareerSpyder can also be installed as an app from your browser's
 install/Add to Home Screen prompt, for a standalone window and app icon.
@@ -272,11 +221,13 @@ browser — every adapter's `fetch()` takes injectable `http_get` /
 `html_renderer` parameters, and tests pass in fakes/fixtures. That also
 means `pytest` runs fast and works offline.
 
-Run the app locally without Docker:
+Run the app locally without Docker (requires a running PostgreSQL instance):
 
 ```bash
-export CAREERSPYDER_DB_PATH=./data/state.db
-export CAREERSPYDER_SOURCES_PATH=./config/sources.json
+export DATABASE_URL=postgresql://careerspyder:dev@localhost:5432/careerspyder
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=changeme
+export SECRET_KEY=dev-local-secret
 export SMTP_PASSWORD=dummy   # only needed if a run finds something to email
 uvicorn app.web.main:app --reload --port 8080
 ```
@@ -310,23 +261,16 @@ Two compose files, for two different purposes:
   docker compose -f docker-compose.prod.yml up -d
   ```
 
-Both files mount the same two paths for persistent state:
-
-- `/app/config` — `sources.json`.
-- `/app/data` — `state.db` (dedup store, run history, settings).
-
-`docker-compose.yml` bind-mounts these from `./config` and `./data`
-(relative to the checkout) — fine for local dev and CI, which always run
-from a fresh, known directory. `docker-compose.prod.yml` uses named Docker
-volumes (`careerspyder_config`, `careerspyder_data`) instead — Docker keys
-these by name rather than host path, so they survive pulls and container
-recreation regardless of where or how `docker compose` is invoked, which
-matters for a manually managed deploy host. Docker creates them
-automatically on first `up -d`; no host directory setup needed. To inspect
-or back up the files directly, e.g.:
+All persistent state lives in PostgreSQL. `docker-compose.yml` bind-mounts
+`./data/postgres` for the database files — fine for local dev and CI.
+`docker-compose.prod.yml` uses a named Docker volume (`careerspyder_pgdata`)
+instead — Docker keys these by name rather than host path, so they survive
+pulls and container recreation. Docker creates the volume automatically on
+the first `up -d`; no host directory setup is needed. To back up the
+database:
 ```bash
-docker run --rm -v careerspyder_data:/data -v "$PWD":/backup alpine \
-  cp /data/state.db /backup/
+docker exec -t careerspyder-postgres-1 \
+  pg_dump -U careerspyder careerspyder > careerspyder.sql
 ```
 
 Exposed port: `32600` (mapped to the container's internal port 8080).
@@ -343,8 +287,8 @@ mismatched host directory ownership never breaks a deploy.
 ```
 app/
   models.py          Job dataclass
-  db.py               SQLite: jobs / runs / settings
-  config.py           sources.json schema + CRUD (pydantic models)
+  db.py               PostgreSQL: jobs / runs / settings / sources / users / invite_tokens
+  config.py           Source pydantic models (SourceConfig union type)
   filters.py           include/exclude keyword filtering
   textutils.py          HTML-to-plain-text summaries + safe-URL-scheme helper
   adapters/
@@ -358,7 +302,10 @@ app/
   scheduler.py           APScheduler daily job + run-and-notify wiring
   web/
     main.py              FastAPI app + startup wiring
-    routes_*.py           one router per UI section
+    auth.py              session middleware, login guard (require_user/require_admin), password hashing
+    routes_auth.py        /login, /logout, /register
+    routes_users.py       /users (admin: invite, deactivate)
+    routes_*.py           one router per other UI section
     source_form.py        form <-> pydantic model translation
     templating.py         shared Jinja2Templates instance
     templates/*.html      server-rendered pages

@@ -1,4 +1,3 @@
-import json
 import os
 import socket
 import threading
@@ -21,9 +20,7 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="session")
-def live_server(tmp_path_factory, postgresql_proc):
-    tmp_path = tmp_path_factory.mktemp("e2e")
-
+def live_server(postgresql_proc):
     dbname = f"cs_e2e_{uuid.uuid4().hex[:12]}"
     host = postgresql_proc.host
     port = postgresql_proc.port
@@ -40,12 +37,12 @@ def live_server(tmp_path_factory, postgresql_proc):
     cfg.set_main_option("sqlalchemy.url", dsn.replace("postgresql://", "postgresql+psycopg://", 1))
     command.upgrade(cfg, "head")
 
-    sources_path = tmp_path / "sources.json"
-    sources_path.write_text(json.dumps({"sources": []}))
-
     env_overrides = {
         "DATABASE_URL": dsn,
-        "CAREERSPYDER_SOURCES_PATH": str(sources_path),
+        "ADMIN_USERNAME": "admin",
+        "ADMIN_PASSWORD": "password123",
+        "ADMIN_EMAIL": "admin@test.local",
+        "SECRET_KEY": "test-secret-key-e2e",
         "RUN_CRON": "0 8 * * *",
         "TZ": "UTC",
         "SMTP_HOST": "smtp.example.com",
@@ -97,11 +94,16 @@ def browser():
 
 
 @pytest.fixture
-def page(browser):
+def page(browser, live_server):
     # bypass_csp: the app's CSP (app/web/security_headers.py) blocks eval(),
     # which Playwright's own wait_for_function/expect helpers use internally
     # to run predicates in-page. Real browsers/users are unaffected -- this
     # only disables CSP enforcement inside this test-only page.
     p = browser.new_page(bypass_csp=True)
+    p.goto(live_server + "/login")
+    p.fill('input[name="username"]', "admin")
+    p.fill('input[name="password"]', "password123")
+    p.click('button[type="submit"]')
+    p.wait_for_load_state("networkidle")
     yield p
     p.close()

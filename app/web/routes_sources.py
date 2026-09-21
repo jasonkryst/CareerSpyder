@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
-from app import config
+from app import db
 from app.adapters import ADAPTERS
 from app.textutils import safe_url_scheme
+from app.web.auth import require_user
 from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.source_form import echo_source, source_from_form
@@ -25,10 +26,15 @@ _SOURCE_SORT_KEYS = {
 
 @router.get("/sources", response_class=HTMLResponse)
 def list_sources(
-    request: Request, page: str = "1", sort: str = "",
-    direction: str = Query("", alias="dir"), source_type: str = Query("", alias="type"),
+    request: Request,
+    page: str = "1",
+    sort: str = "",
+    direction: str = Query("", alias="dir"),
+    source_type: str = Query("", alias="type"),
+    current_user: dict = Depends(require_user),
 ):
-    all_sources = config.load_sources(request.app.state.sources_path)
+    with request.app.state.pool.connection() as conn:
+        all_sources = db.list_sources(conn, current_user["id"])
     available_types = sorted({s.type for s in all_sources})
     if source_type:
         all_sources = [s for s in all_sources if s.type == source_type]
@@ -46,21 +52,32 @@ def list_sources(
 
 
 @router.post("/sources/{source_id}/delete")
-def delete_source(request: Request, source_id: str):
-    try:
-        config.delete_source(request.app.state.sources_path, source_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Source not found")
+def delete_source(
+    request: Request,
+    source_id: str,
+    current_user: dict = Depends(require_user),
+):
+    with request.app.state.pool.connection() as conn:
+        try:
+            db.delete_source(conn, current_user["id"], source_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Source not found")
     return flash_redirect("/sources", "Source deleted.")
 
 
 @router.get("/sources/new", response_class=HTMLResponse)
-def new_source_form(request: Request):
+def new_source_form(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     return templates.TemplateResponse(request, "source_form.html", {"source": None, "action": "/sources/new"})
 
 
 @router.post("/sources/new")
-async def create_source(request: Request):
+async def create_source(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     try:
         source = source_from_form(form)
@@ -71,15 +88,20 @@ async def create_source(request: Request):
             {"source": echo_source(form), "action": "/sources/new", "error": fmt_validation_error(exc)},
             status_code=400,
         )
-    config.add_source(request.app.state.sources_path, source)
+    with request.app.state.pool.connection() as conn:
+        db.add_source(conn, current_user["id"], source)
     return flash_redirect("/sources", "Source added.")
 
 
 @router.get("/sources/{source_id}/edit", response_class=HTMLResponse)
-def edit_source_form(request: Request, source_id: str):
-    try:
-        source = config.get_source(request.app.state.sources_path, source_id)
-    except KeyError:
+def edit_source_form(
+    request: Request,
+    source_id: str,
+    current_user: dict = Depends(require_user),
+):
+    with request.app.state.pool.connection() as conn:
+        source = db.get_source(conn, current_user["id"], source_id)
+    if source is None:
         raise HTTPException(status_code=404, detail="Source not found")
     return templates.TemplateResponse(
         request, "source_form.html", {"source": source, "action": f"/sources/{source_id}/edit"}
@@ -87,7 +109,11 @@ def edit_source_form(request: Request, source_id: str):
 
 
 @router.post("/sources/{source_id}/edit")
-async def update_source(request: Request, source_id: str):
+async def update_source(
+    request: Request,
+    source_id: str,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     action = f"/sources/{source_id}/edit"
     try:
@@ -103,15 +129,19 @@ async def update_source(request: Request, source_id: str):
     # form field carried — prevents a tampered hidden field from rewriting
     # a different source's id.
     source.id = source_id
-    try:
-        config.update_source(request.app.state.sources_path, source_id, source)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Source not found")
+    with request.app.state.pool.connection() as conn:
+        try:
+            db.update_source(conn, current_user["id"], source_id, source)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Source not found")
     return flash_redirect("/sources", "Source saved.")
 
 
 @router.post("/sources/test-preview")
-async def test_source_preview(request: Request):
+async def test_source_preview(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     try:
         source = source_from_form(form)

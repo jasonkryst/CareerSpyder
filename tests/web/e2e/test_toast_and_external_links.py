@@ -11,7 +11,7 @@ def test_toast_appears_after_deleting_a_source_and_can_be_dismissed(live_server,
     page.fill('input[name="name"]', "Toast Test Source")
     page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "toast-test")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
     page.wait_for_url("**/sources")
 
     row = page.locator("tr", has_text="Toast Test Source")
@@ -31,7 +31,7 @@ def test_toast_auto_dismisses_without_manual_close(live_server, page):
     page.fill('input[name="smtp_port"]', "587")
     page.fill('input[name="smtp_user"]', "user")
     page.fill('input[name="email_from"]', "from@x.test")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
 
     page.wait_for_selector(".toast")
     page.wait_for_selector(".toast", state="detached", timeout=8000)

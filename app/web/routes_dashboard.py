@@ -1,10 +1,11 @@
-from fastapi import APIRouter, BackgroundTasks, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from psycopg_pool import ConnectionPool
 
 from app import checker, db
 from app.orchestrator import _run_lock
 from app.scheduler import run_and_notify
+from app.web.auth import require_user
 from app.web.pagination import paginate
 from app.web.templating import templates
 
@@ -28,6 +29,7 @@ def _dashboard_context(conn, request: Request, page: str, sort: str, direction: 
 def dashboard(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"), failures: str = "",
+    current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
         context = _dashboard_context(conn, request, page, sort, direction, failures)
@@ -38,6 +40,7 @@ def dashboard(
 def dashboard_rows(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"), failures: str = "",
+    current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
         context = _dashboard_context(conn, request, page, sort, direction, failures)
@@ -45,9 +48,13 @@ def dashboard_rows(
 
 
 @router.post("/run-now")
-def run_now(request: Request, background_tasks: BackgroundTasks):
+def run_now(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_user),
+):
     background_tasks.add_task(
-        run_and_notify, request.app.state.pool, request.app.state.sources_path, force=True,
+        run_and_notify, request.app.state.pool, request.app.state.tz, force=True,
     )
     return RedirectResponse(url="/", status_code=303)
 
@@ -63,7 +70,11 @@ def _run_url_check(pool: ConnectionPool, run_id: int) -> None:
 
 
 @router.post("/check-urls")
-def check_urls(request: Request, background_tasks: BackgroundTasks):
+def check_urls(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_user),
+):
     with request.app.state.pool.connection() as conn:
         run_id = db.start_run(conn, kind="url_check")
     background_tasks.add_task(_run_url_check, request.app.state.pool, run_id)

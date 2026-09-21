@@ -1,13 +1,20 @@
-import json
-import os
+from pydantic import TypeAdapter
+
+from app import db
+from app.config import SourceConfig
+
+_ta = TypeAdapter(SourceConfig)
 
 
-def test_sources_list_renders_empty_when_sources_file_missing(client):
-    sources_path = client.app.state.sources_path
-    os.remove(sources_path)
+def _add_sources(client, admin_user_id, sources_data):
+    """Seed sources from a list of dicts into the DB for the admin user."""
+    with client.app.state.pool.connection() as conn:
+        for d in sources_data:
+            db.add_source(conn, admin_user_id, _ta.validate_python(d))
 
+
+def test_sources_list_renders_empty_when_no_sources(client):
     resp = client.get("/sources")
-
     assert resp.status_code == 200
 
 
@@ -16,12 +23,10 @@ def test_delete_unknown_source_returns_404(client):
     assert resp.status_code == 404
 
 
-def test_sources_list_shows_configured_sources(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_sources_list_shows_configured_sources(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.get("/sources")
 
@@ -29,28 +34,24 @@ def test_sources_list_shows_configured_sources(client):
     assert "Acme (Greenhouse)" in resp.text
 
 
-def test_delete_source_removes_it(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_delete_source_removes_it(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.post("/sources/s1/delete", follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_delete_source_redirect_carries_deleted_flash_message(client):
+def test_delete_source_redirect_carries_deleted_flash_message(client, admin_user_id):
     from urllib.parse import parse_qs, urlparse
 
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.post("/sources/s1/delete", follow_redirects=False)
 
@@ -73,14 +74,12 @@ def test_sources_table_has_scoped_headers_and_scroll_wrapper(client):
     assert 'class="table-scroll"' in resp.text
 
 
-def test_sources_list_second_page_shows_remaining_sources(client):
-    sources_path = client.app.state.sources_path
+def test_sources_list_second_page_shows_remaining_sources(client, admin_user_id):
     sources = [
         {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
         for i in range(30)
     ]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": sources}, f)
+    _add_sources(client, admin_user_id, sources)
 
     page1 = client.get("/sources?page=1")
     page2 = client.get("/sources?page=2")
@@ -98,12 +97,10 @@ def test_sources_list_invalid_page_param_clamps_instead_of_erroring(client):
     assert "Page 1 of 1" in resp.text
 
 
-def test_sources_table_cells_have_data_labels(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_sources_table_cells_have_data_labels(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.get("/sources")
 
@@ -111,12 +108,10 @@ def test_sources_table_cells_have_data_labels(client):
         assert f'data-label="{label}"' in resp.text
 
 
-def test_delete_form_has_confirm_guard(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_delete_form_has_confirm_guard(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Greenhouse)", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.get("/sources")
 
@@ -124,39 +119,33 @@ def test_delete_form_has_confirm_guard(client):
     assert "Delete &quot;Acme (Greenhouse)&quot;? This can't be undone." in resp.text
 
 
-def test_sources_list_sorts_by_name_ascending(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
-            {"id": "s2", "name": "Acme", "type": "greenhouse", "board_token": "a"},
-        ]}, f)
+def test_sources_list_sorts_by_name_ascending(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
+        {"id": "s2", "name": "Acme", "type": "greenhouse", "board_token": "a"},
+    ])
 
     resp = client.get("/sources?sort=name&dir=asc")
 
     assert resp.text.index("Acme") < resp.text.index("Zeta")
 
 
-def test_sources_list_sorts_by_name_descending(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "a"},
-            {"id": "s2", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
-        ]}, f)
+def test_sources_list_sorts_by_name_descending(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "Zeta", "type": "greenhouse", "board_token": "z"},
+    ])
 
     resp = client.get("/sources?sort=name&dir=desc")
 
     assert resp.text.index("Zeta") < resp.text.index("Acme")
 
 
-def test_sources_list_filters_by_type(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "A Source", "type": "greenhouse", "board_token": "a"},
-            {"id": "s2", "name": "B Source", "type": "lever", "board_token": "b"},
-        ]}, f)
+def test_sources_list_filters_by_type(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A Source", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "B Source", "type": "lever", "board_token": "b"},
+    ])
 
     resp = client.get("/sources?type=lever")
 
@@ -164,12 +153,10 @@ def test_sources_list_filters_by_type(client):
     assert 'data-label="Name">A Source' not in resp.text
 
 
-def test_sources_list_type_filter_options_only_include_present_types(client):
-    sources_path = client.app.state.sources_path
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
-        ]}, f)
+def test_sources_list_type_filter_options_only_include_present_types(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+    ])
 
     resp = client.get("/sources")
 
@@ -182,14 +169,12 @@ def test_sources_list_invalid_sort_does_not_error(client):
     assert resp.status_code == 200
 
 
-def test_sources_list_second_page_still_shows_remaining_sources_unsorted(client):
-    sources_path = client.app.state.sources_path
+def test_sources_list_second_page_still_shows_remaining_sources_unsorted(client, admin_user_id):
     sources = [
         {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
         for i in range(30)
     ]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": sources}, f)
+    _add_sources(client, admin_user_id, sources)
 
     page1 = client.get("/sources?page=1")
 

@@ -35,6 +35,7 @@ services:
       TZ: ${TZ:-UTC}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
-      CAREERSPYDER_SOURCES_PATH: /app/config/sources.json
-    volumes:
-      - ./config:/app/config
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      SECRET_KEY: ${SECRET_KEY}

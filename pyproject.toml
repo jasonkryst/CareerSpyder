@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerspyder"
-version = "0.66.0"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
@@ -18,6 +18,8 @@ dependencies = [
     "requests>=2.34.2",
     "beautifulsoup4>=4.15.0",
     "playwright>=1.62.0",
+    "bcrypt>=4.0.1",
+    "itsdangerous>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -53,12 +55,15 @@ target-version = "py312"
 extend-select = ["S"]  # flake8-bandit security rules
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S108"]  # asserts + fixture creds/paths are fine in tests
+"tests/**" = ["S101", "S105", "S106", "S107", "S108"]  # asserts + fixture creds/paths are fine in tests
 # Every dynamic query here interpolates only allow-listed column names/ORDER
 # direction (never user-supplied values) alongside `?` placeholders for
 # actual data -- see _run_filters_sql/_job_filters_sql and the *_SORT_COLUMNS
 # dicts. S608 can't tell allow-listed identifiers from unsanitized input.
 "app/db.py" = ["S608"]
+# FastAPI's Depends() in function-signature defaults is the intended pattern;
+# B008 fires on every route that uses it.
+"app/web/**" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -67,3 +72,4 @@ files = ["app"]
 [[tool.mypy.overrides]]
 module = "apscheduler.*"
 ignore_missing_imports = true
+

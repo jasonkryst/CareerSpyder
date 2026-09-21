@@ -5,6 +5,52 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-20
+
+### Added
+
+- **Multi-user authentication.** CareerSpyder now requires a login. The first
+  user (admin) is provisioned automatically from `ADMIN_USERNAME`,
+  `ADMIN_PASSWORD`, and `ADMIN_EMAIL` environment variables on first startup.
+  `SECRET_KEY` is required to sign session cookies.
+
+- **Session-based auth.** Starlette `SessionMiddleware` (signed cookies) +
+  `UserContextMiddleware` (sets `request.state.user` from session) + FastAPI
+  `Depends(require_user)` / `Depends(require_admin)` guards on all routes.
+
+- **Invite-based registration.** Admins generate invite links at `/users`;
+  each link is single-use and expires after 7 days. New users register at
+  `/register?token=<token>`.
+
+- **Per-user data isolation.** Sources and settings are now per-user. Every
+  route that reads or writes sources or settings passes `user_id` explicitly.
+
+- **Sources moved to the database.** The `sources.json` file is replaced by a
+  `sources` table (JSONB `config` column, FK to `users`). `CAREERSPYDER_SOURCES_PATH`
+  is no longer used and can be removed from your configuration.
+
+- **Admin user management UI** at `/users`: list all users, create invite
+  links, and deactivate accounts.
+
+### Changed
+
+- **Scheduler is now multi-user aware.** `run_and_notify` iterates all users
+  that have sources and runs each user's job independently. One user's fetch
+  failure does not stop other users' runs.
+
+- **`create_scheduler` signature changed:** `sources_path` parameter removed;
+  now takes `(pool, run_cron, tz)`.
+
+### Removed
+
+- `CAREERSPYDER_SOURCES_PATH` environment variable (sources are stored in the
+  database).
+- File-based source management functions (`config.add_source`,
+  `config.delete_source`, `config.update_source`, `config.get_source`,
+  `config.import_sources_json`, `config.export_sources_json`) are no longer
+  called by any route; `config.load_sources` / `config.add_source` remain in
+  `app/config.py` for backward-compat with `test_config.py` unit tests.
+
 ## [0.66.0] — 2026-09-15
 
 ### Changed

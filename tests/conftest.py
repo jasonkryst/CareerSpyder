@@ -6,6 +6,8 @@ from alembic.config import Config
 from pytest_postgresql import factories
 
 from alembic import command
+from app import db
+from app.web.auth import hash_password
 
 # Session-scoped PostgreSQL process (shared across all tests in a session)
 postgresql_proc = factories.postgresql_proc(port=None)
@@ -48,3 +50,13 @@ def pg_conn(pg_dsn):
     conn = psycopg.connect(pg_dsn)
     yield conn
     conn.close()
+
+
+def seed_admin(conn, *, username: str = "admin", password: str = "password123") -> dict:
+    """Create an admin user and seed empty settings. Returns the user dict."""
+    user = db.create_user(
+        conn, username, f"{username}@test.local",
+        hash_password(password), role="admin",
+    )
+    db.save_settings(conn, user["id"], "smtp.example.com", 587, "user", "from@x.test")
+    return user

@@ -133,11 +133,12 @@ def count_runs(conn: psycopg.Connection, *, failures: str | None = None) -> int:
     return row[0] if row else 0
 
 
-def get_settings(conn: psycopg.Connection) -> dict | None:
+def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
     row = conn.execute(
         "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs, "
         "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses "
-        "FROM settings WHERE id = 1"
+        "FROM settings WHERE user_id = %s",
+        (user_id,),
     ).fetchone()
     if row is None:
         return None
@@ -151,49 +152,49 @@ def get_settings(conn: psycopg.Connection) -> dict | None:
     }
 
 
-def save_settings(conn: psycopg.Connection, smtp_host: str, smtp_port: int, smtp_user: str,
-                   email_from: str) -> None:
+def save_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_port: int,
+                   smtp_user: str, email_from: str) -> None:
     conn.execute(
-        "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from) "
-        "VALUES (1, %s, %s, %s, %s) "
-        "ON CONFLICT(id) DO UPDATE SET "
+        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from) "
+        "VALUES (%s, %s, %s, %s, %s) "
+        "ON CONFLICT(user_id) DO UPDATE SET "
         "smtp_host=excluded.smtp_host, smtp_port=excluded.smtp_port, "
         "smtp_user=excluded.smtp_user, email_from=excluded.email_from",
-        (smtp_host, smtp_port, smtp_user, email_from),
+        (user_id, smtp_host, smtp_port, smtp_user, email_from),
     )
     conn.commit()
 
 
 def save_preferences(
-    conn: psycopg.Connection, email_days: str, resend_jobs: bool, email_to: str,
+    conn: psycopg.Connection, user_id: str, email_days: str, resend_jobs: bool, email_to: str,
     hide_not_interested_on_map: bool = True,
     digest_max_per_company: int = 0,
     digest_exclude_statuses: str = "",
 ) -> None:
     conn.execute(
         "INSERT INTO settings "
-        "(id, email_days, resend_jobs, email_to, hide_not_interested_on_map, "
+        "(user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map, "
         "digest_max_per_company, digest_exclude_statuses) "
-        "VALUES (1, %s, %s, %s, %s, %s, %s) "
-        "ON CONFLICT(id) DO UPDATE SET "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT(user_id) DO UPDATE SET "
         "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, "
         "email_to=excluded.email_to, "
         "hide_not_interested_on_map=excluded.hide_not_interested_on_map, "
         "digest_max_per_company=excluded.digest_max_per_company, "
         "digest_exclude_statuses=excluded.digest_exclude_statuses",
-        (email_days, resend_jobs, email_to, hide_not_interested_on_map,
+        (user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map,
          digest_max_per_company, digest_exclude_statuses),
     )
     conn.commit()
 
 
-def seed_settings_if_empty(conn: psycopg.Connection, smtp_host: str, smtp_port: int, smtp_user: str,
-                            email_from: str, email_to: str) -> None:
+def _seed_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_port: int,
+                   smtp_user: str, email_from: str, email_to: str) -> None:
     conn.execute(
-        "INSERT INTO settings (id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
-        "VALUES (1, %s, %s, %s, %s, %s) "
+        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
+        "VALUES (%s, %s, %s, %s, %s, %s) "
         "ON CONFLICT DO NOTHING",
-        (smtp_host, smtp_port, smtp_user, email_from, email_to),
+        (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to),
     )
     conn.commit()
 
@@ -568,3 +569,245 @@ def get_job_status_history(conn: psycopg.Connection, keys: list[str]) -> dict[st
     for job_key, status, changed_at in rows:
         history.setdefault(job_key, []).append({"status": status, "changed_at": changed_at})
     return history
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+def create_user(
+    conn: psycopg.Connection, username: str, email: str,
+    password_hash: str, role: str = "member",
+) -> dict:
+    row = conn.execute(
+        "INSERT INTO users (username, email, password_hash, role) "
+        "VALUES (%s, %s, %s, %s) RETURNING id, username, email, role, is_active, created_at",
+        (username, email, password_hash, role),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("INSERT INTO users did not produce a row")
+    conn.commit()
+    return {"id": str(row[0]), "username": row[1], "email": row[2],
+            "role": row[3], "is_active": row[4], "created_at": str(row[5])}
+
+
+def get_user_by_id(conn: psycopg.Connection, user_id: str) -> dict | None:
+    row = conn.execute(
+        "SELECT id, username, email, role, is_active, created_at FROM users WHERE id = %s",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"id": str(row[0]), "username": row[1], "email": row[2],
+            "role": row[3], "is_active": row[4], "created_at": str(row[5])}
+
+
+def get_user_by_username(conn: psycopg.Connection, username: str) -> dict | None:
+    row = conn.execute(
+        "SELECT id, username, email, password_hash, role, is_active FROM users "
+        "WHERE username = %s",
+        (username,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"id": str(row[0]), "username": row[1], "email": row[2],
+            "password_hash": row[3], "role": row[4], "is_active": row[5]}
+
+
+def get_user_by_email(conn: psycopg.Connection, email: str) -> dict | None:
+    row = conn.execute(
+        "SELECT id, username, email, role, is_active FROM users WHERE email = %s",
+        (email,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"id": str(row[0]), "username": row[1], "email": row[2],
+            "role": row[3], "is_active": row[4]}
+
+
+def list_users(conn: psycopg.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, username, email, role, is_active, created_at FROM users ORDER BY created_at"
+    ).fetchall()
+    return [{"id": str(r[0]), "username": r[1], "email": r[2],
+             "role": r[3], "is_active": r[4], "created_at": str(r[5])} for r in rows]
+
+
+def deactivate_user(conn: psycopg.Connection, user_id: str) -> None:
+    conn.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Invite tokens
+# ---------------------------------------------------------------------------
+
+def create_invite(
+    conn: psycopg.Connection, email: str, created_by: str, expires_in_days: int = 7,
+) -> dict:
+    from datetime import UTC, datetime, timedelta
+    expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+    row = conn.execute(
+        "INSERT INTO invite_tokens (email, created_by, expires_at) "
+        "VALUES (%s, %s, %s) "
+        "RETURNING token, email, expires_at",
+        (email, created_by, expires_at),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("INSERT INTO invite_tokens did not produce a row")
+    conn.commit()
+    return {"token": str(row[0]), "email": row[1], "expires_at": str(row[2])}
+
+
+def get_invite(conn: psycopg.Connection, token: str) -> dict | None:
+    row = conn.execute(
+        "SELECT token, email, created_by, expires_at, used_at FROM invite_tokens WHERE token = %s",
+        (token,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"token": str(row[0]), "email": row[1], "created_by": str(row[2]),
+            "expires_at": str(row[3]), "used_at": str(row[4]) if row[4] else None}
+
+
+def use_invite(conn: psycopg.Connection, token: str) -> None:
+    conn.execute(
+        "UPDATE invite_tokens SET used_at = NOW() WHERE token = %s AND used_at IS NULL",
+        (token,),
+    )
+    conn.commit()
+
+
+def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT token, email, expires_at, used_at FROM invite_tokens "
+        "WHERE created_by = %s ORDER BY expires_at DESC",
+        (created_by,),
+    ).fetchall()
+    return [{"token": str(r[0]), "email": r[1], "expires_at": str(r[2]),
+             "used_at": str(r[3]) if r[3] else None} for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Sources (per-user, replaces sources.json)
+# ---------------------------------------------------------------------------
+
+def _source_row_to_model(config_data: dict):
+    from pydantic import TypeAdapter
+
+    from app.config import SourceConfig  # local import to avoid circular dep
+    return TypeAdapter(SourceConfig).validate_python(config_data)
+
+
+def list_sources(conn: psycopg.Connection, user_id: str) -> list:
+    rows = conn.execute(
+        "SELECT config FROM sources WHERE user_id = %s ORDER BY name",
+        (user_id,),
+    ).fetchall()
+    return [_source_row_to_model(r[0]) for r in rows]
+
+
+def list_all_sources_by_user(conn: psycopg.Connection) -> dict[str, list]:
+    """Returns {user_id: [SourceConfig, ...]} for every user that has sources."""
+    rows = conn.execute(
+        "SELECT user_id::text, config FROM sources ORDER BY user_id, name"
+    ).fetchall()
+    result: dict[str, list] = {}
+    for user_id, config_data in rows:
+        result.setdefault(user_id, []).append(_source_row_to_model(config_data))
+    return result
+
+
+def get_source(conn: psycopg.Connection, user_id: str, source_id: str):
+    row = conn.execute(
+        "SELECT config FROM sources WHERE id = %s AND user_id = %s",
+        (source_id, user_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return _source_row_to_model(row[0])
+
+
+def add_source(conn: psycopg.Connection, user_id: str, source) -> None:
+    data = source.model_dump()
+    conn.execute(
+        "INSERT INTO sources (id, user_id, type, name, secondary, config) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (source.id, user_id, source.type, source.name, source.secondary,
+         json.dumps(data)),
+    )
+    conn.commit()
+
+
+def update_source(conn: psycopg.Connection, user_id: str, source_id: str, source) -> None:
+    data = source.model_dump()
+    cur = conn.execute(
+        "UPDATE sources SET type=%s, name=%s, secondary=%s, config=%s, "
+        "updated_at=NOW() WHERE id=%s AND user_id=%s",
+        (source.type, source.name, source.secondary, json.dumps(data),
+         source_id, user_id),
+    )
+    if cur.rowcount == 0:
+        raise KeyError(source_id)
+    conn.commit()
+
+
+def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> None:
+    cur = conn.execute(
+        "DELETE FROM sources WHERE id = %s AND user_id = %s",
+        (source_id, user_id),
+    )
+    if cur.rowcount == 0:
+        raise KeyError(source_id)
+    conn.commit()
+
+
+def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int:
+    """Upsert a list of SourceConfig objects; returns count of upserted rows."""
+    count = 0
+    for source in sources:
+        data = source.model_dump()
+        conn.execute(
+            "INSERT INTO sources (id, user_id, type, name, secondary, config) "
+            "VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT(id) DO UPDATE SET "
+            "type=excluded.type, name=excluded.name, secondary=excluded.secondary, "
+            "config=excluded.config, updated_at=NOW()",
+            (source.id, user_id, source.type, source.name, source.secondary,
+             json.dumps(data)),
+        )
+        count += 1
+    conn.commit()
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Admin bootstrap
+# ---------------------------------------------------------------------------
+
+def seed_admin_if_empty(
+    conn: psycopg.Connection,
+    username: str, email: str, password_hash: str,
+    smtp_host: str, smtp_port: int, smtp_user: str, email_from: str, email_to: str,
+) -> dict:
+    """Create the admin user and seed their settings if the user doesn't exist yet.
+    Backfills NULL user_id on existing data rows to the admin's id.
+    Returns the admin user dict.
+    """
+    existing = get_user_by_username(conn, username)
+    if existing:
+        return existing
+
+    admin = create_user(conn, username, email, password_hash, role="admin")
+    admin_id = admin["id"]
+
+    _seed_settings(conn, admin_id, smtp_host, smtp_port, smtp_user, email_from, email_to)
+
+    # Backfill any pre-existing rows from a single-user install.
+    conn.execute("UPDATE jobs SET user_id = %s WHERE user_id IS NULL", (admin_id,))
+    conn.execute("UPDATE runs SET user_id = %s WHERE user_id IS NULL", (admin_id,))
+    conn.execute(
+        "UPDATE job_status_history SET user_id = %s WHERE user_id IS NULL", (admin_id,)
+    )
+    conn.commit()
+    return admin

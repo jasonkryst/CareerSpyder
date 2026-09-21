@@ -67,7 +67,18 @@
       <a href="/sources" {% if request.url.path.startswith("/sources") %}aria-current="page"{% endif %}>Sources</a>
       <a href="/settings" {% if request.url.path.startswith("/settings") %}aria-current="page"{% endif %}>Settings</a>
       <a href="/guide" {% if request.url.path == "/guide" %}aria-current="page"{% endif %}>Guide</a>
+      {% if request.state.user and request.state.user.role == "admin" %}
+      <a href="/users" {% if request.url.path.startswith("/users") %}aria-current="page"{% endif %}>Users</a>
+      {% endif %}
     </nav>
+    {% if request.state.user %}
+    <div class="user-menu">
+      <span class="user-display" aria-label="Signed in as {{ request.state.user.username }}">{{ request.state.user.username }}</span>
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit" class="btn-link">Sign out</button>
+      </form>
+    </div>
+    {% endif %}
   </header>
   <main id="main">
     {% block content %}{% endblock %}

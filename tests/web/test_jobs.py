@@ -293,9 +293,9 @@ def test_jobs_map_data_hides_not_interested_jobs_by_default(client):
     assert {j["key"] for j in resp.json()[0]["jobs"]} == {"a"}
 
 
-def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client):
+def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client, admin_user_id):
     conn = client.app.state.conn
-    db.save_preferences(conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test", hide_not_interested_on_map=False)
+    db.save_preferences(conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test", hide_not_interested_on_map=False)
     run_id = db.start_run(conn)
     db.save_jobs(conn, [
         make_job(key="a", location="Chicago, IL"),
@@ -1162,15 +1162,17 @@ def test_post_duplicate_returns_400_when_key_missing(client):
     assert resp.status_code == 400
 
 
-def test_jobs_page_secondary_source_shows_badge(client):
-    import json
+def test_jobs_page_secondary_source_shows_badge(client, admin_user_id):
+    from pydantic import TypeAdapter
+
+    from app.config import SourceConfig
     conn = client.app.state.conn
-    sources_path = client.app.state.sources_path
-    sources = [{"id": "src-1", "name": "Indeed Board", "type": "indeed",
-                "url": "https://indeed.test/jobs", "secondary": True,
-                "include_keywords": [], "exclude_keywords": []}]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": sources}, f)
+    _ta = TypeAdapter(SourceConfig)
+    source = _ta.validate_python({"id": "src-1", "name": "Indeed Board", "type": "indeed",
+                                  "url": "https://indeed.test/jobs", "secondary": True,
+                                  "include_keywords": [], "exclude_keywords": []})
+    with client.app.state.pool.connection() as c:
+        db.add_source(c, admin_user_id, source)
 
     db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Indeed Board")], db.start_run(conn))
 
@@ -1179,15 +1181,17 @@ def test_jobs_page_secondary_source_shows_badge(client):
     assert "2\u00b0" in resp.text or "badge-secondary" in resp.text
 
 
-def test_jobs_page_non_secondary_source_has_no_badge(client):
-    import json
+def test_jobs_page_non_secondary_source_has_no_badge(client, admin_user_id):
+    from pydantic import TypeAdapter
+
+    from app.config import SourceConfig
     conn = client.app.state.conn
-    sources_path = client.app.state.sources_path
-    sources = [{"id": "src-1", "name": "Greenhouse Board", "type": "greenhouse",
-                "board_token": "acme", "secondary": False,
-                "include_keywords": [], "exclude_keywords": []}]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": sources}, f)
+    _ta = TypeAdapter(SourceConfig)
+    source = _ta.validate_python({"id": "src-1", "name": "Greenhouse Board", "type": "greenhouse",
+                                  "board_token": "acme", "secondary": False,
+                                  "include_keywords": [], "exclude_keywords": []})
+    with client.app.state.pool.connection() as c:
+        db.add_source(c, admin_user_id, source)
 
     db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Greenhouse Board")], db.start_run(conn))
 

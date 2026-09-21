@@ -16,7 +16,7 @@ def test_settings_page_does_not_expose_password_field(client):
     assert 'name="password"' not in resp.text
 
 
-def test_post_settings_saves_new_values(client):
+def test_post_settings_saves_new_values(client, admin_user_id):
     resp = client.post("/settings/email", data={
         "smtp_host": "smtp2.example.com", "smtp_port": "465",
         "smtp_user": "user2", "email_from": "from2@x.test",
@@ -25,7 +25,7 @@ def test_post_settings_saves_new_values(client):
     assert resp.status_code == 303
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["smtp_host"] == "smtp2.example.com"
     assert settings["smtp_port"] == 465
 
@@ -76,9 +76,9 @@ def test_settings_preferences_page_shows_all_day_checkboxes(client):
         assert f'name="email_days" value="{day}"' in resp.text
 
 
-def test_settings_preferences_page_prechecks_stored_days(client):
+def test_settings_preferences_page_prechecks_stored_days(client, admin_user_id):
     from app import db
-    db.save_preferences(client.app.state.conn, "mon,wed,fri", False, "to@x.test")
+    db.save_preferences(client.app.state.conn, admin_user_id, "mon,wed,fri", False, "to@x.test")
 
     resp = client.get("/settings/preferences")
 
@@ -99,10 +99,10 @@ def test_settings_preferences_page_shows_hide_not_interested_checkbox_checked_by
     assert 'name="hide_not_interested_on_map" checked' in resp.text
 
 
-def test_settings_preferences_page_unchecks_hide_not_interested_when_turned_off(client):
+def test_settings_preferences_page_unchecks_hide_not_interested_when_turned_off(client, admin_user_id):
     from app import db
     db.save_preferences(
-        client.app.state.conn, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+        client.app.state.conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
         hide_not_interested_on_map=False,
     )
 
@@ -111,9 +111,9 @@ def test_settings_preferences_page_unchecks_hide_not_interested_when_turned_off(
     assert 'name="hide_not_interested_on_map" checked' not in resp.text
 
 
-def test_settings_preferences_page_shows_stored_recipients(client):
+def test_settings_preferences_page_shows_stored_recipients(client, admin_user_id):
     from app import db
-    db.save_preferences(client.app.state.conn, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test,b@x.test")
+    db.save_preferences(client.app.state.conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test,b@x.test")
 
     resp = client.get("/settings/preferences")
 
@@ -134,7 +134,7 @@ def test_settings_preferences_page_wraps_sections_in_cards(client):
     assert resp.text.count('class="card"') == 6
 
 
-def test_post_preferences_saves_days_resend_and_recipients(client):
+def test_post_preferences_saves_days_resend_and_recipients(client, admin_user_id):
     resp = client.post("/settings/preferences", data={
         "email_days": ["mon", "wed", "fri"],
         "resend_jobs": "on",
@@ -144,7 +144,7 @@ def test_post_preferences_saves_days_resend_and_recipients(client):
     assert resp.status_code == 303
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_days"] == "mon,wed,fri"
     assert settings["resend_jobs"] is True
     assert settings["email_to"] == "a@x.test,b@x.test"
@@ -164,15 +164,15 @@ def test_post_preferences_redirect_carries_saved_flash_message(client):
     assert parse_qs(location.query)["flash"] == ["Preferences saved."]
 
 
-def test_post_preferences_unchecked_resend_is_stored_as_false(client):
+def test_post_preferences_unchecked_resend_is_stored_as_false(client, admin_user_id):
     client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["resend_jobs"] is False
 
 
-def test_post_preferences_saves_hide_not_interested_on_map_when_checked(client):
+def test_post_preferences_saves_hide_not_interested_on_map_when_checked(client, admin_user_id):
     resp = client.post("/settings/preferences", data={
         "email_days": ["mon"],
         "email_to": ["a@x.test"],
@@ -181,23 +181,23 @@ def test_post_preferences_saves_hide_not_interested_on_map_when_checked(client):
 
     assert resp.status_code == 303
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is True
 
 
-def test_post_preferences_unchecked_hide_not_interested_is_stored_as_false(client):
+def test_post_preferences_unchecked_hide_not_interested_is_stored_as_false(client, admin_user_id):
     client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is False
 
 
-def test_post_preferences_drops_blank_recipient_rows(client):
+def test_post_preferences_drops_blank_recipient_rows(client, admin_user_id):
     client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test", "", "  "]})
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_to"] == "a@x.test"
 
 
@@ -297,13 +297,14 @@ def test_post_clear_cache_shows_toast_after_redirect(client):
     assert "Job cache cleared" in resp.text
 
 
-def test_get_export_settings_returns_sources_and_preferences_as_download(client):
+def test_get_export_settings_returns_sources_and_preferences_as_download(client, admin_user_id):
     import json
 
-    from app import config
+    from app import config, db
 
     source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
-    config.add_source(client.app.state.sources_path, source)
+    with client.app.state.pool.connection() as conn:
+        db.add_source(conn, admin_user_id, source)
 
     resp = client.get("/settings/data/export")
 
@@ -322,11 +323,11 @@ def test_get_export_settings_returns_sources_and_preferences_as_download(client)
     }
 
 
-def test_post_import_settings_replaces_sources_and_redirects(client):
+def test_post_import_settings_replaces_sources_and_redirects(client, admin_user_id):
     import json
     from urllib.parse import parse_qs, urlparse
 
-    from app import config
+    from app import db
 
     payload = json.dumps({
         "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
@@ -342,16 +343,17 @@ def test_post_import_settings_replaces_sources_and_redirects(client):
     location = urlparse(resp.headers["location"])
     assert location.path == "/settings/data"
     assert parse_qs(location.query)["flash"] == ["Imported 1 source(s)."]
-    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["new"]
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
 
 
-def test_post_import_settings_with_preferences_overwrites_stored_preferences(client):
+def test_post_import_settings_with_preferences_overwrites_stored_preferences(client, admin_user_id):
     import json
     from urllib.parse import parse_qs, urlparse
 
     from app import db
 
-    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    db.save_preferences(client.app.state.conn, admin_user_id, "mon", True, "old@x.test")
     payload = json.dumps({
         "sources": [],
         "preferences": {
@@ -371,20 +373,20 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
     location = urlparse(resp.headers["location"])
     assert location.path == "/settings/data"
     assert parse_qs(location.query)["flash"] == ["Imported 0 source(s) and preferences."]
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_days"] == "tue,thu"
     assert settings["resend_jobs"] is False
     assert settings["email_to"] == "new@x.test"
 
 
-def test_post_import_settings_with_preferences_imports_hide_not_interested_on_map(client):
+def test_post_import_settings_with_preferences_imports_hide_not_interested_on_map(client, admin_user_id):
     import json
     from urllib.parse import urlparse
 
     from app import db
 
     db.save_preferences(
-        client.app.state.conn, "mon", True, "old@x.test", hide_not_interested_on_map=True,
+        client.app.state.conn, admin_user_id, "mon", True, "old@x.test", hide_not_interested_on_map=True,
     )
     payload = json.dumps({
         "sources": [],
@@ -402,17 +404,17 @@ def test_post_import_settings_with_preferences_imports_hide_not_interested_on_ma
 
     assert resp.status_code == 303
     assert urlparse(resp.headers["location"]).path == "/settings/data"
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is False
 
 
-def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_true(client):
+def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_true(client, admin_user_id):
     import json
 
     from app import db
 
     db.save_preferences(
-        client.app.state.conn, "mon", True, "old@x.test", hide_not_interested_on_map=False,
+        client.app.state.conn, admin_user_id, "mon", True, "old@x.test", hide_not_interested_on_map=False,
     )
     payload = json.dumps({
         "sources": [],
@@ -428,17 +430,17 @@ def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_t
         follow_redirects=False,
     )
 
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is True
 
 
-def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client):
+def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client, admin_user_id):
     import json
     from urllib.parse import parse_qs, urlparse
 
     from app import db
 
-    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    db.save_preferences(client.app.state.conn, admin_user_id, "mon", True, "old@x.test")
     payload = json.dumps({"sources": []}).encode()
 
     resp = client.post(
@@ -451,18 +453,18 @@ def test_post_import_settings_without_preferences_key_leaves_stored_preferences_
     location = urlparse(resp.headers["location"])
     assert location.path == "/settings/data"
     assert parse_qs(location.query)["flash"] == ["Imported 0 source(s)."]
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_days"] == "mon"
     assert settings["resend_jobs"] is True
     assert settings["email_to"] == "old@x.test"
 
 
-def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(client):
+def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(client, admin_user_id):
     import json
 
     from app import db
 
-    db.save_preferences(client.app.state.conn, "mon", True, "old@x.test")
+    db.save_preferences(client.app.state.conn, admin_user_id, "mon", True, "old@x.test")
     payload = json.dumps({
         "sources": [],
         "preferences": {"email_days": "mon", "resend_jobs": "yes", "email_to": "not-a-list@x.test"},
@@ -475,7 +477,7 @@ def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(
     )
 
     assert resp.status_code == 303
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_days"] == ""
     assert settings["resend_jobs"] is False
     assert settings["email_to"] == ""
@@ -526,11 +528,12 @@ def test_post_import_settings_with_no_file_returns_400(client):
     assert "Choose a file" in resp.text
 
 
-def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(client):
-    from app import config
+def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(client, admin_user_id):
+    from app import config, db
 
     source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
-    config.add_source(client.app.state.sources_path, source)
+    with client.app.state.pool.connection() as conn:
+        db.add_source(conn, admin_user_id, source)
 
     resp = client.post(
         "/settings/data/import",
@@ -539,7 +542,8 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
 
     assert resp.status_code == 400
     assert 'class="toast" role="status"' not in resp.text
-    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["s1"]
 
 
 def test_settings_data_import_form_has_confirm_guard(client):
@@ -550,7 +554,7 @@ def test_settings_data_import_form_has_confirm_guard(client):
     assert "confirm(" not in resp.text
 
 
-def test_post_preferences_rejects_malformed_email_and_does_not_save(client):
+def test_post_preferences_rejects_malformed_email_and_does_not_save(client, admin_user_id):
     resp = client.post("/settings/preferences", data={
         "email_days": ["mon"], "email_to": ["not-an-email"],
     })
@@ -560,11 +564,11 @@ def test_post_preferences_rejects_malformed_email_and_does_not_save(client):
     assert 'class="toast" role="status"' not in resp.text
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings is None or settings["email_to"] != "not-an-email"
 
 
-def test_post_preferences_accepts_well_formed_emails(client):
+def test_post_preferences_accepts_well_formed_emails(client, admin_user_id):
     resp = client.post("/settings/preferences", data={
         "email_days": ["mon"], "email_to": ["good@x.test"],
     }, follow_redirects=False)
@@ -572,7 +576,7 @@ def test_post_preferences_accepts_well_formed_emails(client):
     assert resp.status_code == 303
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_to"] == "good@x.test"
 
 
@@ -593,7 +597,7 @@ def test_settings_preferences_recipient_inputs_are_required(client):
     assert resp.text.count(" required") >= 2
 
 
-def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(client):
+def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(client, admin_user_id):
     import json
 
     payload = json.dumps({
@@ -614,17 +618,18 @@ def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(cli
     assert resp.status_code == 303
 
     from app import db
-    settings = db.get_settings(client.app.state.conn)
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["email_to"] == "good@x.test"
 
 
-def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_sources(client):
+def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_sources(client, admin_user_id):
     import json
 
-    from app import config
+    from app import config, db
 
     source = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
-    config.add_source(client.app.state.sources_path, source)
+    with client.app.state.pool.connection() as conn:
+        db.add_source(conn, admin_user_id, source)
     payload = json.dumps({"sources": [{"id": "x", "name": "X", "type": "carrier_pigeon"}]}).encode()
 
     resp = client.post(
@@ -633,7 +638,8 @@ def test_post_import_settings_with_unknown_source_type_returns_400_and_leaves_so
     )
 
     assert resp.status_code == 400
-    assert [s.id for s in config.load_sources(client.app.state.sources_path)] == ["s1"]
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["s1"]
 
 
 def test_import_settings_invalid_source_error_has_role_alert(client):

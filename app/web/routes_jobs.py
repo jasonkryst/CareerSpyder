@@ -2,15 +2,16 @@ import functools
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app import config, db
+from app import db
 from app.geocoding.base import GeocoderTransientError
 from app.geocoding.factory import get_geocoder
 from app.models import JOB_STATUSES as STATUSES
 from app.textutils import safe_url_scheme
+from app.web.auth import require_user
 from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.templating import templates
@@ -31,8 +32,8 @@ def _form_str(form: dict, key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _secondary_source_ids(sources_path: str) -> set[str]:
-    return {s.id for s in config.load_sources(sources_path) if s.secondary}
+def _secondary_source_ids(conn, user_id: str) -> set[str]:
+    return {s.id for s in db.list_sources(conn, user_id) if s.secondary}
 
 
 def _wants_json(request: Request) -> bool:
@@ -61,6 +62,7 @@ def jobs(
     location: str = "", duplicates: str = "",
     state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
+    current_user: dict = Depends(require_user),
 ):
     zip_lat: float | None = None
     zip_lng: float | None = None
@@ -76,8 +78,8 @@ def jobs(
     source_name = source or None
     status_filter = status or None
     state_filter = state or None
-    secondary_ids = _secondary_source_ids(request.app.state.sources_path)
     with request.app.state.pool.connection() as conn:
+        secondary_ids = _secondary_source_ids(conn, current_user["id"])
         total = db.count_jobs(
             conn, company=company or None, source_name=source_name,
             removed=removed or None, emailed=emailed or None, status=status_filter,
@@ -124,6 +126,7 @@ def jobs_map(
     status: Annotated[list[str], Query()] = [],  # noqa: B006
     state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
+    current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
         source_names = db.list_job_source_names(conn)
@@ -147,6 +150,7 @@ def jobs_map_data(
     status: Annotated[list[str], Query()] = [],  # noqa: B006
     state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
+    current_user: dict = Depends(require_user),
 ):
     zip_lat: float | None = None
     zip_lng: float | None = None
@@ -157,7 +161,7 @@ def jobs_map_data(
             zip_lat, zip_lng = coords
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
     with request.app.state.pool.connection() as conn:
-        settings = db.get_settings(conn)
+        settings = db.get_settings(conn, current_user["id"])
         hide_not_interested = settings is None or settings["hide_not_interested_on_map"]
         exclude_status = "not_interested" if hide_not_interested and "not_interested" not in status else None
         rows = db.list_mappable_jobs(
@@ -182,7 +186,10 @@ def jobs_map_data(
 
 
 @router.post("/jobs/status")
-async def update_job_status(request: Request):
+async def update_job_status(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     key = _form_str(form, "key")
     status = _form_str(form, "status") or None
@@ -200,7 +207,10 @@ async def update_job_status(request: Request):
 
 
 @router.post("/jobs/remove")
-async def remove_job(request: Request):
+async def remove_job(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     key = _form_str(form, "key")
     if not key:
@@ -217,7 +227,10 @@ async def remove_job(request: Request):
 
 
 @router.post("/jobs/duplicate")
-async def update_job_duplicate(request: Request):
+async def update_job_duplicate(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     key = _form_str(form, "key")
     action = _form_str(form, "action")
@@ -247,7 +260,10 @@ async def update_job_duplicate(request: Request):
 
 
 @router.post("/jobs/location-override")
-async def update_location_override(request: Request):
+async def update_location_override(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     key = _form_str(form, "key")
     location = _form_str(form, "location").strip()

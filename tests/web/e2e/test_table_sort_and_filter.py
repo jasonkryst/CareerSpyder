@@ -32,14 +32,14 @@ def test_clicking_sources_name_header_sorts_and_toggles(live_server, page):
     page.fill('input[name="name"]', "ZZZ Sort Test Zeta")
     page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "zeta")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
     page.wait_for_url("**/sources")
 
     page.goto(live_server + "/sources/new")
     page.fill('input[name="name"]', "ZZZ Sort Test Acme")
     page.select_option('select[name="type"]', "greenhouse")
     page.fill('input[name="board_token"]', "acme")
-    page.click('button[type="submit"]')
+    page.click('button.btn-primary')
     page.wait_for_url("**/sources")
 
     page.click("th a:has-text('Name')")
