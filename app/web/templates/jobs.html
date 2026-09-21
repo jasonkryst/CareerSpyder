@@ -92,6 +92,7 @@
     <th scope="col">Emailed</th>
     <th scope="col">Status</th>
     <th scope="col">Summary</th>
+    {% if is_admin %}<th scope="col">User</th>{% endif %}
   </tr>
   </thead>
   <tbody>
@@ -156,6 +157,7 @@
       {% endif %}
     </td>
     <td data-label="Summary">{{ job.summary or "—" }}</td>
+    {% if is_admin %}<td data-label="User">{{ job.username or "" }}</td>{% endif %}
   </tr>
   {% endfor %}
   </tbody>

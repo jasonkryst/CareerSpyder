@@ -14,15 +14,18 @@ router = APIRouter()
 PAGE_SIZE = 25
 
 
-def _dashboard_context(conn, request: Request, page: str, sort: str, direction: str, failures: str) -> dict:
+def _dashboard_context(conn, request: Request, page: str, sort: str, direction: str, failures: str, current_user: dict) -> dict:
     failures_filter = failures or None
-    total = db.count_runs(conn, failures=failures_filter)
+    is_admin = current_user["role"] == "admin"
+    filter_user_id = None if is_admin else current_user["id"]
+    total = db.count_runs(conn, failures=failures_filter, user_id=filter_user_id)
     pagination = paginate(total, page, PAGE_SIZE)
     runs = db.list_runs(
         conn, limit=PAGE_SIZE, offset=pagination.offset,
         sort=sort, direction=direction, failures=failures_filter,
+        user_id=filter_user_id,
     )
-    return {"runs": runs, "pagination": pagination, "failures": failures}
+    return {"runs": runs, "pagination": pagination, "failures": failures, "is_admin": is_admin}
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -32,7 +35,7 @@ def dashboard(
     current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
-        context = _dashboard_context(conn, request, page, sort, direction, failures)
+        context = _dashboard_context(conn, request, page, sort, direction, failures, current_user)
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
@@ -43,7 +46,7 @@ def dashboard_rows(
     current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
-        context = _dashboard_context(conn, request, page, sort, direction, failures)
+        context = _dashboard_context(conn, request, page, sort, direction, failures, current_user)
     return templates.TemplateResponse(request, "_history_rows.html", context)
 
 
@@ -76,6 +79,6 @@ def check_urls(
     current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
-        run_id = db.start_run(conn, kind="url_check")
+        run_id = db.start_run(conn, kind="url_check", user_id=current_user["id"])
     background_tasks.add_task(_run_url_check, request.app.state.pool, run_id)
     return RedirectResponse(url="/", status_code=303)

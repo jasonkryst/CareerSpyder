@@ -55,6 +55,10 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
+    # Documentary-only: results are visible in the checks UI but a failure never
+    # blocks a PR merge.  Live Infor portals have transient Playwright timeouts
+    # unrelated to code changes; continue-on-error keeps the signal without the noise.
+    continue-on-error: true
     # Runs even when unit tests fail so live-site regressions are always visible.
     # The job skips silently if the required secrets are not configured — this
     # keeps fork PRs and repos without secrets green without any special logic.

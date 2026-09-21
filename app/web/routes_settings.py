@@ -9,7 +9,7 @@ from starlette.datastructures import UploadFile
 from app import db
 from app.config import SourcesFile
 from app.models import JOB_STATUSES
-from app.web.auth import require_user
+from app.web.auth import require_admin, require_user
 from app.web.flash import flash_redirect
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -47,14 +47,16 @@ def _is_valid_email(addr: str) -> bool:
 
 
 @router.get("/settings", response_class=HTMLResponse)
-def settings_redirect():
-    return RedirectResponse(url="/settings/email")
+def settings_redirect(current_user: dict = Depends(require_user)):
+    if current_user["role"] == "admin":
+        return RedirectResponse(url="/settings/email")
+    return RedirectResponse(url="/settings/preferences")
 
 
 @router.get("/settings/email", response_class=HTMLResponse)
 def show_settings(
     request: Request,
-    current_user: dict = Depends(require_user),
+    current_user: dict = Depends(require_admin),
 ):
     with request.app.state.pool.connection() as conn:
         settings = db.get_settings(conn, current_user["id"])
@@ -64,7 +66,7 @@ def show_settings(
 @router.post("/settings/email")
 async def save_settings(
     request: Request,
-    current_user: dict = Depends(require_user),
+    current_user: dict = Depends(require_admin),
 ):
     form = dict((await request.form()).items())
     with request.app.state.pool.connection() as conn:

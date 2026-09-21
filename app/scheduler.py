@@ -29,7 +29,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     if not force and settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
         return
 
-    summary = orchestrator.run_once(conn, sources)
+    summary = orchestrator.run_once(conn, sources, user_id=user_id)
 
     resend = bool(settings and settings["resend_jobs"])
     jobs_to_send = list(summary.found_jobs if resend else summary.new_jobs)
@@ -81,6 +81,10 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     email_to = [addr.strip() for addr in (settings["email_to"] or "").split(",") if addr.strip()]
     if not email_to:
         logger.warning("Skipping digest email for run %s: no recipients configured", summary.run_id)
+        return
+
+    if not settings.get("smtp_host"):
+        logger.warning("Skipping digest email for run %s: SMTP host not configured — set it at /settings/email", summary.run_id)
         return
 
     try:

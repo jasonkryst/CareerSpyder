@@ -1,5 +1,7 @@
 <nav aria-label="Settings tabs">
+  {% if request.state.user and request.state.user.role == "admin" %}
   <a href="/settings/email" {% if request.url.path == "/settings/email" %}aria-current="page"{% endif %}>Email</a>
+  {% endif %}
   <a href="/settings/data" {% if request.url.path == "/settings/data" %}aria-current="page"{% endif %}>Data</a>
   <a href="/settings/preferences" {% if request.url.path == "/settings/preferences" %}aria-current="page"{% endif %}>Preferences</a>
 </nav>

@@ -25,7 +25,7 @@ def get_new_jobs(conn: psycopg.Connection, jobs: list[Job]) -> list[Job]:
     return [j for j in jobs if j.key not in known]
 
 
-def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int) -> None:
+def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: str | None = None) -> None:
     if not jobs:
         return
     now = _now()
@@ -39,11 +39,11 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int) -> None:
         cur.executemany(
             "INSERT INTO jobs "
             "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
-            "first_seen_run_id, first_seen_at) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            "first_seen_run_id, first_seen_at, user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
             [
                 (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
-                 j.source_id, j.summary, run_id, now)
+                 j.source_id, j.summary, run_id, now, user_id)
                 for j in jobs
             ],
         )
@@ -55,10 +55,10 @@ def clear_jobs(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
-def start_run(conn: psycopg.Connection, kind: str = "scrape") -> int:
+def start_run(conn: psycopg.Connection, kind: str = "scrape", user_id: str | None = None) -> int:
     cur = conn.execute(
-        "INSERT INTO runs (started_at, kind) VALUES (%s, %s) RETURNING id",
-        (_now(), kind),
+        "INSERT INTO runs (started_at, kind, user_id) VALUES (%s, %s, %s) RETURNING id",
+        (_now(), kind, user_id),
     )
     row = cur.fetchone()
     if row is None:
@@ -91,44 +91,53 @@ def _deserialize_failed_sources(raw: str) -> list[dict]:
 
 
 _RUN_SORT_COLUMNS = {
-    "started_at": "started_at",
-    "finished_at": "finished_at",
-    "new_job_count": "new_job_count",
+    "started_at": "runs.started_at",
+    "finished_at": "runs.finished_at",
+    "new_job_count": "runs.new_job_count",
 }
 
 
-def _run_filters_sql(failures: str | None) -> tuple[str, list]:
+def _run_where_sql(failures: str | None, user_id: str | None) -> tuple[str, list]:
+    conditions: list[str] = []
+    params: list = []
     if failures == "only":
-        return "WHERE failed_sources != '[]'", []
-    if failures == "clean":
-        return "WHERE failed_sources = '[]'", []
-    return "", []
+        conditions.append("failed_sources != '[]'")
+    elif failures == "clean":
+        conditions.append("failed_sources = '[]'")
+    if user_id is not None:
+        conditions.append("runs.user_id = %s")
+        params.append(user_id)
+    return ("WHERE " + " AND ".join(conditions) if conditions else ""), params
 
 
 def list_runs(
     conn: psycopg.Connection, limit: int = 50, offset: int = 0, *,
     sort: str = "", direction: str = "", failures: str | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
-    order_column = _RUN_SORT_COLUMNS.get(sort, "id")
+    order_column = _RUN_SORT_COLUMNS.get(sort, "runs.id")
     order_dir = "ASC" if direction == "asc" else "DESC"
-    where_sql, params = _run_filters_sql(failures)
+    where_sql, params = _run_where_sql(failures, user_id)
     query = (
-        "SELECT id, started_at, finished_at, new_job_count, failed_sources, kind FROM runs "
-        f"{where_sql} ORDER BY {order_column} {order_dir}, id {order_dir} LIMIT %s OFFSET %s"
+        "SELECT runs.id, runs.started_at, runs.finished_at, runs.new_job_count, "
+        "runs.failed_sources, runs.kind, users.username "
+        "FROM runs LEFT JOIN users ON runs.user_id = users.id "
+        f"{where_sql} ORDER BY {order_column} {order_dir}, runs.id {order_dir} "
+        "LIMIT %s OFFSET %s"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
     return [
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
             "new_job_count": r[3], "failed_sources": _deserialize_failed_sources(r[4]),
-            "kind": r[5],
+            "kind": r[5], "username": r[6],
         }
         for r in rows
     ]
 
 
-def count_runs(conn: psycopg.Connection, *, failures: str | None = None) -> int:
-    where_sql, params = _run_filters_sql(failures)
+def count_runs(conn: psycopg.Connection, *, failures: str | None = None, user_id: str | None = None) -> int:
+    where_sql, params = _run_where_sql(failures, user_id)
     row = conn.execute(f"SELECT COUNT(*) FROM runs {where_sql}", params).fetchone()
     return row[0] if row else 0
 
@@ -190,10 +199,15 @@ def save_preferences(
 
 def _seed_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_port: int,
                    smtp_user: str, email_from: str, email_to: str) -> None:
+    # SMTP fields always sync from env vars so adding/changing them in Portainer takes effect
+    # on the next restart without requiring a settings-page visit.  Preference columns
+    # (email_to, email_days, resend_jobs, …) are untouched on conflict — they belong to the user.
     conn.execute(
         "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
         "VALUES (%s, %s, %s, %s, %s, %s) "
-        "ON CONFLICT DO NOTHING",
+        "ON CONFLICT (user_id) DO UPDATE SET "
+        "smtp_host = EXCLUDED.smtp_host, smtp_port = EXCLUDED.smtp_port, "
+        "smtp_user = EXCLUDED.smtp_user, email_from = EXCLUDED.email_from",
         (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to),
     )
     conn.commit()
@@ -216,6 +230,7 @@ def _job_filters_sql(
     status: list[str] | None = None, location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
@@ -263,6 +278,9 @@ def _job_filters_sql(
     if zip_lat is not None and zip_lng is not None and radius_miles is not None:
         clauses.append("haversine_miles(geocoded_locations.lat, geocoded_locations.lng, %s, %s) <= %s")
         params.extend([zip_lat, zip_lng, radius_miles])
+    if user_id is not None:
+        clauses.append("jobs.user_id = %s")
+        params.append(user_id)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -275,22 +293,25 @@ def list_jobs(
     location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        user_id=user_id,
     )
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
-        "jobs.is_duplicate, jobs.duplicate_of "
+        "jobs.is_duplicate, jobs.duplicate_of, users.username "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
+        "LEFT JOIN users ON jobs.user_id = users.id "
         f"{where_sql} ORDER BY {order_column} {order_dir}, jobs.key {order_dir} LIMIT %s OFFSET %s"
     )
     rows = conn.execute(query, [*params, limit, offset]).fetchall()
@@ -304,7 +325,7 @@ def list_jobs(
             "url": r[7],
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
-            "is_duplicate": bool(r[16]), "duplicate_of": r[17],
+            "is_duplicate": bool(r[16]), "duplicate_of": r[17], "username": r[18],
         }
         for r in rows
     ]
@@ -317,10 +338,12 @@ def count_jobs(
     location: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> int:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        user_id=user_id,
     )
     row = conn.execute(
         "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "

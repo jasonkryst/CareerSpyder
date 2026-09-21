@@ -85,7 +85,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    app.state.scheduler.shutdown()
+    if app.state.scheduler.running:
+        app.state.scheduler.shutdown(wait=False)
     pool.close()
 
 

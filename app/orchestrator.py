@@ -30,9 +30,12 @@ class RunSummary:
     url_removed_count: int = 0
 
 
-def run_once(conn: psycopg.Connection, sources: list[SourceConfig], geocoder: Geocoder | None = None) -> RunSummary:
+def run_once(
+    conn: psycopg.Connection, sources: list[SourceConfig],
+    geocoder: Geocoder | None = None, user_id: str | None = None,
+) -> RunSummary:
     with _run_lock:
-        run_id = db.start_run(conn)
+        run_id = db.start_run(conn, user_id=user_id)
         all_jobs: list[Job] = []
         all_raw_jobs: list[Job] = []
         succeeded_source_ids: set[str] = set()
@@ -54,7 +57,7 @@ def run_once(conn: psycopg.Connection, sources: list[SourceConfig], geocoder: Ge
         deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
 
         new_jobs = db.get_new_jobs(conn, deduped_jobs)
-        db.save_jobs(conn, new_jobs, run_id)
+        db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
 
         configured_source_ids = {s.id for s in sources}
         db.reconcile_jobs(conn, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
