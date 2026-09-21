@@ -232,14 +232,32 @@ def test_count_runs_respects_failures_filter(pg_conn):
     assert db.count_runs(conn, failures="clean") == 0
 
 
-def test_settings_seed_only_when_empty(pg_conn):
+def test_settings_seed_updates_smtp_fields_on_restart(pg_conn):
     conn = pg_conn
     user_id = _make_user(conn)
     db._seed_settings(conn, user_id, "smtp.example.com", 587, "user", "from@x.test", "to@x.test")
-    db._seed_settings(conn, user_id, "ignored.example.com", 25, "ignored", "i@x.test", "i2@x.test")
+    # second call (e.g. after adding SMTP_HOST to Portainer env and restarting) updates SMTP fields
+    db._seed_settings(conn, user_id, "new.example.com", 465, "newuser", "new@x.test", "i2@x.test")
 
     settings = db.get_settings(conn, user_id)
-    assert settings["smtp_host"] == "smtp.example.com"
+    assert settings["smtp_host"] == "new.example.com"
+    assert settings["smtp_port"] == 465
+    assert settings["smtp_user"] == "newuser"
+    assert settings["email_from"] == "new@x.test"
+
+
+def test_settings_seed_preserves_preference_columns_on_restart(pg_conn):
+    conn = pg_conn
+    user_id = _make_user(conn)
+    db._seed_settings(conn, user_id, "smtp.example.com", 587, "user", "from@x.test", "original@x.test")
+    db.save_preferences(conn, user_id, "mon,fri", True, "pref@x.test")
+    # restart with different env vars — preferences must survive
+    db._seed_settings(conn, user_id, "new.example.com", 465, "newuser", "new@x.test", "ignored@x.test")
+
+    settings = db.get_settings(conn, user_id)
+    assert settings["email_to"] == "pref@x.test"
+    assert settings["email_days"] == "mon,fri"
+    assert settings["resend_jobs"] is True
 
 
 def test_save_settings_overwrites(pg_conn):
