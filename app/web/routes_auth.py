@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
@@ -22,9 +22,9 @@ async def login_form(request: Request):
 @router.post("/login")
 async def login(request: Request):
     form = dict((await request.form()).items())
-    username = (form.get("username") or "").strip()
-    password = form.get("password") or ""
-    next_url = (form.get("next") or "/").strip() or "/"
+    username = str(form.get("username") or "").strip()
+    password = str(form.get("password") or "")
+    next_url = str(form.get("next") or "/").strip() or "/"
 
     if not username or not password:
         return templates.TemplateResponse(
@@ -84,10 +84,10 @@ async def register_form(request: Request):
 @router.post("/register")
 async def register(request: Request):
     form = dict((await request.form()).items())
-    token = (form.get("token") or "").strip()
-    username = (form.get("username") or "").strip()
-    password = form.get("password") or ""
-    password_confirm = form.get("password_confirm") or ""
+    token = str(form.get("token") or "").strip()
+    username = str(form.get("username") or "").strip()
+    password = str(form.get("password") or "")
+    password_confirm = str(form.get("password_confirm") or "")
 
     def _error(msg: str):
         return templates.TemplateResponse(
@@ -137,7 +137,7 @@ def _validate_invite(invite: dict | None) -> str | None:
     if invite["used_at"] is not None:
         return "This invite link has already been used."
     try:
-        expires = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(invite["expires_at"])
         if expires < datetime.now(UTC):
             return "This invite link has expired."
     except (ValueError, AttributeError):

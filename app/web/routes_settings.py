@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from app import config, db
+from app import db
 from app.config import SourcesFile
 from app.models import JOB_STATUSES
 from app.web.auth import require_user

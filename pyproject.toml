@@ -55,12 +55,15 @@ target-version = "py312"
 extend-select = ["S"]  # flake8-bandit security rules
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S108"]  # asserts + fixture creds/paths are fine in tests
+"tests/**" = ["S101", "S105", "S106", "S107", "S108"]  # asserts + fixture creds/paths are fine in tests
 # Every dynamic query here interpolates only allow-listed column names/ORDER
 # direction (never user-supplied values) alongside `?` placeholders for
 # actual data -- see _run_filters_sql/_job_filters_sql and the *_SORT_COLUMNS
 # dicts. S608 can't tell allow-listed identifiers from unsanitized input.
 "app/db.py" = ["S608"]
+# FastAPI's Depends() in function-signature defaults is the intended pattern;
+# B008 fires on every route that uses it.
+"app/web/**" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -68,4 +71,8 @@ files = ["app"]
 
 [[tool.mypy.overrides]]
 module = "apscheduler.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "passlib.*"
 ignore_missing_imports = true

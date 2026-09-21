@@ -691,8 +691,10 @@ def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _source_row_to_model(config_data: dict):  # type: ignore[return]
-    from app.config import SourceConfig  # local import to avoid top-level circular dep check
-    return SourceConfig.model_validate(config_data)
+    from app.config import (  # local import to avoid top-level circular dep check
+        SourceConfig,
+    )
+    return SourceConfig.model_validate(config_data)  # type: ignore[attr-defined]
 
 
 def list_sources(conn: psycopg.Connection, user_id: str) -> list:

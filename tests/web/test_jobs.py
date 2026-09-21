@@ -1164,6 +1164,7 @@ def test_post_duplicate_returns_400_when_key_missing(client):
 
 def test_jobs_page_secondary_source_shows_badge(client, admin_user_id):
     from pydantic import TypeAdapter
+
     from app.config import SourceConfig
     conn = client.app.state.conn
     _ta = TypeAdapter(SourceConfig)
@@ -1182,6 +1183,7 @@ def test_jobs_page_secondary_source_shows_badge(client, admin_user_id):
 
 def test_jobs_page_non_secondary_source_has_no_badge(client, admin_user_id):
     from pydantic import TypeAdapter
+
     from app.config import SourceConfig
     conn = client.app.state.conn
     _ta = TypeAdapter(SourceConfig)

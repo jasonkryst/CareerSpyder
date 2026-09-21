@@ -20,9 +20,7 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="session")
-def live_server(tmp_path_factory, postgresql_proc):
-    tmp_path = tmp_path_factory.mktemp("e2e")
-
+def live_server(postgresql_proc):
     dbname = f"cs_e2e_{uuid.uuid4().hex[:12]}"
     host = postgresql_proc.host
     port = postgresql_proc.port

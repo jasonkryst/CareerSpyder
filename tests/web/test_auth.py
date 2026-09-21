@@ -1,5 +1,4 @@
 """Tests for authentication: login, logout, registration, and access control."""
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import TypeAdapter

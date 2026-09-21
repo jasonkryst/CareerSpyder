@@ -57,8 +57,7 @@ jobs:
 
       - name: Start container
         run: |
-          mkdir -p config data
-          echo '{"sources": []}' > config/sources.json
+          mkdir -p data
           cat > .env <<'EOF'
           SMTP_PASSWORD=ci-placeholder
           SMTP_HOST=localhost
@@ -68,6 +67,10 @@ jobs:
           EMAIL_TO=ci@example.test
           RUN_CRON=0 8 * * *
           TZ=UTC
+          ADMIN_USERNAME=ci-admin
+          ADMIN_PASSWORD=ci-password-123
+          ADMIN_EMAIL=ci@example.test
+          SECRET_KEY=ci-smoke-test-secret-not-for-production
           EOF
           docker compose up -d
 
@@ -100,8 +103,30 @@ jobs:
 
       - name: Smoke test all pages
         run: |
+          # /login is the one public page — verify it returns 200
+          status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:32600/login")
+          if [ "$status" != "200" ]; then
+            echo "GET /login returned $status, expected 200" >&2
+            docker compose logs
+            exit 1
+          fi
+          echo "GET /login -> 200"
+
+          # Log in and capture the session cookie
+          login_status=$(curl -s -c /tmp/ci-cookies.txt \
+            -X POST "http://localhost:32600/login" \
+            -d "username=ci-admin&password=ci-password-123" \
+            -o /dev/null -w "%{http_code}")
+          if [ "$login_status" != "303" ]; then
+            echo "POST /login returned $login_status, expected 303" >&2
+            docker compose logs
+            exit 1
+          fi
+          echo "POST /login -> 303 (ok)"
+
+          # Verify all protected pages return 200 with a valid session
           for path in / /sources /jobs /guide /settings/email /settings/data; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:32600$path")
+            status=$(curl -s -b /tmp/ci-cookies.txt -o /dev/null -w "%{http_code}" "http://localhost:32600$path")
             if [ "$status" != "200" ]; then
               echo "GET $path returned $status, expected 200" >&2
               docker compose logs
