@@ -97,6 +97,9 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
 def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -> None:
     with pool.connection() as conn:
         sources_by_user = db.list_all_sources_by_user(conn)
+        if not sources_by_user:
+            orchestrator.run_once(conn, [])
+            return
         for user_id, sources in sources_by_user.items():
             try:
                 _run_user(conn, user_id, sources, tz, force)
