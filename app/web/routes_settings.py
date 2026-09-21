@@ -1,13 +1,15 @@
 import json
 import re
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 from app import config, db
+from app.config import SourcesFile
 from app.models import JOB_STATUSES
+from app.web.auth import require_user
 from app.web.flash import flash_redirect
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -50,18 +52,24 @@ def settings_redirect():
 
 
 @router.get("/settings/email", response_class=HTMLResponse)
-def show_settings(request: Request):
+def show_settings(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     with request.app.state.pool.connection() as conn:
-        settings = db.get_settings(conn)
+        settings = db.get_settings(conn, current_user["id"])
     return templates.TemplateResponse(request, "settings_email.html", {"settings": settings})
 
 
 @router.post("/settings/email")
-async def save_settings(request: Request):
+async def save_settings(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = dict((await request.form()).items())
     with request.app.state.pool.connection() as conn:
         db.save_settings(
-            conn,
+            conn, current_user["id"],
             _str_field(form, "smtp_host"), int(_str_field(form, "smtp_port")), _str_field(form, "smtp_user"),
             _str_field(form, "email_from"),
         )
@@ -69,14 +77,20 @@ async def save_settings(request: Request):
 
 
 @router.get("/settings/data", response_class=HTMLResponse)
-def show_settings_data(request: Request):
+def show_settings_data(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     return templates.TemplateResponse(request, "settings_data.html", {})
 
 
 @router.get("/settings/preferences", response_class=HTMLResponse)
-def show_settings_preferences(request: Request):
+def show_settings_preferences(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     with request.app.state.pool.connection() as conn:
-        settings = db.get_settings(conn)
+        settings = db.get_settings(conn, current_user["id"])
     email_days_selected = set((settings["email_days"] if settings else "").split(","))
     email_to_list = _split_emails(settings["email_to"] if settings else "") or [""]
     digest_exclude_statuses_set = set(
@@ -94,7 +108,10 @@ def show_settings_preferences(request: Request):
 
 
 @router.post("/settings/preferences")
-async def save_preferences(request: Request):
+async def save_preferences(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = await request.form()
     selected_days = set(_str_list_field(form, "email_days")) & set(DAY_CODES)
     email_days = ",".join(day for day in DAY_CODES if day in selected_days)
@@ -114,7 +131,7 @@ async def save_preferences(request: Request):
     invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
     if invalid:
         with request.app.state.pool.connection() as conn:
-            settings = db.get_settings(conn)
+            settings = db.get_settings(conn, current_user["id"])
         digest_exclude_statuses_set = raw_exclude
         return templates.TemplateResponse(
             request, "settings_preferences.html",
@@ -131,7 +148,7 @@ async def save_preferences(request: Request):
     email_to = ",".join(submitted_emails)
     with request.app.state.pool.connection() as conn:
         db.save_preferences(
-            conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+            conn, current_user["id"], email_days, resend_jobs, email_to, hide_not_interested_on_map,
             digest_max_per_company=digest_max_per_company,
             digest_exclude_statuses=digest_exclude_statuses,
         )
@@ -139,7 +156,10 @@ async def save_preferences(request: Request):
 
 
 @router.post("/settings/data/clear-cache")
-def clear_cache(request: Request):
+def clear_cache(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     with request.app.state.pool.connection() as conn:
         db.clear_jobs(conn)
     return flash_redirect(
@@ -154,9 +174,9 @@ DEFAULT_PREFERENCES = {
 }
 
 
-def _export_payload(conn, sources_path: str) -> dict:
-    sources = config.load_sources(sources_path)
-    settings = db.get_settings(conn)
+def _export_payload(conn, user_id: str) -> dict:
+    sources = db.list_sources(conn, user_id)
+    settings = db.get_settings(conn, user_id)
     if settings is None:
         preferences = dict(DEFAULT_PREFERENCES)
     else:
@@ -214,9 +234,12 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, st
 
 
 @router.get("/settings/data/export")
-def export_settings(request: Request):
+def export_settings(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     with request.app.state.pool.connection() as conn:
-        payload = json.dumps(_export_payload(conn, request.app.state.sources_path), indent=2)
+        payload = json.dumps(_export_payload(conn, current_user["id"]), indent=2)
     return Response(
         content=payload,
         media_type="application/json",
@@ -225,7 +248,10 @@ def export_settings(request: Request):
 
 
 @router.post("/settings/data/import")
-async def import_settings(request: Request):
+async def import_settings(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
     form = await request.form()
     upload = form.get("file")
     if not isinstance(upload, UploadFile) or not upload.filename:
@@ -234,7 +260,8 @@ async def import_settings(request: Request):
         )
     raw = await upload.read()
     try:
-        sources = config.import_sources_json(request.app.state.sources_path, raw)
+        data = json.loads(raw)
+        sources = SourcesFile.model_validate(data).sources
     except json.JSONDecodeError as exc:
         return templates.TemplateResponse(
             request, "settings_data.html", {"error": f"Import failed: {exc}"}, status_code=400,
@@ -245,16 +272,17 @@ async def import_settings(request: Request):
             {"error": f"Import failed: {fmt_validation_error(exc)}"}, status_code=400,
         )
 
-    parsed_preferences = _parse_preferences_import(json.loads(raw))
-    if parsed_preferences is not None:
-        email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max, digest_excl = parsed_preferences
-        with request.app.state.pool.connection() as conn:
+    parsed_preferences = _parse_preferences_import(data)
+    with request.app.state.pool.connection() as conn:
+        count = db.import_sources(conn, current_user["id"], sources)
+        if parsed_preferences is not None:
+            email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max, digest_excl = parsed_preferences
             db.save_preferences(
-                conn, email_days, resend_jobs, email_to, hide_not_interested_on_map,
+                conn, current_user["id"], email_days, resend_jobs, email_to, hide_not_interested_on_map,
                 digest_max_per_company=digest_max, digest_exclude_statuses=digest_excl,
             )
 
-    redirect_message = f"Imported {len(sources)} source(s)."
+    redirect_message = f"Imported {count} source(s)."
     if parsed_preferences is not None:
-        redirect_message = f"Imported {len(sources)} source(s) and preferences."
+        redirect_message = f"Imported {count} source(s) and preferences."
     return flash_redirect("/settings/data", redirect_message)

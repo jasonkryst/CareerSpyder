@@ -1,5 +1,3 @@
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,12 +12,11 @@ def _clear_geocode_zip_cache():
     _geocode_zip.cache_clear()
 
 
-@pytest.fixture
-def client(pg_dsn, tmp_path, monkeypatch):
+def _make_client(pg_dsn, monkeypatch, *, authenticated: bool = True):
     monkeypatch.setenv("DATABASE_URL", pg_dsn)
-    sources_path = tmp_path / "sources.json"
-    sources_path.write_text(json.dumps({"sources": []}))
-    monkeypatch.setenv("CAREERSPYDER_SOURCES_PATH", str(sources_path))
+    monkeypatch.setenv("ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("ADMIN_PASSWORD", "password123")
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@test.local")
     monkeypatch.setenv("RUN_CRON", "0 8 * * *")
     monkeypatch.setenv("TZ", "UTC")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
@@ -28,9 +25,62 @@ def client(pg_dsn, tmp_path, monkeypatch):
     monkeypatch.setenv("EMAIL_FROM", "from@x.test")
     monkeypatch.setenv("EMAIL_TO", "to@x.test")
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
 
     from app.web.main import app
 
-    with TestClient(app) as test_client, test_client.app.state.pool.connection() as conn:
-        test_client.app.state.conn = conn
-        yield test_client
+    test_client = TestClient(app, raise_server_exceptions=True)
+    test_client.__enter__()
+
+    if authenticated:
+        resp = test_client.post(
+            "/login",
+            data={"username": "admin", "password": "password123"},
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303), f"Login failed: {resp.status_code}"
+
+    return test_client
+
+
+@pytest.fixture
+def client(pg_dsn, monkeypatch):
+    """Authenticated admin test client."""
+    tc = _make_client(pg_dsn, monkeypatch, authenticated=True)
+    with tc.app.state.pool.connection() as conn:
+        tc.app.state.conn = conn
+        yield tc
+    tc.__exit__(None, None, None)
+
+
+@pytest.fixture
+def unauthed_client(pg_dsn, monkeypatch):
+    """Unauthenticated test client — for auth-flow tests."""
+    tc = _make_client(pg_dsn, monkeypatch, authenticated=False)
+    with tc.app.state.pool.connection() as conn:
+        tc.app.state.conn = conn
+        yield tc
+    tc.__exit__(None, None, None)
+
+
+@pytest.fixture
+def admin_user_id(client):
+    """Returns the UUID string of the seeded admin user."""
+    from app import db
+    with client.app.state.pool.connection() as conn:
+        user = db.get_user_by_username(conn, "admin")
+    assert user is not None
+    return str(user["id"])
+
+
+@pytest.fixture
+def seed_source(client, admin_user_id):
+    """Factory fixture: seed_source(source) → inserts source into DB for admin."""
+    from app import db
+
+    def _seed(source):
+        with client.app.state.pool.connection() as conn:
+            db.add_source(conn, admin_user_id, source)
+        return source
+
+    return _seed

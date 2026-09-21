@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+
+{% if invite_error %}
+<div class="toast toast-error" role="alert">{{ invite_error }}</div>
+{% endif %}
+{% if deactivate_error %}
+<div class="toast toast-error" role="alert">{{ deactivate_error }}</div>
+{% endif %}
+
+{% if invite_url %}
+<div class="card">
+  <p>Invite link for <strong>{{ invite_email }}</strong> (expires in 7 days):</p>
+  <div class="invite-link-wrap">
+    <input type="text" id="invite-link" value="{{ invite_url }}" readonly>
+    <button type="button" class="btn-link" onclick="navigator.clipboard.writeText(document.getElementById('invite-link').value)">Copy</button>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+<h2>Invite a new user</h2>
+<form method="post" action="/users/invite">
+  <label>Email address
+    <input type="email" name="email" required placeholder="user@example.com">
+  </label>
+  <button type="submit" class="btn-primary">Send invite link</button>
+</form>
+</div>
+
+<div class="card">
+<h2>All users</h2>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Username</th>
+      <th scope="col">Email</th>
+      <th scope="col">Role</th>
+      <th scope="col">Status</th>
+      <th scope="col">Joined</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td data-label="Username">{{ u.username }}</td>
+      <td data-label="Email">{{ u.email }}</td>
+      <td data-label="Role">{{ u.role }}</td>
+      <td data-label="Status">{% if u.is_active %}Active{% else %}<span class="badge-secondary">Inactive</span>{% endif %}</td>
+      <td data-label="Joined">{{ u.created_at[:10] }}</td>
+      <td data-label="Actions">
+        {% if u.is_active and u.id != request.state.user.id %}
+        <form method="post" action="/users/{{ u.id }}/deactivate" style="display:inline">
+          <button type="submit" class="btn-link btn-danger"
+            data-confirm-title="Deactivate user"
+            data-confirm-message="Deactivate {{ u.username }}? They will be signed out immediately.">Deactivate</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}

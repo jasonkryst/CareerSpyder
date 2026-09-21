@@ -1,10 +1,28 @@
-import json
 import os
 
 import psycopg
+from pydantic import TypeAdapter
 
 from app import db
+from app.config import SourceConfig
 from app.models import Job
+
+_ta = TypeAdapter(SourceConfig)
+
+
+def _admin_user_id() -> str:
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
+    row = conn.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
+    conn.close()
+    return str(row[0])
+
+
+def _seed_source(source_data: dict) -> None:
+    user_id = _admin_user_id()
+    source = _ta.validate_python(source_data)
+    conn = psycopg.connect(os.environ["DATABASE_URL"])
+    db.add_source(conn, user_id, source)
+    conn.close()
 
 
 def _save_job(key, title, source_id="src-1", source_name="Acme Board"):
@@ -74,13 +92,9 @@ def test_clearing_duplicate_flag_restores_job(live_server, page):
 
 
 def test_secondary_source_badge_appears_for_secondary_source_jobs(live_server, page):
-    sources_path = os.environ["CAREERSPYDER_SOURCES_PATH"]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "src-secondary", "name": "Indeed E2E", "type": "indeed",
-             "url": "https://indeed.test/jobs", "secondary": True,
-             "include_keywords": [], "exclude_keywords": []},
-        ]}, f)
+    _seed_source({"id": "src-secondary", "name": "Indeed E2E", "type": "indeed",
+                  "url": "https://indeed.test/jobs", "secondary": True,
+                  "include_keywords": [], "exclude_keywords": []})
 
     _save_job("e2e-secondary-1", "E2E Secondary Job",
               source_id="src-secondary", source_name="Indeed E2E")
@@ -91,13 +105,9 @@ def test_secondary_source_badge_appears_for_secondary_source_jobs(live_server, p
 
 
 def test_non_secondary_source_has_no_badge(live_server, page):
-    sources_path = os.environ["CAREERSPYDER_SOURCES_PATH"]
-    with open(sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "src-primary", "name": "Greenhouse E2E", "type": "greenhouse",
-             "board_token": "acme", "secondary": False,
-             "include_keywords": [], "exclude_keywords": []},
-        ]}, f)
+    _seed_source({"id": "src-primary", "name": "Greenhouse E2E", "type": "greenhouse",
+                  "board_token": "acme", "secondary": False,
+                  "include_keywords": [], "exclude_keywords": []})
 
     _save_job("e2e-primary-1", "E2E Primary Job",
               source_id="src-primary", source_name="Greenhouse E2E")

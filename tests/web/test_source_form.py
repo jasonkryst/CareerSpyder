@@ -1,6 +1,17 @@
-import json
-
 from bs4 import BeautifulSoup
+from pydantic import TypeAdapter
+
+from app import db
+from app.config import SourceConfig
+
+_ta = TypeAdapter(SourceConfig)
+
+
+def _add_sources(client, admin_user_id, sources_data):
+    """Seed sources from a list of dicts into the DB for the admin user."""
+    with client.app.state.pool.connection() as conn:
+        for d in sources_data:
+            db.add_source(conn, admin_user_id, _ta.validate_python(d))
 
 
 def test_new_source_form_renders(client):
@@ -21,7 +32,7 @@ def test_source_form_has_no_br_tags(client):
     assert "<br>" not in resp.text
 
 
-def test_post_new_source_saves_and_redirects(client):
+def test_post_new_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "acme",
         "include_keywords": "", "exclude_keywords": "",
@@ -29,10 +40,10 @@ def test_post_new_source_saves_and_redirects(client):
 
     assert resp.status_code == 303
     assert resp.headers["location"].startswith("/sources?flash=")
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["name"] == "Acme"
-    assert saved[0]["board_token"] == "acme"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].name == "Acme"
+    assert saved[0].board_token == "acme"
 
 
 def test_post_new_source_redirect_carries_added_flash_message(client):
@@ -48,11 +59,10 @@ def test_post_new_source_redirect_carries_added_flash_message(client):
     assert parse_qs(location.query)["flash"] == ["Source added."]
 
 
-def test_edit_form_prefills_existing_values(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_edit_form_prefills_existing_values(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.get("/sources/s1/edit")
 
@@ -60,7 +70,7 @@ def test_edit_form_prefills_existing_values(client):
     assert 'value="Acme"' in resp.text
 
 
-def test_post_new_infor_source_saves_and_redirects(client):
+def test_post_new_infor_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "infor", "name": "Rush (Infor)", "company": "Rush University Medical Center",
         "infor_url": "https://rush.test/careers", "max_pages": "5",
@@ -68,74 +78,74 @@ def test_post_new_infor_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "infor"
-    assert saved[0]["url"] == "https://rush.test/careers"
-    assert saved[0]["max_pages"] == 5
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "infor"
+    assert saved[0].url == "https://rush.test/careers"
+    assert saved[0].max_pages == 5
 
 
-def test_post_new_infor_source_with_empty_url_shows_error_and_does_not_save(client):
+def test_post_new_infor_source_with_empty_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "infor", "name": "Rush (Infor)", "infor_url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_healthcaresource_source_saves_and_redirects(client):
+def test_post_new_healthcaresource_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "healthcaresource", "name": "Rush Copley (HealthcareSource)",
         "site_id": "rcmc", "include_keywords": "", "exclude_keywords": "",
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "healthcaresource"
-    assert saved[0]["site_id"] == "rcmc"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "healthcaresource"
+    assert saved[0].site_id == "rcmc"
 
 
-def test_post_new_healthcaresource_source_with_empty_site_id_shows_error_and_does_not_save(client):
+def test_post_new_healthcaresource_source_with_empty_site_id_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "healthcaresource", "name": "Rush Copley (HealthcareSource)", "site_id": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_talentbrew_source_saves_and_redirects(client):
+def test_post_new_talentbrew_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "https://jobs.nm.org",
         "max_pages": "10", "include_keywords": "", "exclude_keywords": "",
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "talentbrew"
-    assert saved[0]["base_url"] == "https://jobs.nm.org"
-    assert saved[0]["max_pages"] == 10
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "talentbrew"
+    assert saved[0].base_url == "https://jobs.nm.org"
+    assert saved[0].max_pages == 10
 
 
-def test_post_new_talentbrew_source_with_empty_base_url_shows_error_and_does_not_save(client):
+def test_post_new_talentbrew_source_with_empty_base_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "talentbrew", "name": "NM (TalentBrew)", "base_url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_workday_source_saves_and_redirects(client):
+def test_post_new_workday_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "workday", "name": "Duly (Workday)",
         "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
@@ -143,25 +153,25 @@ def test_post_new_workday_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "workday"
-    assert saved[0]["career_site_url"] == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"
-    assert saved[0]["max_pages"] == 20
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "workday"
+    assert saved[0].career_site_url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"
+    assert saved[0].max_pages == 20
 
 
-def test_post_new_workday_source_with_empty_career_site_url_shows_error_and_does_not_save(client):
+def test_post_new_workday_source_with_empty_career_site_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "workday", "name": "Duly (Workday)", "career_site_url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_phenompeople_source_saves_and_redirects(client):
+def test_post_new_phenompeople_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "phenompeople", "name": "Ascension (PhenomPeople)",
         "phenompeople_career_site_url": "https://jobs.ascension.org", "state": "Illinois",
@@ -169,25 +179,25 @@ def test_post_new_phenompeople_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "phenompeople"
-    assert saved[0]["career_site_url"] == "https://jobs.ascension.org"
-    assert saved[0]["state"] == "Illinois"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "phenompeople"
+    assert saved[0].career_site_url == "https://jobs.ascension.org"
+    assert saved[0].state == "Illinois"
 
 
-def test_post_new_phenompeople_source_with_empty_career_site_url_shows_error_and_does_not_save(client):
+def test_post_new_phenompeople_source_with_empty_career_site_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "phenompeople", "name": "Ascension (PhenomPeople)", "phenompeople_career_site_url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_findly_source_saves_and_redirects(client):
+def test_post_new_findly_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "findly", "name": "Advocate Health (Findly)",
         "org_id": "2297", "findly_career_site_url": "https://careers.aah.org",
@@ -195,15 +205,15 @@ def test_post_new_findly_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "findly"
-    assert saved[0]["org_id"] == "2297"
-    assert saved[0]["career_site_url"] == "https://careers.aah.org"
-    assert saved[0]["max_pages"] == 10
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "findly"
+    assert saved[0].org_id == "2297"
+    assert saved[0].career_site_url == "https://careers.aah.org"
+    assert saved[0].max_pages == 10
 
 
-def test_post_new_findly_source_with_empty_org_id_shows_error_and_does_not_save(client):
+def test_post_new_findly_source_with_empty_org_id_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "findly", "name": "Advocate Health (Findly)", "org_id": "",
         "findly_career_site_url": "https://careers.aah.org",
@@ -211,15 +221,14 @@ def test_post_new_findly_source_with_empty_org_id_shows_error_and_does_not_save(
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_edit_updates_existing_source(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+def test_post_edit_updates_existing_source(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.post("/sources/s1/edit", data={
         "id": "s1", "type": "greenhouse", "name": "Acme Renamed", "board_token": "acme",
@@ -227,19 +236,18 @@ def test_post_edit_updates_existing_source(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["name"] == "Acme Renamed"
-    assert saved[0]["id"] == "s1"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].name == "Acme Renamed"
+    assert saved[0].id == "s1"
 
 
-def test_post_edit_redirect_carries_saved_flash_message(client):
+def test_post_edit_redirect_carries_saved_flash_message(client, admin_user_id):
     from urllib.parse import parse_qs, urlparse
 
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-        ]}, f)
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+    ])
 
     resp = client.post("/sources/s1/edit", data={
         "id": "s1", "type": "greenhouse", "name": "Acme Renamed", "board_token": "acme",
@@ -251,7 +259,7 @@ def test_post_edit_redirect_carries_saved_flash_message(client):
     assert parse_qs(location.query)["flash"] == ["Source saved."]
 
 
-def test_post_new_source_with_empty_board_token_shows_error_and_does_not_save(client):
+def test_post_new_source_with_empty_board_token_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp", "board_token": "",
         "include_keywords": "", "exclude_keywords": "",
@@ -260,11 +268,11 @@ def test_post_new_source_with_empty_board_token_shows_error_and_does_not_save(cl
     assert resp.status_code == 400
     assert "Add source" in resp.text
     assert 'class="toast" role="status"' not in resp.text
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_source_with_empty_job_card_selector_shows_error_and_does_not_save(client):
+def test_post_new_source_with_empty_job_card_selector_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "generic_html", "name": "Custom Co", "url": "https://customco.test/careers",
         "selector_job_card": "", "selector_title": ".t", "selector_link": "a",
@@ -272,8 +280,8 @@ def test_post_new_source_with_empty_job_card_selector_shows_error_and_does_not_s
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
 def test_edit_unknown_source_returns_404(client):
@@ -312,12 +320,11 @@ def test_source_form_hints_link_to_guide_anchors(client):
     assert 'href="/guide#type-findly"' in resp.text
 
 
-def test_edit_ignores_tampered_hidden_id_field(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
-            {"id": "s2", "name": "Beta", "type": "greenhouse", "board_token": "beta"},
-        ]}, f)
+def test_edit_ignores_tampered_hidden_id_field(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme", "type": "greenhouse", "board_token": "acme"},
+        {"id": "s2", "name": "Beta", "type": "greenhouse", "board_token": "beta"},
+    ])
 
     resp = client.post("/sources/s1/edit", data={
         "id": "s2", "type": "greenhouse", "name": "Acme Renamed", "board_token": "acme",
@@ -325,17 +332,17 @@ def test_edit_ignores_tampered_hidden_id_field(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    ids = {s["id"] for s in saved}
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    ids = {s.id for s in saved}
     assert ids == {"s1", "s2"}
-    s1 = next(s for s in saved if s["id"] == "s1")
-    assert s1["name"] == "Acme Renamed"
-    s2 = next(s for s in saved if s["id"] == "s2")
-    assert s2["name"] == "Beta"
+    s1 = next(s for s in saved if s.id == "s1")
+    assert s1.name == "Acme Renamed"
+    s2 = next(s for s in saved if s.id == "s2")
+    assert s2.name == "Beta"
 
 
-def test_post_new_linkedin_source_saves_and_redirects(client):
+def test_post_new_linkedin_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "linkedin", "name": "Acme (LinkedIn)",
         "url": "https://www.linkedin.com/jobs/search/?keywords=backend+engineer",
@@ -343,24 +350,24 @@ def test_post_new_linkedin_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "linkedin"
-    assert saved[0]["url"] == "https://www.linkedin.com/jobs/search/?keywords=backend+engineer"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "linkedin"
+    assert saved[0].url == "https://www.linkedin.com/jobs/search/?keywords=backend+engineer"
 
 
-def test_post_new_linkedin_source_with_empty_url_shows_error_and_does_not_save(client):
+def test_post_new_linkedin_source_with_empty_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "linkedin", "name": "Acme (LinkedIn)", "url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
-def test_post_new_indeed_source_saves_and_redirects(client):
+def test_post_new_indeed_source_saves_and_redirects(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "indeed", "name": "Acme (Indeed)",
         "url": "https://www.indeed.com/jobs?q=backend+engineer",
@@ -368,21 +375,21 @@ def test_post_new_indeed_source_saves_and_redirects(client):
     }, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["type"] == "indeed"
-    assert saved[0]["url"] == "https://www.indeed.com/jobs?q=backend+engineer"
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].type == "indeed"
+    assert saved[0].url == "https://www.indeed.com/jobs?q=backend+engineer"
 
 
-def test_post_new_indeed_source_with_empty_url_shows_error_and_does_not_save(client):
+def test_post_new_indeed_source_with_empty_url_shows_error_and_does_not_save(client, admin_user_id):
     resp = client.post("/sources/new", data={
         "type": "indeed", "name": "Acme (Indeed)", "url": "",
         "include_keywords": "", "exclude_keywords": "",
     })
 
     assert resp.status_code == 400
-    with open(client.app.state.sources_path) as f:
-        assert json.load(f)["sources"] == []
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
 
 
 def test_url_field_appears_exactly_once_in_source_form(client):
@@ -406,12 +413,11 @@ def test_url_field_shown_for_generic_html_linkedin_and_indeed(client):
     assert set(container["data-types"].split()) == {"generic_html", "linkedin", "indeed"}
 
 
-def test_edit_form_prefills_url_for_linkedin_source(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (LinkedIn)", "type": "linkedin",
-             "url": "https://www.linkedin.com/jobs/search/?keywords=eng"},
-        ]}, f)
+def test_edit_form_prefills_url_for_linkedin_source(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (LinkedIn)", "type": "linkedin",
+         "url": "https://www.linkedin.com/jobs/search/?keywords=eng"},
+    ])
 
     resp = client.get("/sources/s1/edit")
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -420,12 +426,11 @@ def test_edit_form_prefills_url_for_linkedin_source(client):
     assert url_input["value"] == "https://www.linkedin.com/jobs/search/?keywords=eng"
 
 
-def test_edit_form_prefills_url_for_indeed_source(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Acme (Indeed)", "type": "indeed",
-             "url": "https://www.indeed.com/jobs?q=eng"},
-        ]}, f)
+def test_edit_form_prefills_url_for_indeed_source(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Acme (Indeed)", "type": "indeed",
+         "url": "https://www.indeed.com/jobs?q=eng"},
+    ])
 
     resp = client.get("/sources/s1/edit")
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -451,13 +456,12 @@ def test_max_pages_field_shown_for_infor_talentbrew_workday_and_findly(client):
     assert set(container["data-types"].split()) == {"infor", "talentbrew", "workday", "findly"}
 
 
-def test_edit_form_prefills_max_pages_for_workday_source(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Duly (Workday)", "type": "workday",
-             "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
-             "max_pages": 45},
-        ]}, f)
+def test_edit_form_prefills_max_pages_for_workday_source(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Duly (Workday)", "type": "workday",
+         "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+         "max_pages": 45},
+    ])
 
     resp = client.get("/sources/s1/edit")
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -488,16 +492,15 @@ def _rendered_form_fields(html: str) -> dict:
     return fields
 
 
-def test_post_edit_resubmitting_rendered_workday_form_preserves_max_pages(client):
+def test_post_edit_resubmitting_rendered_workday_form_preserves_max_pages(client, admin_user_id):
     """Regression for #36: a browser submits every max_pages input in the
     DOM (even hidden ones); if more than one shares that name, the wrong
     (last-in-DOM) value silently overwrites the real one on save."""
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Duly (Workday)", "type": "workday",
-             "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
-             "max_pages": 77},
-        ]}, f)
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Duly (Workday)", "type": "workday",
+         "career_site_url": "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly",
+         "max_pages": 77},
+    ])
 
     edit_page = client.get("/sources/s1/edit")
     fields = _rendered_form_fields(edit_page.text)
@@ -505,18 +508,17 @@ def test_post_edit_resubmitting_rendered_workday_form_preserves_max_pages(client
     resp = client.post("/sources/s1/edit", data=fields, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["max_pages"] == 77
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].max_pages == 77
 
 
-def test_post_edit_resubmitting_rendered_findly_form_preserves_max_pages(client):
-    with open(client.app.state.sources_path, "w") as f:
-        json.dump({"sources": [
-            {"id": "s1", "name": "Advocate Health (Findly)", "type": "findly",
-             "org_id": "2297", "career_site_url": "https://careers.aah.org",
-             "max_pages": 33},
-        ]}, f)
+def test_post_edit_resubmitting_rendered_findly_form_preserves_max_pages(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Advocate Health (Findly)", "type": "findly",
+         "org_id": "2297", "career_site_url": "https://careers.aah.org",
+         "max_pages": 33},
+    ])
 
     edit_page = client.get("/sources/s1/edit")
     fields = _rendered_form_fields(edit_page.text)
@@ -524,9 +526,9 @@ def test_post_edit_resubmitting_rendered_findly_form_preserves_max_pages(client)
     resp = client.post("/sources/s1/edit", data=fields, follow_redirects=False)
 
     assert resp.status_code == 303
-    with open(client.app.state.sources_path) as f:
-        saved = json.load(f)["sources"]
-    assert saved[0]["max_pages"] == 33
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].max_pages == 33
 
 
 def test_test_results_render_as_a_table_not_a_bullet_list(client):
@@ -566,7 +568,6 @@ def test_source_form_has_secondary_checkbox(client):
 
 def test_secondary_checkbox_unchecked_by_default(client):
     resp = client.get("/sources/new")
-    from bs4 import BeautifulSoup
     soup = BeautifulSoup(resp.text, "html.parser")
     cb = soup.find("input", {"name": "secondary", "type": "checkbox"})
     assert cb is not None
@@ -582,7 +583,6 @@ def test_secondary_checkbox_checked_when_source_is_secondary(client):
     assert resp.status_code == 303
 
     sources_resp = client.get("/sources")
-    from bs4 import BeautifulSoup
     soup = BeautifulSoup(sources_resp.text, "html.parser")
     edit_link = soup.find("a", href=lambda h: h and "/edit" in h)
     assert edit_link is not None
@@ -594,28 +594,24 @@ def test_secondary_checkbox_checked_when_source_is_secondary(client):
     assert cb.get("checked") is not None
 
 
-def test_secondary_false_persisted_when_checkbox_omitted(client):
-    import json
+def test_secondary_false_persisted_when_checkbox_omitted(client, admin_user_id):
     client.post("/sources/new", data={
         "name": "Greenhouse", "type": "greenhouse", "board_token": "acme",
         "include_keywords": "", "exclude_keywords": "",
     }, follow_redirects=False)
-    sources_path = client.app.state.sources_path
-    with open(sources_path) as f:
-        data = json.load(f)
-    assert data["sources"][0]["secondary"] is False
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].secondary is False
 
 
-def test_secondary_true_persisted_when_checkbox_checked(client):
-    import json
+def test_secondary_true_persisted_when_checkbox_checked(client, admin_user_id):
     client.post("/sources/new", data={
         "name": "Indeed", "type": "indeed", "url": "https://indeed.test/jobs",
         "secondary": "on", "include_keywords": "", "exclude_keywords": "",
     }, follow_redirects=False)
-    sources_path = client.app.state.sources_path
-    with open(sources_path) as f:
-        data = json.load(f)
-    assert data["sources"][0]["secondary"] is True
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].secondary is True
 
 
 def test_source_validation_error_shows_clean_message_not_raw_pydantic(client):

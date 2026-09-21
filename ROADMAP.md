@@ -10,10 +10,6 @@ later rather than fixed immediately.
 
 ## Security & access
 
-- **Authentication on the web UI (from design spec).** v1 has none — it's
-  built for a trusted home/private network only. Before exposing this
-  beyond that, add at minimum a login gate; consider whether "single user"
-  is still the right model at that point.
 - **Editable SMTP password (from design spec).** Currently env-var only by
   design, to avoid persisting a credential in plaintext on disk. If this
   becomes painful operationally, revisit with e.g. an encrypted-at-rest
@@ -32,11 +28,6 @@ later rather than fixed immediately.
 
 ## Reliability & operations
 
-- **Concurrent writes to `sources.json` aren't locked (from review).** The
-  save path is atomic (temp file + `os.replace`) but two simultaneous
-  `/sources` edits can still interleave before the swap. Low risk for a
-  single-operator deployment; worth a lock (mirroring the SQLite run lock
-  in `app/orchestrator.py`) if this ever gets multiple concurrent editors.
 - **SMTP port 465 / implicit TLS isn't supported (from review).** The
   emailer always does STARTTLS; the settings page accepts port 465 without
   validating it needs `smtplib.SMTP_SSL` instead. Either branch on the
