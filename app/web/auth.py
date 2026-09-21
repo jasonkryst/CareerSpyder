@@ -1,8 +1,8 @@
 """Session helpers, FastAPI dependencies, and password utilities for auth."""
 import logging
 
+import bcrypt as _bcrypt
 from fastapi import Depends, HTTPException, Request
-from passlib.hash import bcrypt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp
@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 def hash_password(plaintext: str) -> str:
-    return bcrypt.hash(plaintext)
+    return _bcrypt.hashpw(plaintext.encode(), _bcrypt.gensalt()).decode()
 
 
 def verify_password(plaintext: str, hashed: str) -> bool:
-    return bcrypt.verify(plaintext, hashed)
+    return _bcrypt.checkpw(plaintext.encode(), hashed.encode())
 
 
 def get_current_user(request: Request) -> dict | None:
