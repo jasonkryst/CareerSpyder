@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-21
+
+### Added
+
+- **Admin jobs page shows which user each job belongs to.** When the logged-in
+  user is an admin, the Jobs table gains a **User** column showing the username
+  that owns each job. Members see only their own jobs and no User column. New
+  jobs are attributed to the user whose source found them; jobs already in the
+  database before this release show an empty User cell.
+
 ### Changed
 
 - **Email settings restricted to admin.** The `/settings/email` page (SMTP
@@ -20,6 +30,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   User column. Runs are attributed at creation time — both the scheduler
   (per-user) and the manual "Check job URLs" button now record `user_id` on
   each run row.
+
+### Fixed
+
+- **SMTP env vars now take effect on container restart.** Previously adding or
+  changing `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `EMAIL_FROM` in Portainer
+  after the first startup had no effect — the settings row was seeded once with
+  `ON CONFLICT DO NOTHING` and never updated. The seeding step now syncs those
+  four fields on every restart while leaving user-controlled preference columns
+  (`email_to`, `email_days`, `resend_jobs`) untouched.
 
 ## [1.0.0] — 2026-09-20
 

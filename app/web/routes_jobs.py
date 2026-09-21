@@ -78,6 +78,8 @@ def jobs(
     source_name = source or None
     status_filter = status or None
     state_filter = state or None
+    is_admin = current_user["role"] == "admin"
+    filter_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
         secondary_ids = _secondary_source_ids(conn, current_user["id"])
         total = db.count_jobs(
@@ -85,6 +87,7 @@ def jobs(
             removed=removed or None, emailed=emailed or None, status=status_filter,
             location=location or None, duplicates=duplicates or None, state=state_filter,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+            user_id=filter_user_id,
         )
         pagination = paginate(total, page, PAGE_SIZE)
         rows = db.list_jobs(
@@ -93,6 +96,7 @@ def jobs(
             removed=removed or None, emailed=emailed or None, status=status_filter,
             location=location or None, duplicates=duplicates or None, state=state_filter,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+            user_id=filter_user_id,
         )
         history = db.get_job_status_history(conn, [row["key"] for row in rows])
         for row in rows:
@@ -109,7 +113,7 @@ def jobs(
     return templates.TemplateResponse(request, "jobs.html", {
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "locations": locations, "states": states,
-        "statuses": STATUSES,
+        "statuses": STATUSES, "is_admin": is_admin,
         "filters": {
             "company": company, "source": source, "removed": removed, "emailed": emailed,
             "status": status, "location": location, "duplicates": duplicates,
