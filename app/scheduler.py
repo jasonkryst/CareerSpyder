@@ -26,7 +26,9 @@ def _today_code(tz: str) -> str:
 
 def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     settings = db.get_settings(conn, user_id)
-    if not force and settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
+    email_days = (settings["email_days"] or "").strip() if settings else ""
+    # Empty/unconfigured email_days means "run every day"; only gate when explicitly set.
+    if not force and email_days and _today_code(tz) not in email_days.split(","):
         return
 
     summary = orchestrator.run_once(conn, sources, user_id=user_id)
@@ -44,7 +46,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
             current_keys.add(rescued.key)
 
     duplicate_keys = {
-        row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only")
+        row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only", user_id=user_id)
     }
     jobs_to_send = [j for j in jobs_to_send if j.key not in duplicate_keys]
 

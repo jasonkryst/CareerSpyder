@@ -214,8 +214,8 @@ def _seed_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_
     # on the next restart without requiring a settings-page visit.  Preference columns
     # (email_to, email_days, resend_jobs, …) are untouched on conflict — they belong to the user.
     conn.execute(
-        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
-        "VALUES (%s, %s, %s, %s, %s, %s) "
+        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to, email_days) "
+        "VALUES (%s, %s, %s, %s, %s, %s, 'mon,tue,wed,thu,fri,sat,sun') "
         "ON CONFLICT (user_id) DO UPDATE SET "
         "smtp_host = EXCLUDED.smtp_host, smtp_port = EXCLUDED.smtp_port, "
         "smtp_user = EXCLUDED.smtp_user, email_from = EXCLUDED.email_from",

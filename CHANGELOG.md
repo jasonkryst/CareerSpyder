@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-09-22
+
+### Fixed
+
+- **Scheduled scrapes and digest emails not running.** Two related bugs prevented
+  the cron job from ever scraping sources or sending emails after a fresh install:
+  - `_seed_settings` did not write an initial `email_days` value, so new admin
+    accounts had `email_days = NULL`.
+  - The scheduler treated `NULL`/empty `email_days` as "no days configured →
+    skip every day" instead of "not restricted → run every day." Any instance
+    whose `email_days` was not explicitly set via Settings → Preferences would
+    silently skip every scheduled run.
+  - Fix: `_seed_settings` now inserts `email_days = 'mon,tue,wed,thu,fri,sat,sun'`
+    for new rows; the scheduler treats an empty/NULL value as unrestricted (always
+    runs), so existing instances are unblocked immediately on restart.
+- **Duplicate-key filter in digest crossed user boundaries.** Jobs marked as
+  duplicates by one user could suppress email entries for another user's digest;
+  the filter is now scoped per user.
+
 ## [1.2.1] — 2026-09-21
 
 ### Fixed
