@@ -5,7 +5,12 @@ from pydantic import TypeAdapter
 
 from app import db
 from app.config import SourceConfig
-from app.web.auth import hash_password
+from app.web.auth import (
+    generate_reset_token,
+    hash_password,
+    verify_password,
+    verify_reset_token,
+)
 
 _ta = TypeAdapter(SourceConfig)
 
@@ -274,6 +279,69 @@ def test_post_register_uses_invite_so_it_cannot_be_reused(unauthed_client):
 
     assert resp.status_code == 400
     assert "already been used" in resp.text.lower()
+
+
+# ── DB helpers ────────────────────────────────────────────────────────────────
+
+def test_get_user_by_id_with_hash_returns_password_hash(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    result = db.get_user_by_id_with_hash(conn, user["id"])
+    assert result is not None
+    assert "password_hash" in result
+    assert result["password_hash"].startswith("$2b$")
+    assert result["id"] == user["id"]
+
+
+def test_get_user_by_id_with_hash_returns_none_for_unknown_id(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    result = db.get_user_by_id_with_hash(conn, "00000000-0000-0000-0000-000000000000")
+    assert result is None
+
+
+def test_update_password_changes_stored_hash(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    old_hash = user["password_hash"]
+    db.update_password(conn, user["id"], hash_password("newpassword123"))
+    updated = db.get_user_by_id_with_hash(conn, user["id"])
+    assert updated["password_hash"] != old_hash
+    assert verify_password("newpassword123", updated["password_hash"])
+
+
+# ── Token helpers ─────────────────────────────────────────────────────────────
+
+def test_generate_and_verify_reset_token(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    result = verify_reset_token("test-secret-key", token, conn)
+    assert result is not None
+    assert result["id"] == user["id"]
+    assert result["username"] == "admin"
+
+
+def test_verify_reset_token_rejects_expired_token(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    result = verify_reset_token("test-secret-key", token, conn, max_age=0)
+    assert result is None
+
+
+def test_verify_reset_token_rejects_tampered_token(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    result = verify_reset_token("test-secret-key", "garbage.tampered.token", conn)
+    assert result is None
+
+
+def test_verify_reset_token_invalidated_after_password_change(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    db.update_password(conn, user["id"], hash_password("newpassword123"))
+    result = verify_reset_token("test-secret-key", token, conn)
+    assert result is None
 
 
 # ── Multi-user data isolation ─────────────────────────────────────────────────

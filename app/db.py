@@ -636,6 +636,26 @@ def get_user_by_id(conn: psycopg.Connection, user_id: str) -> dict | None:
             "role": row[3], "is_active": row[4], "created_at": str(row[5])}
 
 
+def get_user_by_id_with_hash(conn: psycopg.Connection, user_id: str) -> dict | None:
+    row = conn.execute(
+        "SELECT id, username, email, password_hash, role, is_active, created_at "
+        "FROM users WHERE id = %s",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": str(row[0]), "username": row[1], "email": row[2],
+        "password_hash": row[3], "role": row[4], "is_active": row[5],
+        "created_at": str(row[6]),
+    }
+
+
+def update_password(conn: psycopg.Connection, user_id: str, new_hash: str) -> None:
+    conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user_id))
+    conn.commit()
+
+
 def get_user_by_username(conn: psycopg.Connection, username: str) -> dict | None:
     row = conn.execute(
         "SELECT id, username, email, password_hash, role, is_active FROM users "

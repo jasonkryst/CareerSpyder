@@ -1,8 +1,11 @@
 """Session helpers, FastAPI dependencies, and password utilities for auth."""
+import hashlib
 import logging
 
 import bcrypt as _bcrypt
+import psycopg
 from fastapi import Depends, HTTPException, Request
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp
@@ -77,3 +80,29 @@ class UserContextMiddleware(BaseHTTPMiddleware):
             else:
                 request.state.user = None
         return await call_next(request)
+
+
+_RESET_SALT = "password-reset"
+
+
+def generate_reset_token(secret_key: str, user_id: str, email: str, pw_hash: str) -> str:
+    s = URLSafeTimedSerializer(secret_key)
+    pw_fp = hashlib.sha256(pw_hash.encode()).hexdigest()[:8]
+    return s.dumps({"user_id": user_id, "email": email, "pw_fp": pw_fp}, salt=_RESET_SALT)
+
+
+def verify_reset_token(
+    secret_key: str, token: str, conn: psycopg.Connection, max_age: int = 3600,
+) -> dict | None:
+    s = URLSafeTimedSerializer(secret_key)
+    try:
+        payload = s.loads(token, salt=_RESET_SALT, max_age=max_age)
+    except (BadSignature, SignatureExpired):
+        return None
+    user = db.get_user_by_id_with_hash(conn, payload["user_id"])
+    if user is None or not user["is_active"]:
+        return None
+    expected_fp = hashlib.sha256(user["password_hash"].encode()).hexdigest()[:8]
+    if payload.get("pw_fp") != expected_fp:
+        return None
+    return user

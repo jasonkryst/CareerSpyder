@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI):
             )
 
     app.state.pool = pool
+    app.state.secret_key = _resolve_secret_key()
     app.state.tz = tz
     app.state.scheduler = create_scheduler(pool, run_cron, tz)
 
