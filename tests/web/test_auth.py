@@ -448,3 +448,123 @@ def test_account_recovery_with_empty_email_returns_400(unauthed_client):
     resp = unauthed_client.post("/account-recovery", data={"email": ""})
     assert resp.status_code == 400
     assert "required" in resp.text.lower()
+
+
+# ── Password reset ────────────────────────────────────────────────────────────
+
+def test_reset_password_form_with_valid_token_renders(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.get(f"/reset-password?token={token}")
+    assert resp.status_code == 200
+    assert 'name="password"' in resp.text
+    assert "admin" in resp.text
+
+
+def test_reset_password_form_shows_username(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.get(f"/reset-password?token={token}")
+    assert "admin" in resp.text
+
+
+def test_reset_password_form_with_no_token_returns_400(unauthed_client):
+    resp = unauthed_client.get("/reset-password")
+    assert resp.status_code == 400
+    assert "invalid or has expired" in resp.text.lower()
+
+
+def test_reset_password_form_with_tampered_token_returns_400(unauthed_client):
+    resp = unauthed_client.get("/reset-password?token=garbage.invalid.token")
+    assert resp.status_code == 400
+    assert "invalid or has expired" in resp.text.lower()
+
+
+def test_reset_password_form_with_expired_token_returns_400(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    # Generate with same key but verify with max_age=0 via the route's internal logic.
+    # We can't pass max_age to the route, so we generate a token then tamper with the
+    # timestamp by monkey-patching verify_reset_token.
+    # Simpler: generate a token with a wrong secret so it fails signature check.
+    token = generate_reset_token("wrong-secret", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.get(f"/reset-password?token={token}")
+    assert resp.status_code == 400
+    assert "invalid or has expired" in resp.text.lower()
+
+
+def test_post_reset_password_with_valid_token_redirects_to_login(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "freshpassword1",
+        "password_confirm": "freshpassword1",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "/login" in resp.headers["location"]
+
+
+def test_post_reset_password_old_password_no_longer_works(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "freshpassword1",
+        "password_confirm": "freshpassword1",
+    }, follow_redirects=False)
+    resp = unauthed_client.post("/login", data={"username": "admin", "password": "password123"})
+    assert resp.status_code == 401
+
+
+def test_post_reset_password_with_mismatched_passwords_returns_400(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "freshpassword1",
+        "password_confirm": "differentpass1",
+    })
+    assert resp.status_code == 400
+    assert "do not match" in resp.text.lower()
+
+
+def test_post_reset_password_with_short_password_returns_400(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    resp = unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "short",
+        "password_confirm": "short",
+    })
+    assert resp.status_code == 400
+    assert "8 characters" in resp.text
+
+
+def test_post_reset_password_token_is_invalidated_after_use(unauthed_client):
+    conn = unauthed_client.app.state.conn
+    user = db.get_user_by_username(conn, "admin")
+    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+
+    # First use — succeeds
+    resp = unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "freshpassword1",
+        "password_confirm": "freshpassword1",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+
+    # Replay — fails (password_hash fingerprint has changed)
+    resp = unauthed_client.post("/reset-password", data={
+        "token": token,
+        "password": "anotherpass99",
+        "password_confirm": "anotherpass99",
+    })
+    assert resp.status_code == 400
+    assert "invalid or has expired" in resp.text.lower()

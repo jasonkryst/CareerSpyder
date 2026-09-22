@@ -8,7 +8,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db, emailer
-from app.web.auth import generate_reset_token, hash_password, verify_password
+from app.web.auth import (
+    generate_reset_token,
+    hash_password,
+    verify_password,
+    verify_reset_token,
+)
+from app.web.flash import flash_redirect
 from app.web.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -96,7 +102,8 @@ async def account_recovery(request: Request):
             user_with_hash["email"],
             user_with_hash["password_hash"],
         )
-        reset_url = str(request.base_url).rstrip("/") + f"/reset-password?token={token}"
+        base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
+        reset_url = base_url + f"/reset-password?token={token}"
         try:
             emailer.send_email(
                 smtp_host=smtp["smtp_host"],
@@ -115,6 +122,61 @@ async def account_recovery(request: Request):
         request, "account_recovery.html",
         {"submitted": True},
     )
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_form(request: Request):
+    token = request.query_params.get("token", "").strip()
+    with request.app.state.pool.connection() as conn:
+        user = verify_reset_token(request.app.state.secret_key, token, conn) if token else None
+    if user is None:
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": "This link is invalid or has expired.", "show_recovery_link": True},
+            status_code=400,
+        )
+    return templates.TemplateResponse(
+        request, "reset_password.html",
+        {"token": token, "username": user["username"]},
+    )
+
+
+@router.post("/reset-password", response_class=HTMLResponse)
+async def reset_password(request: Request):
+    form = dict((await request.form()).items())
+    token = str(form.get("token") or "").strip()
+    password = str(form.get("password") or "")
+    password_confirm = str(form.get("password_confirm") or "")
+
+    def _token_error() -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": "This link is invalid or has expired.", "show_recovery_link": True},
+            status_code=400,
+        )
+
+    def _form_error(msg: str) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": msg, "token": token},
+            status_code=400,
+        )
+
+    if not token:
+        return _token_error()
+
+    with request.app.state.pool.connection() as conn:
+        user = verify_reset_token(request.app.state.secret_key, token, conn)
+        if user is None:
+            return _token_error()
+        if len(password) < 8:
+            return _form_error("Password must be at least 8 characters.")
+        if password != password_confirm:
+            return _form_error("Passwords do not match.")
+        db.update_password(conn, user["id"], hash_password(password))
+
+    request.session.clear()
+    return flash_redirect("/login", "Password reset. Please sign in with your new password.")
 
 
 @router.get("/register", response_class=HTMLResponse)
