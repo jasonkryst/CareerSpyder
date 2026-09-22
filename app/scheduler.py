@@ -26,10 +26,14 @@ def _today_code(tz: str) -> str:
 
 def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     settings = db.get_settings(conn, user_id)
-    email_days = (settings["email_days"] or "").strip() if settings else ""
-    # Empty/unconfigured email_days means "run every day"; only gate when explicitly set.
-    if not force and email_days and _today_code(tz) not in email_days.split(","):
-        return
+    # NULL means the column was never set (legacy row) → no day restriction.
+    # Empty string means the user explicitly cleared all days → skip.
+    # Non-empty applies the day filter.
+    email_days_raw = (settings or {}).get("email_days")
+    if not force and email_days_raw is not None:
+        email_days = email_days_raw.strip()
+        if not email_days or _today_code(tz) not in email_days.split(","):
+            return
 
     summary = orchestrator.run_once(conn, sources, user_id=user_id)
 
