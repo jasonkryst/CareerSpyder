@@ -580,3 +580,8 @@ def test_login_page_shows_account_recovery_link(unauthed_client):
 def test_login_page_displays_flash_message_from_query_param(unauthed_client):
     resp = unauthed_client.get("/login?flash=Password+reset")
     assert "Password reset" in resp.text
+
+
+def test_login_page_displays_error_flash_with_error_class(unauthed_client):
+    resp = unauthed_client.get("/login?flash=Something+went+wrong&flash_category=error")
+    assert "auth-error" in resp.text

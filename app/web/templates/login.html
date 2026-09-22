@@ -98,7 +98,10 @@
       <div class="auth-error" role="alert">{{ error }}</div>
       {% endif %}
       {% if request.query_params.get("flash") %}
-      <div class="auth-success" role="status">{{ request.query_params.get("flash") }}</div>
+      <div class="{% if request.query_params.get('flash_category') == 'error' %}auth-error{% else %}auth-success{% endif %}"
+           role="{% if request.query_params.get('flash_category') == 'error' %}alert{% else %}status{% endif %}">
+        {{ request.query_params.get("flash") }}
+      </div>
       {% endif %}
       <form method="post" action="/login">
         <input type="hidden" name="next" value="{{ next or '/' }}">
