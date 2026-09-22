@@ -97,3 +97,16 @@ def test_fetch_skips_malformed_record_and_keeps_valid_ones():
     assert len(jobs) == 2
     assert jobs[0].key == "lever:abc"
     assert jobs[1].key == "lever:xyz"
+
+
+def test_fetch_url_encodes_board_token_with_special_characters():
+    calls = []
+
+    def fake_get(url, timeout):
+        calls.append(url)
+        return FakeResponse([])
+
+    source = LeverSource(id="s1", name="Acme", type="lever", board_token="acme/corp")
+    lever.fetch(source, http_get=fake_get)
+
+    assert calls[0] == "https://api.lever.co/v0/postings/acme%2Fcorp?mode=json"

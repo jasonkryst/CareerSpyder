@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 import requests
 
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch(source: GreenhouseSource, http_get=requests.get) -> list[Job]:
-    url = f"https://boards-api.greenhouse.io/v1/boards/{source.board_token}/jobs?content=true"
+    url = f"https://boards-api.greenhouse.io/v1/boards/{quote(source.board_token, safe='')}/jobs?content=true"
     resp = http_get(url, timeout=15)
     resp.raise_for_status()
     data = resp.json()

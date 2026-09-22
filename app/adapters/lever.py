@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 import requests
 
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch(source: LeverSource, http_get=requests.get) -> list[Job]:
-    url = f"https://api.lever.co/v0/postings/{source.board_token}?mode=json"
+    url = f"https://api.lever.co/v0/postings/{quote(source.board_token, safe='')}?mode=json"
     resp = http_get(url, timeout=15)
     resp.raise_for_status()
     data = resp.json()
