@@ -11,15 +11,18 @@ _PAGE_SIZE = 20
 
 
 def _resolve(career_site_url: str) -> tuple[str, str]:
-    """Returns (api_url, origin), both derived from the career site URL."""
+    """Returns (api_url, site_base), both derived from the career site URL.
+
+    site_base is `{origin}/{site}`: Workday's `externalPath` is relative to
+    the career site, so `{origin}{externalPath}` 404s (issue #175)."""
     parsed = urlparse(career_site_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     tenant = parsed.netloc.split(".")[0]
     site = parsed.path.strip("/").split("/")[-1]
-    return f"{origin}/wday/cxs/{tenant}/{site}/jobs", origin
+    return f"{origin}/wday/cxs/{tenant}/{site}/jobs", f"{origin}/{site}"
 
 
-def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) -> list[Job]:
+def _parse_postings(postings: list[dict], source: WorkdaySource, site_base: str) -> list[Job]:
     jobs = []
     for posting in postings:
         try:
@@ -29,7 +32,7 @@ def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) ->
             jobs.append(Job(
                 key=f"workday:{requisition_id}",
                 title=posting["title"],
-                url=f"{origin}{external_path}",
+                url=f"{site_base}{external_path}",
                 company=source.company,
                 location=posting.get("locationsText"),
                 posted_date=posting.get("postedOn"),
@@ -42,7 +45,7 @@ def _parse_postings(postings: list[dict], source: WorkdaySource, origin: str) ->
 
 
 def fetch(source: WorkdaySource, http_post=safe_post) -> list[Job]:
-    api_url, origin = _resolve(source.career_site_url)
+    api_url, site_base = _resolve(source.career_site_url)
 
     def fetch_page(offset: int):
         resp = http_post(
@@ -55,7 +58,7 @@ def fetch(source: WorkdaySource, http_post=safe_post) -> list[Job]:
 
     first_page = fetch_page(0)
     total = first_page.get("total", 0)
-    all_jobs = _parse_postings(first_page.get("jobPostings", []), source, origin)
+    all_jobs = _parse_postings(first_page.get("jobPostings", []), source, site_base)
 
     # `total` is only trustworthy on this first response -- every later
     # response reports 0 regardless of how many real results remain, and
@@ -67,7 +70,7 @@ def fetch(source: WorkdaySource, http_post=safe_post) -> list[Job]:
     offset = _PAGE_SIZE
     while offset < max_offset:
         page = fetch_page(offset)
-        all_jobs.extend(_parse_postings(page.get("jobPostings", []), source, origin))
+        all_jobs.extend(_parse_postings(page.get("jobPostings", []), source, site_base))
         offset += _PAGE_SIZE
 
     return all_jobs

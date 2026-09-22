@@ -26,14 +26,14 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/theme.js" defer></script>
-  <script src="/static/preferences.js" defer></script>
-  <script src="/static/nav.js" defer></script>
-  <script src="/static/dates.js" defer></script>
-  <script src="/static/dashboard.js" defer></script>
-  <script src="/static/confirm-modal.js" defer></script>
-  <script src="/static/toast.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
+  <script src="/static/theme.js?v={{ app_version }}" defer></script>
+  <script src="/static/preferences.js?v={{ app_version }}" defer></script>
+  <script src="/static/nav.js?v={{ app_version }}" defer></script>
+  <script src="/static/dates.js?v={{ app_version }}" defer></script>
+  <script src="/static/dashboard.js?v={{ app_version }}" defer></script>
+  <script src="/static/confirm-modal.js?v={{ app_version }}" defer></script>
+  <script src="/static/toast.js?v={{ app_version }}" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {

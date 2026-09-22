@@ -3,11 +3,12 @@ import uuid
 
 import psycopg
 import pytest
+import requests
 from alembic.config import Config
 from pytest_postgresql import factories
 
 from alembic import command
-from app import db
+from app import checker, db
 from app.web.auth import hash_password
 
 # If PGTEST_HOST is set, connect to an already-running PostgreSQL (e.g. a
@@ -22,6 +23,23 @@ if os.environ.get("PGTEST_HOST"):
 else:
     # Session-scoped PostgreSQL process (shared across all tests in a session)
     postgresql_proc = factories.postgresql_proc(port=None)
+
+
+def _offline_head(url, *, timeout, allow_redirects):
+    raise requests.ConnectionError(f"live network disabled in tests: {url}")
+
+
+@pytest.fixture(autouse=True)
+def _no_live_url_checks(monkeypatch):
+    """run_once and /check-urls call checker.check_job_urls with the real
+    requests.head; route those through an offline fake so no test makes a
+    live HEAD request. Tests that inject their own http_head are unaffected."""
+    real = checker.check_job_urls
+
+    def _check(conn, http_head=None, **kwargs):
+        return real(conn, http_head=http_head or _offline_head, **kwargs)
+
+    monkeypatch.setattr(checker, "check_job_urls", _check)
 
 
 @pytest.fixture(scope="function")

@@ -50,6 +50,23 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: s
     conn.commit()
 
 
+def refresh_job_urls(conn: psycopg.Connection, jobs: list[Job]) -> int:
+    """Overwrite the stored URL of already-known jobs whose freshly scraped URL
+    differs. Job keys never include the URL, so without this an adapter URL fix
+    (e.g. issue #175) would leave existing rows pointing at the old, broken link.
+    Returns the number of rows updated."""
+    if not jobs:
+        return 0
+    with conn.cursor() as cur:
+        cur.executemany(
+            "UPDATE jobs SET url = %s WHERE key = %s AND url IS DISTINCT FROM %s",
+            [(j.url, j.key, j.url) for j in jobs],
+        )
+        updated = cur.rowcount
+    conn.commit()
+    return max(updated, 0)
+
+
 def clear_jobs(conn: psycopg.Connection) -> None:
     conn.execute("DELETE FROM jobs")
     conn.commit()

@@ -1,4 +1,6 @@
+import logging
 import time
+from collections.abc import Iterator
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -7,6 +9,8 @@ from playwright.sync_api import sync_playwright
 from app.config import InforSource
 from app.models import Job
 from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
+
+logger = logging.getLogger(__name__)
 
 # CSS selectors for two known Infor job board UI generations.
 # v1 = Slickgrid card-stack (older).  v2 = list-view SPA (newer, e.g. Rush post-2025).
@@ -21,11 +25,16 @@ _NEXT_SELECTOR = "button.nextPage, a.nextPage"  # both UI generations use nextPa
 # .inforCardstackCell can race against the cell-render step and time out.
 _V1_SLICK_ROW = ".slick-row"
 
-# Generic "v2 grid has content" selector: waits for any child of gridContent
-# rather than li[job-req] specifically, so portals with different card markup
-# still work.  The actual card selectors (_V2_CARD, _V1_CARD) are tried by
-# _parse_page / BeautifulSoup after the HTML is retrieved.
-_V2_CONTENT_READY = "div.gridContent > *"
+# "v2 grid has content": any child of the job list's grid container, so
+# portals with different card markup still count as rendered.  Scoped to
+# #jobListScreen because the page has several div.gridContent siblings.
+# The actual card selectors (_V2_CARD, _V1_CARD) are applied by _parse_page.
+_V2_READY = "#jobListScreen .gridContent > *"
+
+# How long to wait for either board generation to render cards, and how many
+# times to load the board before giving up (issue #153).
+_READY_TIMEOUT_S = 30.0
+_LOAD_ATTEMPTS = 2
 
 
 def _parse_v1_card(card, source: InforSource) -> Job | None:
@@ -123,96 +132,119 @@ def _wait_for_new_first_title(frame, previous_title: str | None, timeout_s: floa
         time.sleep(0.5)
 
 
-def default_frame_fetcher(url: str, page_number: int) -> str | None:
+def _board_kind(page) -> str | None:
+    """Returns "v1" once Slickgrid rows exist in #parentIframe, "v2" once the
+    list-view grid in the main body has cards, else None (not rendered yet).
+
+    Lawson-hybrid portals (e.g. RUMC/Rush Oak Park) have a #jobListScreen
+    shell *and* their real cards in the iframe, so neither marker can be used
+    to rule the other out -- we poll for whichever shows up first.
+    """
+    if (page.locator("#parentIframe").count() > 0
+            and page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0):
+        return "v1"
+    if page.locator(_V2_READY).count() > 0:
+        return "v2"
+    return None
+
+
+def _wait_for_board(page) -> str:
+    deadline = time.monotonic() + _READY_TIMEOUT_S
+    while True:
+        kind = _board_kind(page)
+        if kind is not None:
+            return kind
+        if time.monotonic() >= deadline:
+            raise PlaywrightTimeoutError(
+                f"Infor board rendered no job cards within {_READY_TIMEOUT_S:.0f}s"
+            )
+        time.sleep(0.5)
+
+
+def _open_board(browser, url: str):
+    """Loads the board and waits for cards, retrying the load once: the
+    iframe's first XHR is occasionally very slow (issue #153)."""
+    for attempt in range(1, _LOAD_ATTEMPTS + 1):
+        page = browser.new_page()
+        install_ssrf_guard(page)
+        try:
+            page.goto(url, wait_until="networkidle", timeout=30000)
+            return page, _wait_for_board(page)
+        except PlaywrightTimeoutError:
+            page.close()
+            if attempt == _LOAD_ATTEMPTS:
+                raise
+            logger.warning("infor: board at %s not ready, retrying load", url)
+    raise AssertionError("unreachable")
+
+
+def _iter_v1_pages(page, max_pages: int) -> Iterator[str]:
+    # Cards live inside #parentIframe (Slickgrid card-stack), paged by a
+    # next button that swaps the grid's contents in place.
+    frame = page.frame_locator("#parentIframe")
+    for page_number in range(1, max_pages + 1):
+        if page_number > 1:
+            next_button = frame.locator(_NEXT_SELECTOR)
+            if next_button.count() == 0 or next_button.is_disabled():
+                return
+            previous_title = _first_title(frame)
+            next_button.click()
+            _wait_for_new_first_title(frame, previous_title)
+        if frame.locator(_CARD_SELECTOR).count() == 0:
+            return
+        yield frame.locator("body").inner_html()
+
+
+def _iter_v2_pages(page, max_pages: int) -> Iterator[str]:
+    # Cards render in the main body; "load more" (#gridBottom) appends to the
+    # same grid, so each yield is cumulative -- fetch() dedupes by key.
+    for page_number in range(1, max_pages + 1):
+        if page_number > 1:
+            load_more = page.locator("#gridBottom")
+            if load_more.count() == 0 or not load_more.is_visible():
+                return
+            prev_count = page.locator(_V2_READY).count()
+            load_more.click()
+            deadline = time.monotonic() + 15.0
+            while page.locator(_V2_READY).count() <= prev_count:
+                if time.monotonic() >= deadline:
+                    return
+                time.sleep(0.5)
+        yield page.locator("#jobListScreen .gridContent").first.inner_html()
+
+
+def default_page_iterator(url: str, max_pages: int) -> Iterator[str]:
+    """Yields the HTML of each results page from ONE browser session.
+
+    Earlier versions relaunched Chromium and replayed N-1 "next" clicks for
+    every page N, so a 20-page board meant 20 cold loads -- and any one slow
+    load failed the whole source (issue #153).
+    """
     assert_safe_url(url)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page()
-            install_ssrf_guard(page)
-            page.goto(url, wait_until="networkidle", timeout=30000)
-
-            # v2 portals (post-2025 Infor list-view SPA) render job cards
-            # directly in div#jobListScreen → div.gridContent in the main page
-            # body.  The iframe is absent or frozen at blank.html with no cards.
-            #
-            # Lawson-hybrid portals (e.g. RUMC/Rush Oak Park) also have
-            # #jobListScreen in the outer shell but their actual job cards live
-            # inside #parentIframe as a Slickgrid card-stack.
-            #
-            # networkidle fires before the iframe's own XHR completes, so an
-            # instant count() probe on .slick-row returns 0 even on a healthy
-            # Lawson-hybrid portal.  Instead, wait up to 5 s for the rows: if
-            # they arrive it's a Lawson hybrid; if the wait times out the iframe
-            # is a frozen blank.html and this is a true v2 portal.
-            if page.locator("#jobListScreen").count() > 0:
-                iframe_rows = False
-                if page.locator("#parentIframe").count() > 0:
-                    try:
-                        page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).first.wait_for(
-                            timeout=15000
-                        )
-                        iframe_rows = True
-                    except PlaywrightTimeoutError:
-                        iframe_rows = False
-                if not iframe_rows:
-                    # True v2: wait for any child inside the job list's grid
-                    # container.  Use the specific container to avoid strict-mode
-                    # errors (the page has multiple div.gridContent siblings).
-                    _v2_ready = "#jobListScreen .gridContent > *"
-                    page.locator(_v2_ready).first.wait_for(timeout=30000)
-
-                    for _ in range(page_number - 1):
-                        load_more = page.locator("#gridBottom")
-                        if load_more.count() == 0 or not load_more.is_visible():
-                            return None
-                        prev_count = page.locator(_v2_ready).count()
-                        load_more.click()
-                        deadline = time.monotonic() + 15.0
-                        while time.monotonic() < deadline:
-                            if page.locator(_v2_ready).count() > prev_count:
-                                break
-                            time.sleep(0.5)
-                        else:
-                            return None
-
-                    if page.locator(_v2_ready).count() == 0:
-                        return None
-                    return page.locator("#jobListScreen .gridContent").first.inner_html()
-                # else: Lawson hybrid — fall through to v1 iframe handling below.
-
-            # v1: job cards inside #parentIframe (Slickgrid card-stack).
-            # Wait for .slick-row (the Slickgrid row container) rather than the
-            # card-cell selector: Slickgrid injects the row shells first, then
-            # renders cell content asynchronously.  Waiting for the cell
-            # selector can therefore time out even on a healthy portal.
-            frame = page.frame_locator("#parentIframe")
-            frame.locator(_V1_SLICK_ROW).first.wait_for(timeout=30000)
-
-            for _ in range(page_number - 1):
-                next_button = frame.locator(_NEXT_SELECTOR)
-                if next_button.count() == 0 or next_button.is_disabled():
-                    return None
-                previous_title = _first_title(frame)
-                next_button.click()
-                _wait_for_new_first_title(frame, previous_title)
-
-            if frame.locator(_CARD_SELECTOR).count() == 0:
-                return None
-
-            return frame.locator("body").inner_html()
+            page, kind = _open_board(browser, url)
+            iter_pages = _iter_v1_pages if kind == "v1" else _iter_v2_pages
+            yield from iter_pages(page, max_pages)
         finally:
             browser.close()
 
 
-def fetch(source: InforSource, frame_fetcher=default_frame_fetcher) -> list[Job]:
+def fetch(source: InforSource, page_iterator=default_page_iterator) -> list[Job]:
+    # Any failure propagates (source marked failed) rather than returning the
+    # pages read so far: a partial result would make reconcile_jobs mark the
+    # unread pages' jobs as removed.
     all_jobs: list[Job] = []
-    for page_number in range(1, source.max_pages + 1):
-        html = frame_fetcher(source.url, page_number)
-        if html is None:
-            break
-        page_jobs = _parse_page(html, source)
-        if not page_jobs:
-            break
-        all_jobs.extend(page_jobs)
-    return all_jobs
+    pages = page_iterator(source.url, source.max_pages)
+    try:
+        for html in pages:
+            page_jobs = _parse_page(html, source)
+            if not page_jobs:
+                break
+            all_jobs.extend(page_jobs)
+    finally:
+        close = getattr(pages, "close", None)
+        if close is not None:
+            close()
+    return list({job.key: job for job in all_jobs}.values())

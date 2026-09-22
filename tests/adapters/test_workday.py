@@ -54,7 +54,7 @@ def test_fetch_maps_postings_to_job_objects():
     assert len(jobs) == 1
     assert jobs[0].key == "workday:JR100001"
     assert jobs[0].title == "Registered Nurse"
-    assert jobs[0].url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/job/naperville/Registered-Nurse_JR100001"
+    assert jobs[0].url == "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly/job/naperville/Registered-Nurse_JR100001"
     assert jobs[0].company == "Duly Health and Care"
     assert jobs[0].location == "Naperville, Illinois"
     assert jobs[0].posted_date == "Posted Today"
@@ -139,3 +139,22 @@ def test_fetch_skips_malformed_record_and_keeps_valid_ones():
     assert len(jobs) == 2
     assert jobs[0].title == "Good One"
     assert jobs[1].title == "Good Two"
+
+
+def test_job_url_includes_the_career_site_segment():
+    # Workday's externalPath is relative to the career site, not the host:
+    # {origin}{externalPath} 404s, {origin}/{site}{externalPath} is the real
+    # posting page (issue #175, verified against Duly and Endeavour).
+    source = WorkdaySource(
+        id="s2", name="Endeavour", company="Endeavour", type="workday",
+        career_site_url="https://nshs.wd1.myworkdayjobs.com/ns-eeh/",
+    )
+
+    def fake_post(url, json, timeout):
+        return FakeResponse({"total": 1, "jobPostings": [
+            make_posting(external_path="/job/EVH-Evanston-Hospital/RN_R41824-1"),
+        ]})
+
+    jobs = workday.fetch(source, http_post=fake_post)
+
+    assert jobs[0].url == "https://nshs.wd1.myworkdayjobs.com/ns-eeh/job/EVH-Evanston-Hospital/RN_R41824-1"

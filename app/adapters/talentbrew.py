@@ -1,3 +1,4 @@
+import logging
 import re
 
 from bs4 import BeautifulSoup
@@ -5,6 +6,8 @@ from bs4 import BeautifulSoup
 from app.config import TalentBrewSource
 from app.models import Job
 from app.security.ssrf_guard import safe_get
+
+logger = logging.getLogger(__name__)
 
 _RESULTS_PARAMS = {
     "ActiveFacetID": "0",
@@ -80,7 +83,14 @@ def fetch(source: TalentBrewSource, http_get=safe_get) -> list[Job]:
 
         if total_pages is None:
             match = _TOTAL_PAGES_RE.search(html)
-            total_pages = int(match.group(1)) if match else 1
+            if match:
+                total_pages = int(match.group(1))
+            else:
+                total_pages = 1
+                logger.warning(
+                    "talentbrew: no data-total-pages marker for %s; scraping page 1 only "
+                    "(markup may have changed)", source.name,
+                )
 
         page_jobs = _parse_page(html, source)
         if not page_jobs:

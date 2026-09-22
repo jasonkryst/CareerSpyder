@@ -147,3 +147,50 @@ def test_check_job_urls_only_removes_jobs_that_return_404_or_410(pg_conn):
     assert rows["gone-404"]["removed_at"] is not None
     assert rows["gone-410"]["removed_at"] is not None
     assert rows["still-live"]["removed_at"] is None
+
+
+# ── concurrency / deadline (issue #166) ─────────────────────────────────────
+
+def test_check_job_urls_checks_urls_concurrently(pg_conn):
+    import threading
+    conn = pg_conn
+    db.save_jobs(conn, [make_job(key=f"k{i}", url=f"https://example.com/{i}") for i in range(3)],
+                 db.start_run(conn))
+    # Every call waits at the barrier until all three are in flight at once --
+    # a sequential checker would time out here instead of passing through.
+    barrier = threading.Barrier(3, timeout=5)
+
+    def _head(url, *, timeout, allow_redirects):
+        barrier.wait()
+        return FakeHead(404)
+
+    count = checker.check_job_urls(conn, http_head=_head, max_workers=3)
+
+    assert count == 3
+
+
+def test_check_job_urls_stops_waiting_at_the_overall_deadline(pg_conn):
+    import threading
+    import time
+    conn = pg_conn
+    db.save_jobs(conn, [make_job(key="fast", url="https://example.com/fast"),
+                        make_job(key="slow", url="https://example.com/slow")],
+                 db.start_run(conn))
+    release = threading.Event()
+
+    def _head(url, *, timeout, allow_redirects):
+        if url.endswith("/slow"):
+            release.wait(5)
+        return FakeHead(404)
+
+    started = time.monotonic()
+    try:
+        count = checker.check_job_urls(conn, http_head=_head, max_workers=2, deadline_s=0.3)
+    finally:
+        release.set()
+    elapsed = time.monotonic() - started
+
+    removed = {r["key"] for r in db.list_jobs(conn) if r["removed_at"] is not None}
+    assert elapsed < 3
+    assert count == 1
+    assert removed == {"fast"}

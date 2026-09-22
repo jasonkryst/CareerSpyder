@@ -44,7 +44,7 @@ later rather than fixed immediately.
 
 ## Features
 
-- **Auto-dedup engine for secondary sources (issue #82, item 4).** Jobs
+- **Auto-dedup engine for secondary sources (issue #91; #82 item 4).** Jobs
   found by secondary sources (Indeed, LinkedIn) could be automatically
   compared against primary-source listings using title + company similarity
   scoring (e.g. `difflib.SequenceMatcher`) to produce low/medium/high
