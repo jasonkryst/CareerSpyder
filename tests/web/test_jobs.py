@@ -1716,3 +1716,51 @@ def test_member_job_count_excludes_other_users(client, member_client, admin_user
     resp = member_client.get("/jobs?removed=all")
 
     assert "Page 1 of 1" in resp.text
+
+
+def test_admin_user_filter_dropdown_shown_for_admin_hidden_for_member(
+    client, member_client, admin_user_id, member_user_id,
+):
+    admin_resp = client.get("/jobs")
+    member_resp = member_client.get("/jobs")
+
+    assert 'name="user"' in admin_resp.text
+    assert 'name="user"' not in member_resp.text
+
+
+def test_admin_user_filter_narrows_to_selected_user(
+    client, member_client, admin_user_id, member_user_id,
+):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.save_jobs(admin_conn, [make_job(key="a1", company="AdminCo")], admin_run, user_id=admin_user_id)
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCo")], member_run, user_id=member_user_id)
+
+    resp = client.get(f"/jobs?removed=all&user={member_user_id}")
+
+    assert "MemberCo" in resp.text
+    assert "AdminCo" not in resp.text
+    assert f'value="{member_user_id}" selected' in resp.text
+
+
+def test_non_admin_user_filter_param_is_ignored(
+    client, member_client, admin_user_id, member_user_id,
+):
+    admin_conn = client.app.state.conn
+    member_conn = member_client.app.state.conn
+
+    admin_run = db.start_run(admin_conn, user_id=admin_user_id)
+    db.save_jobs(admin_conn, [make_job(key="a1", company="AdminCo")], admin_run, user_id=admin_user_id)
+
+    member_run = db.start_run(member_conn, user_id=member_user_id)
+    db.save_jobs(member_conn, [make_job(key="m1", company="MemberCo")], member_run, user_id=member_user_id)
+
+    # Member passes the admin's user_id in the query param — must be silently ignored.
+    resp = member_client.get(f"/jobs?removed=all&user={admin_user_id}")
+
+    assert "MemberCo" in resp.text
+    assert "AdminCo" not in resp.text
