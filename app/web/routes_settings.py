@@ -2,6 +2,8 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+
+_IMPORT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
@@ -261,6 +263,12 @@ async def import_settings(
             request, "settings_data.html", {"error": "Choose a file to import."}, status_code=400,
         )
     raw = await upload.read()
+    if len(raw) > _IMPORT_MAX_BYTES:
+        return templates.TemplateResponse(
+            request, "settings_data.html",
+            {"error": "Import file is too large (max 1 MB)."},
+            status_code=413,
+        )
     try:
         data = json.loads(raw)
         sources = SourcesFile.model_validate(data).sources

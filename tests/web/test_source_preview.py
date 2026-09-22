@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import patch
 
 from app.models import Job
@@ -51,3 +52,10 @@ def test_preview_neutralizes_a_javascript_url(client):
 
     assert resp.status_code == 200
     assert resp.json()["jobs"] == [{"title": "Backend Engineer", "url": "#"}]
+
+
+def test_preview_semaphore_limits_concurrent_playwright_launches():
+    from app.web.routes_sources import _preview_semaphore
+
+    assert isinstance(_preview_semaphore, asyncio.Semaphore)
+    assert _preview_semaphore._value <= 3

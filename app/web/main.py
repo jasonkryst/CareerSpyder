@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import db
-from app.scheduler import create_scheduler
+from app.scheduler import catch_up_missed_run, create_scheduler
 from app.web.auth import UserContextMiddleware, hash_password
 from app.web.csrf_protection import OriginCheckMiddleware
 from app.web.routes_auth import router as auth_router
@@ -84,6 +84,8 @@ async def lifespan(app: FastAPI):
     app.state.secret_key = _resolve_secret_key()
     app.state.tz = tz
     app.state.scheduler = create_scheduler(pool, run_cron, tz)
+
+    catch_up_missed_run(pool, run_cron, tz)
 
     if not os.environ.get("PUBLIC_BASE_URL"):
         logger.warning(

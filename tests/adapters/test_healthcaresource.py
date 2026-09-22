@@ -142,3 +142,17 @@ def test_fetch_skips_malformed_record_and_keeps_valid_ones():
     assert len(jobs) == 2
     assert jobs[0].key == "healthcaresource:1_001"
     assert jobs[1].key == "healthcaresource:1_003"
+
+
+def test_fetch_url_encodes_site_id_with_special_characters():
+    search_calls = []
+
+    def fake_post(url, json, timeout):
+        search_calls.append(url)
+        return FakeResponse({"hits": {"total": {"value": 1}, "hits": [make_hit()]}})
+
+    source = HealthcareSource(id="s1", name="Test", type="healthcaresource", site_id="r c/mc")
+    jobs = healthcaresource.fetch(source, http_post=fake_post)
+
+    assert search_calls[0] == "https://pm.healthcaresource.com/JobseekerSearchAPI/r%20c%2Fmc/api/Search?size=1000"
+    assert jobs[0].url == "https://pm.healthcaresource.com/CS/r%20c%2Fmc/#/job/12040"

@@ -1,3 +1,4 @@
+import os
 import uuid
 
 import psycopg
@@ -9,8 +10,18 @@ from alembic import command
 from app import db
 from app.web.auth import hash_password
 
-# Session-scoped PostgreSQL process (shared across all tests in a session)
-postgresql_proc = factories.postgresql_proc(port=None)
+# If PGTEST_HOST is set, connect to an already-running PostgreSQL (e.g. a
+# Docker container) instead of spawning a managed pg_ctl process.
+if os.environ.get("PGTEST_HOST"):
+    postgresql_proc = factories.postgresql_noproc(
+        host=os.environ.get("PGTEST_HOST", "localhost"),
+        port=int(os.environ.get("PGTEST_PORT", "5432")),
+        user=os.environ.get("PGTEST_USER", "postgres"),
+        password=os.environ.get("PGTEST_PASSWORD", "") or None,
+    )
+else:
+    # Session-scoped PostgreSQL process (shared across all tests in a session)
+    postgresql_proc = factories.postgresql_proc(port=None)
 
 
 @pytest.fixture(scope="function")
@@ -20,14 +31,18 @@ def pg_dsn(postgresql_proc):
     host = postgresql_proc.host
     port = postgresql_proc.port
     user = postgresql_proc.user
+    password = getattr(postgresql_proc, "password", None) or os.environ.get("PGPASSWORD", "") or None
 
     admin = psycopg.connect(
-        f"host={host} port={port} user={user} dbname=postgres", autocommit=True
+        f"host={host} port={port} user={user} dbname=postgres",
+        password=password,
+        autocommit=True,
     )
     admin.execute(f"CREATE DATABASE {dbname}")
     admin.close()
 
-    dsn = f"postgresql://{user}@{host}:{port}/{dbname}"
+    userinfo = f"{user}:{password}" if password else user
+    dsn = f"postgresql://{userinfo}@{host}:{port}/{dbname}"
 
     cfg = Config("alembic.ini")
     cfg.set_main_option(
@@ -38,7 +53,9 @@ def pg_dsn(postgresql_proc):
         yield dsn
     finally:
         admin = psycopg.connect(
-            f"host={host} port={port} user={user} dbname=postgres", autocommit=True
+            f"host={host} port={port} user={user} dbname=postgres",
+            password=password,
+            autocommit=True,
         )
         admin.execute(f"DROP DATABASE IF EXISTS {dbname} WITH (FORCE)")
         admin.close()

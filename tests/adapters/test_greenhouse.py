@@ -89,3 +89,16 @@ def test_fetch_skips_malformed_record_and_keeps_valid_ones():
     assert len(jobs) == 2
     assert jobs[0].key == "greenhouse:1"
     assert jobs[1].key == "greenhouse:3"
+
+
+def test_fetch_url_encodes_board_token_with_special_characters():
+    calls = []
+
+    def fake_get(url, timeout):
+        calls.append(url)
+        return FakeResponse({"jobs": []})
+
+    source = GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme/corp")
+    greenhouse.fetch(source, http_get=fake_get)
+
+    assert calls[0] == "https://boards-api.greenhouse.io/v1/boards/acme%2Fcorp/jobs?content=true"

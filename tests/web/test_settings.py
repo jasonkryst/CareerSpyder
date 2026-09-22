@@ -712,3 +712,30 @@ def test_email_tab_hidden_from_member(member_client):
     resp = member_client.get("/settings/preferences")
     assert resp.status_code == 200
     assert 'href="/settings/email"' not in resp.text
+
+
+def test_post_import_rejects_oversized_file(client):
+    oversized = b"x" * (1 * 1024 * 1024 + 1)
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("big.json", oversized, "application/json")},
+    )
+
+    assert resp.status_code == 413
+    assert "too large" in resp.text.lower()
+
+
+def test_post_import_accepts_file_at_exactly_the_size_limit(client):
+    import json
+
+    payload = json.dumps({"sources": []}).encode()
+    padded = payload + b" " * (1 * 1024 * 1024 - len(payload))
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", padded, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 import requests
 
@@ -19,7 +20,7 @@ _SEARCH_BODY = {
 
 
 def fetch(source: HealthcareSource, http_post=requests.post) -> list[Job]:
-    url = f"https://pm.healthcaresource.com/JobseekerSearchAPI/{source.site_id}/api/Search?size=1000"
+    url = f"https://pm.healthcaresource.com/JobseekerSearchAPI/{quote(source.site_id, safe='')}/api/Search?size=1000"
     resp = http_post(url, json=_SEARCH_BODY, timeout=15)
     resp.raise_for_status()
     data = resp.json()
@@ -33,7 +34,7 @@ def fetch(source: HealthcareSource, http_post=requests.post) -> list[Job]:
             jobs.append(Job(
                 key=f"healthcaresource:{hit['_id']}",
                 title=src["title"],
-                url=f"https://pm.healthcaresource.com/CS/{source.site_id}/#/job/{job_id}",
+                url=f"https://pm.healthcaresource.com/CS/{quote(source.site_id, safe='')}/#/job/{job_id}",
                 company=hiring_org.get("name") or source.company,
                 location=address.get("addressLocalityRegion"),
                 posted_date=src.get("datePosted"),
