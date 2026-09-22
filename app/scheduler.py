@@ -26,8 +26,14 @@ def _today_code(tz: str) -> str:
 
 def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     settings = db.get_settings(conn, user_id)
-    if not force and settings is not None and _today_code(tz) not in (settings["email_days"] or "").split(","):
-        return
+    # NULL means the column was never set (legacy row) → no day restriction.
+    # Empty string means the user explicitly cleared all days → skip.
+    # Non-empty applies the day filter.
+    email_days_raw = (settings or {}).get("email_days")
+    if not force and email_days_raw is not None:
+        email_days = email_days_raw.strip()
+        if not email_days or _today_code(tz) not in email_days.split(","):
+            return
 
     summary = orchestrator.run_once(conn, sources, user_id=user_id)
 
@@ -38,13 +44,13 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     # Rescue jobs saved in a prior run but never emailed because the process
     # crashed between save_jobs committing and mark_emailed running.
     current_keys = {j.key for j in jobs_to_send}
-    for rescued in db.get_unemailed_jobs(conn):
+    for rescued in db.get_unemailed_jobs(conn, user_id=user_id):
         if rescued.key not in current_keys:
             jobs_to_send.append(rescued)
             current_keys.add(rescued.key)
 
     duplicate_keys = {
-        row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only")
+        row["key"] for row in db.list_jobs(conn, limit=10_000, duplicates="only", user_id=user_id)
     }
     jobs_to_send = [j for j in jobs_to_send if j.key not in duplicate_keys]
 

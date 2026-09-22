@@ -538,9 +538,9 @@ def test_run_and_notify_rescues_jobs_dropped_by_a_prior_crash(pg_dsn, monkeypatc
         with pool.connection() as conn:
             user_id = _seed_user(conn)
             _configure(conn, user_id)
-            run_id = db.start_run(conn)
+            run_id = db.start_run(conn, user_id=user_id)
             stranded = Job(key="stranded-1", title="Old Job", url="https://x.test/s", source_name="s")
-            db.save_jobs(conn, [stranded], run_id)
+            db.save_jobs(conn, [stranded], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
             # Simulate crash: save_jobs committed, mark_emailed never ran.  emailed_at IS NULL.
 

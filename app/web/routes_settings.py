@@ -9,7 +9,7 @@ from starlette.datastructures import UploadFile
 from app import db
 from app.config import SourcesFile
 from app.models import JOB_STATUSES
-from app.web.auth import require_admin, require_user
+from app.web.auth import hash_password, require_admin, require_user, verify_password
 from app.web.flash import flash_redirect
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -288,3 +288,44 @@ async def import_settings(
     if parsed_preferences is not None:
         redirect_message = f"Imported {count} source(s) and preferences."
     return flash_redirect("/settings/data", redirect_message)
+
+
+@router.get("/settings/account", response_class=HTMLResponse)
+def account_settings(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    return templates.TemplateResponse(request, "settings_account.html", {})
+
+
+@router.post("/settings/account/password")
+async def change_password(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = dict((await request.form()).items())
+    current_password = str(form.get("current_password") or "")
+    new_password = str(form.get("new_password") or "")
+    new_password_confirm = str(form.get("new_password_confirm") or "")
+
+    def _error(msg: str) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "settings_account.html",
+            {"error": msg},
+            status_code=400,
+        )
+
+    with request.app.state.pool.connection() as conn:
+        user_with_hash = db.get_user_by_id_with_hash(conn, current_user["id"])
+
+    if user_with_hash is None or not verify_password(current_password, user_with_hash["password_hash"]):
+        return _error("Current password is incorrect.")
+    if len(new_password) < 8:
+        return _error("New password must be at least 8 characters.")
+    if new_password != new_password_confirm:
+        return _error("New passwords do not match.")
+
+    with request.app.state.pool.connection() as conn:
+        db.update_password(conn, current_user["id"], hash_password(new_password))
+
+    return flash_redirect("/settings/account", "Password updated.")

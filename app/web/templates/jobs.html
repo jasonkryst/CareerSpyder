@@ -75,8 +75,18 @@
       <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
     </select>
   </label>
+  {% if is_admin %}
+  <label>User
+    <select name="user">
+      <option value="">All users</option>
+      {% for u in users %}
+      <option value="{{ u.id }}" {% if filters.user == u.id %}selected{% endif %}>{{ u.username }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>
