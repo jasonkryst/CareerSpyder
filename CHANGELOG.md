@@ -5,6 +5,49 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-09-22
+
+### Fixed
+
+- **Workday job links 404'd (issue #175).** Workday's `externalPath` is relative
+  to the career site, but links were built from the host alone
+  (`https://<tenant>.wd1.myworkdayjobs.com/job/...`). Links now include the site
+  segment (`.../<site>/job/...`). Because the broken URL 404'd, the URL checker
+  had also been marking every Workday job *removed* after each scrape. Each run
+  now refreshes the stored URL of already-known jobs, so existing rows are healed
+  on the next scrape. Expect Workday jobs that match your keywords to appear once
+  in the next digest, since they were never emailed with a working link.
+
+- **RUMC (Infor) failed most runs (issue #153).** The Infor adapter relaunched
+  Chromium and replayed every "next" click for each results page, so a 20-page
+  board meant 20 cold loads. Roughly one load in four had the board's iframe take
+  more than 15 s, after which the adapter guessed the wrong board type and failed
+  the whole source. All pages are now read from one browser session, the adapter
+  waits up to 30 s for either board generation to render, and the initial load is
+  retried once. A full RUMC scrape now takes about 11 s instead of several
+  minutes.
+
+- **TalentBrew could silently scrape only page 1 (issue #164).** If the
+  `data-total-pages` marker is missing, a warning is now logged naming the source.
+
+### Changed
+
+- **"Check job URLs" runs in parallel with a 60 s budget (issue #166).** URLs are
+  HEAD-checked on 8 worker threads, and URLs still unanswered after 60 s are left
+  for the next pass. Previously a few unresponsive hosts (10 s timeout each) could
+  hold the run lock, and block "Run now", for minutes.
+
+- **Static assets are cached by the browser for a week (issue #167).** `/static`
+  JS, CSS and images are served with `Cache-Control: public, max-age=604800`, and
+  every template reference carries `?v=<app version>` so a release busts the
+  cache. `manifest.json` and `offline.html` are served `no-cache`.
+
+### Internal
+
+- Tests can no longer make live HEAD requests through `run_once` or
+  `/check-urls`: an autouse fixture routes the URL checker through an offline
+  fake unless a test injects its own `http_head`.
+
 ## [1.3.0] — 2026-09-22
 
 ### Fixed
