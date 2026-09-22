@@ -71,6 +71,16 @@
       font-size: .875rem;
       margin-bottom: 1rem;
     }
+    .auth-success {
+      background: var(--success-bg, #f0fdf4);
+      color: var(--success, #15803d);
+      border: 1px solid var(--success-border, #86efac);
+      border-radius: 4px;
+      padding: .625rem .75rem;
+      font-size: .875rem;
+      margin-bottom: 1rem;
+    }
+    .auth-help { margin-top: 1rem; font-size: .875rem; text-align: center; }
   </style>
 </head>
 <body>
@@ -87,6 +97,9 @@
       {% if error %}
       <div class="auth-error" role="alert">{{ error }}</div>
       {% endif %}
+      {% if request.query_params.get("flash") %}
+      <div class="auth-success" role="status">{{ request.query_params.get("flash") }}</div>
+      {% endif %}
       <form method="post" action="/login">
         <input type="hidden" name="next" value="{{ next or '/' }}">
         <div class="form-group">
@@ -99,6 +112,7 @@
           <input id="password" name="password" type="password" autocomplete="current-password" required>
         </div>
         <button type="submit" class="btn btn-primary">Sign in</button>
+        <p class="auth-help"><a href="/account-recovery">Forgot username or password?</a></p>
       </form>
     </div>
   </div>

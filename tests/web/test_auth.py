@@ -568,3 +568,15 @@ def test_post_reset_password_token_is_invalidated_after_use(unauthed_client):
     })
     assert resp.status_code == 400
     assert "invalid or has expired" in resp.text.lower()
+
+
+# ── Login page links ──────────────────────────────────────────────────────────
+
+def test_login_page_shows_account_recovery_link(unauthed_client):
+    resp = unauthed_client.get("/login")
+    assert "account-recovery" in resp.text
+
+
+def test_login_page_displays_flash_message_from_query_param(unauthed_client):
+    resp = unauthed_client.get("/login?flash=Password+reset")
+    assert "Password reset" in resp.text
