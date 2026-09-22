@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "settings_tabs.html" %}
+<h1>Account</h1>
+
+{% if error %}
+<div class="error" role="alert">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/settings/account/password">
+<div class="card">
+  <fieldset>
+    <legend>Change password</legend>
+    <div class="form-group">
+      <label for="current_password">Current password</label>
+      <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="form-group">
+      <label for="new_password">New password</label>
+      <input id="new_password" name="new_password" type="password" autocomplete="new-password" required minlength="8">
+    </div>
+    <div class="form-group">
+      <label for="new_password_confirm">Confirm new password</label>
+      <input id="new_password_confirm" name="new_password_confirm" type="password" autocomplete="new-password" required minlength="8">
+    </div>
+  </fieldset>
+</div>
+<div class="form-actions">
+  <button type="submit" class="btn btn-primary">Update password</button>
+</div>
+</form>
+{% endblock %}
