@@ -5,6 +5,75 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-09-22
+
+### Fixed
+
+- **Scheduled scrapes and digest emails not running.** Two related bugs prevented
+  the cron job from ever scraping sources or sending emails after a fresh install:
+  - `_seed_settings` did not write an initial `email_days` value, so new admin
+    accounts had `email_days = NULL`.
+  - The scheduler treated `NULL`/empty `email_days` as "no days configured →
+    skip every day" instead of "not restricted → run every day." Any instance
+    whose `email_days` was not explicitly set via Settings → Preferences would
+    silently skip every scheduled run.
+  - Fix: `_seed_settings` now inserts `email_days = 'mon,tue,wed,thu,fri,sat,sun'`
+    for new rows; the scheduler treats an empty/NULL value as unrestricted (always
+    runs), so existing instances are unblocked immediately on restart.
+- **Duplicate-key filter in digest crossed user boundaries.** Jobs marked as
+  duplicates by one user could suppress email entries for another user's digest;
+  the filter is now scoped per user.
+
+## [1.2.1] — 2026-09-21
+
+### Fixed
+
+- **Data isolation for multi-user deployments.** Several views were not properly
+  scoped to the requesting user's data:
+  - The jobs map (`/jobs/map/data`) now filters by the current user's jobs;
+    previously all users' jobs were visible on any user's map.
+  - "Check job URLs" now only checks the triggering user's active jobs (admin
+    still checks all jobs, matching the all-users run behaviour).
+  - The source-name filter dropdown on the jobs and map pages now only lists
+    source names belonging to the current user (admin sees all).
+  - The scheduler's unemailed-job rescue path now scopes to the user being
+    processed, preventing one user's undelivered jobs from appearing in another
+    user's digest email.
+
+## [1.2.0] — 2026-09-21
+
+### Added
+
+- **Account recovery from the login page.** A "Forgot username or password?" link on
+  the sign-in page opens a one-page recovery flow. Enter the email address associated
+  with your account; if the email is registered and admin SMTP is configured, you'll
+  receive an email containing your username and a time-limited password-reset link
+  (expires in 1 hour). The response is always the same neutral confirmation to avoid
+  revealing whether an email address is registered.
+
+- **Password reset via email link.** The reset link from the recovery email leads to
+  `/reset-password`, where you can set a new password. The link is invalidated
+  immediately after use (the token embeds a fingerprint of the current password hash,
+  so changing the password makes any earlier token fail). A successful reset redirects
+  to the sign-in page.
+
+- **Change password from Settings.** A new **Account** tab in Settings
+  (`/settings/account`) lets any authenticated user (admin or member) change their
+  password by supplying their current password and a new one. The tab appears after
+  "Preferences" for all roles.
+
+## [1.1.1] — 2026-09-21
+
+### Fixed
+
+- **Digest emails now send for all users, not just the admin.** Member-role
+  users had empty SMTP fields in their settings row (seeded on invite
+  registration). The scheduler was reading `smtp_host` from the running user's
+  own row, so every member's digest was silently skipped. The scheduler now
+  fetches SMTP config from the admin user's settings and uses it for all
+  outgoing digests; each user's own preferences (recipients, schedule) are still
+  respected per-user.
+
 ## [1.1.0] — 2026-09-21
 
 ### Added

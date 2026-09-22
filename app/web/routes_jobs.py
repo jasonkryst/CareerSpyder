@@ -62,6 +62,7 @@ def jobs(
     location: str = "", duplicates: str = "",
     state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
+    user: str = "",
     current_user: dict = Depends(require_user),
 ):
     zip_lat: float | None = None
@@ -79,7 +80,12 @@ def jobs(
     status_filter = status or None
     state_filter = state or None
     is_admin = current_user["role"] == "admin"
-    filter_user_id = None if is_admin else current_user["id"]
+    # Admins see all users by default; the user dropdown narrows to a specific user.
+    # Non-admins are always scoped to their own data regardless of query params.
+    if is_admin:
+        filter_user_id = user if user else None
+    else:
+        filter_user_id = current_user["id"]
     with request.app.state.pool.connection() as conn:
         secondary_ids = _secondary_source_ids(conn, current_user["id"])
         total = db.count_jobs(
@@ -107,17 +113,19 @@ def jobs(
                 {"status_label": STATUSES.get(entry["status"], "No status"), "changed_at": entry["changed_at"]}
                 for entry in history.get(row["key"], [])
             ]
-        source_names = db.list_job_source_names(conn)
+        source_names = db.list_job_source_names(conn, user_id=filter_user_id)
         locations = db.list_job_locations(conn)
         states = db.list_job_states(conn)
+        users = db.list_users(conn) if is_admin else []
     return templates.TemplateResponse(request, "jobs.html", {
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "locations": locations, "states": states,
-        "statuses": STATUSES, "is_admin": is_admin,
+        "statuses": STATUSES, "is_admin": is_admin, "users": users,
         "filters": {
             "company": company, "source": source, "removed": removed, "emailed": emailed,
             "status": status, "location": location, "duplicates": duplicates,
             "state": state, "zip": zip_code, "radius": radius, "zip_error": zip_error,
+            "user": user,
         },
     })
 
@@ -132,8 +140,10 @@ def jobs_map(
     zip_code: str = Query("", alias="zip"), radius: str = "25",
     current_user: dict = Depends(require_user),
 ):
+    is_admin = current_user["role"] == "admin"
+    filter_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
-        source_names = db.list_job_source_names(conn)
+        source_names = db.list_job_source_names(conn, user_id=filter_user_id)
         locations = db.list_job_locations(conn)
         states = db.list_job_states(conn)
     return templates.TemplateResponse(request, "jobs_map.html", {
@@ -164,6 +174,8 @@ def jobs_map_data(
         if coords:
             zip_lat, zip_lng = coords
             radius_miles = float(radius) if radius in ("10", "25", "50", "100") else 25.0
+    is_admin = current_user["role"] == "admin"
+    filter_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
         settings = db.get_settings(conn, current_user["id"])
         hide_not_interested = settings is None or settings["hide_not_interested_on_map"]
@@ -174,6 +186,7 @@ def jobs_map_data(
             exclude_status=exclude_status,
             state=state or None,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+            user_id=filter_user_id,
         )
     grouped: dict[tuple, dict] = {}
     for row in rows:

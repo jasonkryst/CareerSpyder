@@ -13,11 +13,21 @@ _REMOVED_STATUSES = frozenset({404, 410})
 def check_job_urls(
     conn: psycopg.Connection,
     http_head: Callable = requests.head,
+    user_id: str | None = None,
 ) -> int:
-    """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs."""
-    rows = conn.execute(
-        "SELECT key, url FROM jobs WHERE removed_at IS NULL"
-    ).fetchall()
+    """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs.
+
+    Pass user_id to restrict checks to that user's jobs; None checks all (admin/scheduler use).
+    """
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT key, url FROM jobs WHERE removed_at IS NULL AND user_id = %s",
+            (user_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT key, url FROM jobs WHERE removed_at IS NULL"
+        ).fetchall()
 
     removed_keys: list[str] = []
     for key, url in rows:

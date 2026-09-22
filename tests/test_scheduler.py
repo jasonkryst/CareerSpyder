@@ -538,9 +538,9 @@ def test_run_and_notify_rescues_jobs_dropped_by_a_prior_crash(pg_dsn, monkeypatc
         with pool.connection() as conn:
             user_id = _seed_user(conn)
             _configure(conn, user_id)
-            run_id = db.start_run(conn)
+            run_id = db.start_run(conn, user_id=user_id)
             stranded = Job(key="stranded-1", title="Old Job", url="https://x.test/s", source_name="s")
-            db.save_jobs(conn, [stranded], run_id)
+            db.save_jobs(conn, [stranded], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
             # Simulate crash: save_jobs committed, mark_emailed never ran.  emailed_at IS NULL.
 
@@ -589,6 +589,40 @@ def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(pg_dsn,
 
         sent_keys = [j.key for j in call_args[0]]
         assert sent_keys.count("new-1") == 1
+    finally:
+        pool.close()
+
+
+def test_run_and_notify_non_admin_user_uses_admin_smtp(pg_dsn, monkeypatch):
+    """Non-admin user with empty SMTP in their own settings row should use admin SMTP."""
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            admin_id = _seed_user(conn, "admin")
+            db.save_settings(conn, admin_id, "smtp.example.com", 587, "user", "from@x.test")
+            db.save_preferences(conn, admin_id, "mon,tue,wed,thu,fri,sat,sun", False, "admin@x.test")
+
+            member = db.create_user(conn, "bob", "bob@x.test", hash_password("pw"), role="member")
+            member_id = member["id"]
+            db._seed_settings(conn, member_id, "", 587, "", "", "")
+            db.save_preferences(conn, member_id, "mon,tue,wed,thu,fri,sat,sun", False, "bob@x.test")
+
+        fake_job = Job(key="job-x", title="Engineer", url="https://x.test/x", source_name="s")
+        fake_summary = type("S", (), {"new_jobs": [fake_job], "found_jobs": [fake_job], "failed_sources": [], "run_id": 1})()
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={member_id: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")), \
+             patch("app.scheduler.emailer.send_email") as mock_send:
+            scheduler.run_and_notify(pool)
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[0] == "smtp.example.com"   # admin SMTP host
+        assert args[4] == "from@x.test"         # admin from-address
+        assert args[5] == ["bob@x.test"]         # member's own recipients
     finally:
         pool.close()
 
