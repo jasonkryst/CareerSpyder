@@ -5,6 +5,28 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-21
+
+### Added
+
+- **Account recovery from the login page.** A "Forgot username or password?" link on
+  the sign-in page opens a one-page recovery flow. Enter the email address associated
+  with your account; if the email is registered and admin SMTP is configured, you'll
+  receive an email containing your username and a time-limited password-reset link
+  (expires in 1 hour). The response is always the same neutral confirmation to avoid
+  revealing whether an email address is registered.
+
+- **Password reset via email link.** The reset link from the recovery email leads to
+  `/reset-password`, where you can set a new password. The link is invalidated
+  immediately after use (the token embeds a fingerprint of the current password hash,
+  so changing the password makes any earlier token fail). A successful reset redirects
+  to the sign-in page.
+
+- **Change password from Settings.** A new **Account** tab in Settings
+  (`/settings/account`) lets any authenticated user (admin or member) change their
+  password by supplying their current password and a new one. The tab appears after
+  "Preferences" for all roles.
+
 ## [1.1.1] — 2026-09-21
 
 ### Fixed
