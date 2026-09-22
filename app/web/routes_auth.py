@@ -1,12 +1,17 @@
+import logging
+import os
 from datetime import UTC, datetime
+from html import escape as _esc
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app import db
-from app.web.auth import hash_password, verify_password
+from app import db, emailer
+from app.web.auth import generate_reset_token, hash_password, verify_password
 from app.web.templating import templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -55,6 +60,61 @@ async def login(request: Request):
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
+
+
+@router.get("/account-recovery", response_class=HTMLResponse)
+async def account_recovery_form(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse(request, "account_recovery.html", {})
+
+
+@router.post("/account-recovery", response_class=HTMLResponse)
+async def account_recovery(request: Request):
+    form = dict((await request.form()).items())
+    email = str(form.get("email") or "").strip().lower()
+
+    if not email:
+        return templates.TemplateResponse(
+            request, "account_recovery.html",
+            {"error": "Email address is required."},
+            status_code=400,
+        )
+
+    user_with_hash = None
+    smtp = None
+    with request.app.state.pool.connection() as conn:
+        user = db.get_user_by_email(conn, email)
+        if user and user["is_active"]:
+            user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
+            smtp = db.get_admin_smtp_settings(conn)
+
+    if user_with_hash and smtp and smtp.get("smtp_host"):
+        token = generate_reset_token(
+            request.app.state.secret_key,
+            user_with_hash["id"],
+            user_with_hash["email"],
+            user_with_hash["password_hash"],
+        )
+        reset_url = str(request.base_url).rstrip("/") + f"/reset-password?token={token}"
+        try:
+            emailer.send_email(
+                smtp_host=smtp["smtp_host"],
+                smtp_port=smtp["smtp_port"],
+                smtp_user=smtp["smtp_user"],
+                smtp_password=os.environ.get("SMTP_PASSWORD", ""),
+                email_from=smtp["email_from"],
+                email_to=[email],
+                subject="CareerSpyder account recovery",
+                html_body=_recovery_email_html(user_with_hash["username"], reset_url),
+            )
+        except Exception:
+            logger.exception("Failed to send recovery email to %s", email)
+
+    return templates.TemplateResponse(
+        request, "account_recovery.html",
+        {"submitted": True},
+    )
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -129,6 +189,17 @@ async def register(request: Request):
 
     request.session["user_id"] = user["id"]
     return RedirectResponse(url="/", status_code=303)
+
+
+def _recovery_email_html(username: str, reset_url: str) -> str:
+    u = _esc(username)
+    r = _esc(reset_url)
+    return (
+        f"<p>Your username is: <strong>{u}</strong></p>"
+        f"<p>To reset your password, click the link below. It expires in 1 hour.</p>"
+        f'<p><a href="{r}">Reset my password</a></p>'
+        f"<p>If you didn't request this, you can safely ignore this email.</p>"
+    )
 
 
 def _validate_invite(invite: dict | None) -> str | None:

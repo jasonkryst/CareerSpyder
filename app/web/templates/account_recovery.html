@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Account recovery — CareerSpyder</title>
+  <meta name="theme-color" content="#b3101f">
+  <link rel="icon" href="/static/icons/favicon-32.png">
+  <script>
+    (function () {
+      var stored = localStorage.getItem("theme");
+      if (stored === "dark" || stored === "light") {
+        document.documentElement.setAttribute("data-theme", stored);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js" defer></script>
+  <style>
+    .auth-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      padding: 2rem 1rem;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #ddd);
+      border-radius: 8px;
+      padding: 2rem;
+    }
+    .auth-brand {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: var(--accent, #b3101f);
+    }
+    .auth-card h1 { font-size: 1.2rem; margin: 0 0 1.25rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: .875rem; margin-bottom: .25rem; }
+    .form-group input { width: 100%; box-sizing: border-box; }
+    .btn-primary { width: 100%; margin-top: .5rem; }
+    .auth-error {
+      background: var(--error-bg, #fef2f2);
+      color: var(--error, #b91c1c);
+      border: 1px solid var(--error-border, #fca5a5);
+      border-radius: 4px;
+      padding: .625rem .75rem;
+      font-size: .875rem;
+      margin-bottom: 1rem;
+    }
+    .auth-success {
+      background: var(--success-bg, #f0fdf4);
+      color: var(--success, #15803d);
+      border: 1px solid var(--success-border, #86efac);
+      border-radius: 4px;
+      padding: .625rem .75rem;
+      font-size: .875rem;
+      margin-bottom: 1rem;
+    }
+    .auth-help { margin-top: 1rem; font-size: .875rem; text-align: center; }
+    .auth-hint { font-size: .875rem; margin: 0 0 1.25rem; color: var(--text-muted, #555); }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="9" cy="9" r="5"></circle>
+          <line x1="13" y1="13" x2="20" y2="20"></line>
+        </svg>
+        CareerSpyder
+      </div>
+      <h1>Account recovery</h1>
+      {% if submitted %}
+      <div class="auth-success" role="status">
+        If that email is registered, we've sent you an email with your username and a password reset link.
+      </div>
+      <p class="auth-help"><a href="/login">Back to sign in</a></p>
+      {% else %}
+      {% if error %}
+      <div class="auth-error" role="alert">{{ error }}</div>
+      {% endif %}
+      <p class="auth-hint">Enter your email address and we'll send your username and a link to reset your password.</p>
+      <form method="post" action="/account-recovery">
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" autofocus required>
+        </div>
+        <button type="submit" class="btn btn-primary">Send recovery email</button>
+      </form>
+      <p class="auth-help"><a href="/login">Back to sign in</a></p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

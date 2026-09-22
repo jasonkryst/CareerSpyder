@@ -1,5 +1,7 @@
 """Tests for authentication: login, logout, registration, and access control."""
 
+from unittest.mock import patch
+
 import pytest
 from pydantic import TypeAdapter
 
@@ -397,3 +399,52 @@ def test_user_cannot_delete_another_users_source(client, admin_user_id):
     with client.app.state.pool.connection() as c:
         bobs_sources = db.list_sources(c, str(bob["id"]))
     assert len(bobs_sources) == 1
+
+
+# ── Account recovery ──────────────────────────────────────────────────────────
+
+def test_account_recovery_form_renders_for_unauthenticated_user(unauthed_client):
+    resp = unauthed_client.get("/account-recovery")
+    assert resp.status_code == 200
+    assert 'name="email"' in resp.text
+
+
+def test_authenticated_user_redirected_from_account_recovery(client):
+    resp = client.get("/account-recovery", follow_redirects=False)
+    assert resp.status_code in (302, 303)
+    assert resp.headers["location"] == "/"
+
+
+def test_account_recovery_with_registered_email_shows_confirmation(unauthed_client):
+    with patch("app.emailer.send_email"):
+        resp = unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
+    assert resp.status_code == 200
+    assert "we've sent" in resp.text.lower()
+
+
+def test_account_recovery_with_registered_email_sends_one_email(unauthed_client):
+    with patch("app.emailer.send_email") as mock_send:
+        unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
+    assert mock_send.call_count == 1
+
+
+def test_account_recovery_email_contains_username_and_reset_link(unauthed_client):
+    with patch("app.emailer.send_email") as mock_send:
+        unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
+    kwargs = mock_send.call_args.kwargs
+    assert "admin" in kwargs["html_body"]
+    assert "/reset-password?token=" in kwargs["html_body"]
+
+
+def test_account_recovery_with_unknown_email_shows_same_confirmation(unauthed_client):
+    with patch("app.emailer.send_email") as mock_send:
+        resp = unauthed_client.post("/account-recovery", data={"email": "nobody@x.test"})
+    assert resp.status_code == 200
+    assert "we've sent" in resp.text.lower()
+    mock_send.assert_not_called()
+
+
+def test_account_recovery_with_empty_email_returns_400(unauthed_client):
+    resp = unauthed_client.post("/account-recovery", data={"email": ""})
+    assert resp.status_code == 400
+    assert "required" in resp.text.lower()
