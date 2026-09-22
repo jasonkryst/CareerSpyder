@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-from app.adapters.infor import _parse_page, default_frame_fetcher
+from app.adapters.infor import _parse_page, default_page_iterator
 from app.config import InforSource
 
 _RUMC_URL = os.environ.get("INFOR_TEST_URL_RUMC")
@@ -42,9 +42,10 @@ def _assert_jobs_valid(jobs, url: str) -> None:
 def test_rumc_returns_jobs():
     """RUMC is a Lawson-hybrid portal — #jobListScreen shell with a Slickgrid iframe."""
     assert _RUMC_URL  # narrow type for mypy
-    html = default_frame_fetcher(_RUMC_URL, page_number=1)
+    pages = list(default_page_iterator(_RUMC_URL, max_pages=1))
+    html = pages[0] if pages else None
 
-    assert html is not None, f"frame fetcher returned None for {_RUMC_URL}"
+    assert html is not None, f"page iterator yielded no page for {_RUMC_URL}"
     # Lawson-hybrid portals return v1 Slickgrid HTML from the iframe body.
     # If this assertion fails the portal UI has changed to v2 list-view.
     assert "inforCardstackCell" in html, (
@@ -62,9 +63,10 @@ def test_rumc_returns_jobs():
 def test_rush_oak_park_returns_jobs():
     """Rush Oak Park is also a Lawson-hybrid Infor portal."""
     assert _RUSH_OAK_PARK_URL
-    html = default_frame_fetcher(_RUSH_OAK_PARK_URL, page_number=1)
+    pages = list(default_page_iterator(_RUSH_OAK_PARK_URL, max_pages=1))
+    html = pages[0] if pages else None
 
-    assert html is not None, f"frame fetcher returned None for {_RUSH_OAK_PARK_URL}"
+    assert html is not None, f"page iterator yielded no page for {_RUSH_OAK_PARK_URL}"
     assert "inforCardstackCell" in html, (
         "Expected Lawson-hybrid (v1 Slickgrid) HTML — portal type may have changed. "
         f"HTML snippet: {html[:500]}"

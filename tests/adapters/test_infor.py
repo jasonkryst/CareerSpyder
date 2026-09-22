@@ -1,9 +1,10 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.adapters import infor
-from app.adapters.infor import _title_changed, default_frame_fetcher
+from app.adapters.infor import _title_changed, default_page_iterator
 from app.config import InforSource
 
 # ── v1 (Slickgrid card-stack) HTML fixtures ──────────────────────────────────
@@ -115,6 +116,18 @@ def make_source(max_pages=3):
     )
 
 
+def _by_page_number(fetcher):
+    """Adapts a `fetcher(url, page_number) -> html | None` fake to the
+    `page_iterator(url, max_pages)` shape fetch() takes."""
+    def page_iterator(url, max_pages):
+        for page_number in range(1, max_pages + 1):
+            html = fetcher(url, page_number)
+            if html is None:
+                return
+            yield html
+    return page_iterator
+
+
 # ── v1 parsing tests ──────────────────────────────────────────────────────────
 
 def test_fetch_parses_single_page_of_v1_cards():
@@ -122,7 +135,7 @@ def test_fetch_parses_single_page_of_v1_cards():
         assert url == "https://rush.test/careers"
         return PAGE_1_HTML if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 2
     assert jobs[0].title == "Anesthesia Tech 1"
@@ -146,17 +159,17 @@ def test_fetch_paginates_up_to_max_pages():
             return PAGE_2_HTML
         return None
 
-    jobs = infor.fetch(make_source(max_pages=2), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(max_pages=2), page_iterator=_by_page_number(fake_fetcher))
 
     assert calls == [1, 2]
     assert [j.title for j in jobs] == ["Anesthesia Tech 1", "Supply Chain MDM Analyst", "Physical Therapist"]
 
 
-def test_fetch_stops_early_when_frame_fetcher_returns_none():
+def test_fetch_stops_early_when_page_iterator_is_exhausted():
     def fake_fetcher(url, page_number):
         return PAGE_1_HTML if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(max_pages=5), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(max_pages=5), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 2
 
@@ -167,7 +180,7 @@ def test_fetch_stops_when_a_page_has_zero_cards():
             return PAGE_1_HTML
         return "<div>no cards here</div>"
 
-    jobs = infor.fetch(make_source(max_pages=5), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(max_pages=5), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 2
 
@@ -176,7 +189,7 @@ def test_v1_card_missing_posted_and_location_still_yields_a_job_with_none_fields
     def fake_fetcher(url, page_number):
         return CARD_MISSING_POSTED_AND_LOCATION if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 1
     assert jobs[0].title == "Bare Title Only"
@@ -188,10 +201,10 @@ def test_job_key_is_stable_across_identical_cards_and_differs_for_different_ones
     def fake_fetcher(url, page_number):
         return PAGE_1_HTML if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert jobs[0].key != jobs[1].key
-    jobs_again = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs_again = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
     assert jobs[0].key == jobs_again[0].key
 
 
@@ -201,7 +214,7 @@ def test_fetch_parses_v2_listview_cards():
     def fake_fetcher(url, page_number):
         return V2_PAGE_1_HTML if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 2
     assert jobs[0].title == "Radiation Therapist"
@@ -217,7 +230,7 @@ def test_v2_card_without_subcategory_parses_correctly():
     def fake_fetcher(url, page_number):
         return V2_CARD_NO_SUBCATEGORY if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 1
     assert jobs[0].title == "CT Tech"
@@ -229,7 +242,7 @@ def test_v2_card_missing_p_listview_heading_is_skipped():
     def fake_fetcher(url, page_number):
         return V2_CARD_MISSING_TITLE if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert len(jobs) == 0
 
@@ -240,7 +253,7 @@ def test_v2_takes_priority_over_v1_when_both_selectors_present():
     def fake_fetcher(url, page_number):
         return mixed_html if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     # v2 cards are found first; v1 cards are ignored
     assert all(j.title in ("Radiation Therapist", "MRI Technologist") for j in jobs)
@@ -251,8 +264,8 @@ def test_v2_key_is_stable_and_differs_between_cards():
     def fake_fetcher(url, page_number):
         return V2_PAGE_1_HTML if page_number == 1 else None
 
-    jobs = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
-    jobs_again = infor.fetch(make_source(), frame_fetcher=fake_fetcher)
+    jobs = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
+    jobs_again = infor.fetch(make_source(), page_iterator=_by_page_number(fake_fetcher))
 
     assert jobs[0].key != jobs[1].key
     assert jobs[0].key == jobs_again[0].key
@@ -272,410 +285,250 @@ def test_title_changed_true_when_previous_is_none():
     assert _title_changed("First Title", None) is True
 
 
-def _make_page_mock(*, cell_count=1, disabled=False):
-    """Builds a fake Playwright page/frame chain for v1 (Slickgrid) fetcher tests.
+# ── fetch(): session lifecycle ───────────────────────────────────────────────
 
-    page.locator("#jobListScreen") returns count=0 so the v1 iframe branch is
-    taken.  _first_title() tries "p.listview-heading" first (v2), then
-    ".inforCardstackHeading" (v1); the mock returns count=0 for the v2 selector
-    so it falls through to v1 — each call returns a new unique title so
-    _wait_for_new_first_title always sees a change on its first iteration without
-    burning real-time on the 15-second deadline (only time.sleep is mocked, not
-    time.monotonic).
-    """
-    v2_heading = MagicMock()
-    v2_heading.count.return_value = 0
+def test_fetch_dedupes_cumulative_v2_pages_by_key():
+    # v2 "load more" appends to the same grid, so each yielded page repeats
+    # the earlier cards; fetch must not return them twice.
+    def page_iterator(url, max_pages):
+        yield V2_PAGE_1_HTML
+        yield V2_PAGE_1_HTML + V2_CARD_NO_SUBCATEGORY
 
-    v1_heading = MagicMock()
-    v1_heading.count.return_value = 1
-    titles = (f"Title {i}" for i in range(1000))
-    v1_heading.first.text_content.side_effect = lambda: next(titles)
+    jobs = infor.fetch(make_source(), page_iterator=page_iterator)
 
-    card_locator = MagicMock()
-    card_locator.count.return_value = cell_count
-
-    next_locator = MagicMock()
-    next_locator.count.return_value = 1
-    next_locator.is_disabled.return_value = disabled
-
-    body_locator = MagicMock()
-    body_locator.inner_html.return_value = "<div class='inforCardstackCell'></div>"
-
-    frame = MagicMock()
-
-    slick_row_locator = MagicMock()  # wait_for() returns None by default — that's fine
-
-    def frame_locator_side_effect(selector):
-        return {
-            infor._V1_SLICK_ROW: slick_row_locator,
-            infor._CARD_SELECTOR: card_locator,
-            infor._NEXT_SELECTOR: next_locator,
-            "p.listview-heading": v2_heading,
-            ".inforCardstackHeading": v1_heading,
-            "body": body_locator,
-        }[selector]
-
-    frame.locator.side_effect = frame_locator_side_effect
-
-    # v2-detection locator: count=0 so code takes the v1 iframe branch
-    job_list_screen_locator = MagicMock()
-    job_list_screen_locator.count.return_value = 0
-
-    page = MagicMock()
-    page.frame_locator.return_value = frame
-    page.locator.side_effect = lambda sel: job_list_screen_locator if sel == "#jobListScreen" else MagicMock()
-
-    pw_browser = MagicMock()
-    pw_browser.new_page.return_value = page
-
-    p = MagicMock()
-    p.chromium.launch.return_value = pw_browser
-
-    sync_playwright_cm = MagicMock()
-    sync_playwright_cm.__enter__.return_value = p
-    sync_playwright_cm.__exit__.return_value = False
-
-    return sync_playwright_cm, pw_browser, page, next_locator, card_locator
+    assert [j.title for j in jobs] == ["Radiation Therapist", "MRI Technologist", "CT Tech"]
 
 
-def _make_v2_page_mock(*, cell_count=2, has_load_more=False, cell_count_after_load=None):
-    """Builds a fake Playwright page for v2 (list-view SPA) fetcher tests.
+def test_fetch_closes_the_page_iterator_when_it_stops_early():
+    closed = []
 
-    page.locator("#jobListScreen").count() returns 1 → v2 branch.
-    page.locator("#parentIframe").count() returns 0 → no iframe probe short-circuit.
-    cell_count_after_load lets pagination tests simulate the count rising after a
-    "load more" click.
-    """
-    job_list_screen_locator = MagicMock()
-    job_list_screen_locator.count.return_value = 1
+    def page_iterator(url, max_pages):
+        try:
+            yield PAGE_1_HTML
+            yield "<div>no cards</div>"
+            yield PAGE_2_HTML
+        finally:
+            closed.append(True)
 
-    # Explicit 0 so the Lawson-hybrid iframe probe short-circuits correctly.
-    no_iframe_locator = MagicMock()
-    no_iframe_locator.count.return_value = 0
+    infor.fetch(make_source(max_pages=5), page_iterator=page_iterator)
 
-    # "#jobListScreen .gridContent > *" — the v2 content-ready selector.
-    v2_card_locator = MagicMock()
-    if cell_count_after_load is not None:
-        v2_card_locator.count.side_effect = [cell_count, cell_count_after_load] * 10
-    else:
-        v2_card_locator.count.return_value = cell_count
-
-    load_more_locator = MagicMock()
-    load_more_locator.count.return_value = 1 if has_load_more else 0
-    load_more_locator.is_visible.return_value = has_load_more
-
-    # "#jobListScreen .gridContent" — inner_html via .first
-    grid_content_locator = MagicMock()
-    grid_content_locator.first.inner_html.return_value = (
-        "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
-    )
-
-    def page_locator_side_effect(selector):
-        return {
-            "#jobListScreen": job_list_screen_locator,
-            "#parentIframe": no_iframe_locator,
-            "#jobListScreen .gridContent > *": v2_card_locator,
-            "#gridBottom": load_more_locator,
-            "#jobListScreen .gridContent": grid_content_locator,
-        }.get(selector, MagicMock())
-
-    page = MagicMock()
-    page.locator.side_effect = page_locator_side_effect
-
-    pw_browser = MagicMock()
-    pw_browser.new_page.return_value = page
-
-    p = MagicMock()
-    p.chromium.launch.return_value = pw_browser
-
-    sync_playwright_cm = MagicMock()
-    sync_playwright_cm.__enter__.return_value = p
-    sync_playwright_cm.__exit__.return_value = False
-
-    return sync_playwright_cm, pw_browser, page, load_more_locator, v2_card_locator
+    assert closed == [True]
 
 
-def test_default_frame_fetcher_returns_none_when_next_button_is_disabled():
-    sync_playwright_cm, *_ = _make_page_mock(disabled=True)
+def test_fetch_propagates_a_mid_run_failure_instead_of_returning_partial_jobs():
+    # A partial result would make reconcile_jobs mark every job on the unread
+    # pages as removed, then re-email them on the next full run.
+    def page_iterator(url, max_pages):
+        yield PAGE_1_HTML
+        raise PlaywrightTimeoutError("page 2 never rendered")
 
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
-
-    assert result is None
-
-
-def test_default_frame_fetcher_returns_none_when_no_next_button():
-    sync_playwright_cm, _, _, next_locator, _ = _make_page_mock()
-    next_locator.count.return_value = 0
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
-
-    assert result is None
+    with pytest.raises(PlaywrightTimeoutError):
+        infor.fetch(make_source(max_pages=5), page_iterator=page_iterator)
 
 
-def test_default_frame_fetcher_returns_none_when_zero_cards():
-    sync_playwright_cm, *_ = _make_page_mock(cell_count=0)
+# ── Browser session (default_page_iterator) with a fake Playwright page ──────
 
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
+class _FakeLocator:
+    def __init__(self, count=0, html="", text=None, disabled=False, visible=True, on_click=None):
+        self._count, self._html, self._text = count, html, text
+        self._disabled, self._visible, self._on_click = disabled, visible, on_click
+        self.clicks = 0
 
-    assert result is None
+    def count(self):
+        return self._count() if callable(self._count) else self._count
+
+    @property
+    def first(self):
+        return self
+
+    def inner_html(self):
+        return self._html() if callable(self._html) else self._html
+
+    def text_content(self):
+        return self._text() if callable(self._text) else self._text
+
+    def is_disabled(self):
+        return self._disabled
+
+    def is_visible(self):
+        return self._visible
+
+    def click(self):
+        self.clicks += 1
+        if self._on_click:
+            self._on_click()
 
 
-def test_default_frame_fetcher_clicks_next_page_number_minus_one_times():
-    sync_playwright_cm, _, _, next_locator, _ = _make_page_mock(cell_count=1)
+class _FakeFrame:
+    def __init__(self, locators):
+        self._locators = locators
 
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
+    def locator(self, selector):
+        return self._locators.get(selector, _FakeLocator())
+
+
+class _FakePage:
+    def __init__(self, page_locators=None, frame_locators=None):
+        self._page_locators = page_locators or {}
+        self._frame = _FakeFrame(frame_locators or {})
+        self.closed = False
+
+    def goto(self, url, wait_until, timeout):
+        pass
+
+    def locator(self, selector):
+        return self._page_locators.get(selector, _FakeLocator())
+
+    def frame_locator(self, selector):
+        assert selector == "#parentIframe"
+        return self._frame
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeBrowser:
+    def __init__(self, pages):
+        self._pages = list(pages)
+        self.opened: list[_FakePage] = []
+        self.closed = False
+
+    def new_page(self):
+        page = self._pages.pop(0)
+        self.opened.append(page)
+        return page
+
+    def close(self):
+        self.closed = True
+
+
+class _FakePlaywright:
+    def __init__(self, browser):
+        self.chromium = self
+        self._browser = browser
+
+    def launch(self):
+        return self._browser
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _v1_page(pages_html, *, ready_after_polls=0):
+    """Lawson-hybrid/v1 board: Slickgrid rows inside #parentIframe, paged by a
+    next button. Rows appear only after `ready_after_polls` readiness polls."""
+    state = {"page": 0, "polls": 0}
+
+    def rows():
+        state["polls"] += 1
+        return 10 if state["polls"] > ready_after_polls else 0
+
+    def advance():
+        state["page"] += 1
+
+    next_button = _FakeLocator(count=1, on_click=advance)
+    frame = {
+        infor._V1_SLICK_ROW: _FakeLocator(count=rows),
+        infor._CARD_SELECTOR: _FakeLocator(count=lambda: 1 if state["page"] < len(pages_html) else 0),
+        infor._NEXT_SELECTOR: next_button,
+        ".inforCardstackHeading": _FakeLocator(count=1, text=lambda: f"first-title-{state['page']}"),
+        "body": _FakeLocator(html=lambda: pages_html[min(state["page"], len(pages_html) - 1)]),
+    }
+    page = _FakePage(page_locators={"#jobListScreen": _FakeLocator(count=1),
+                                    "#parentIframe": _FakeLocator(count=1)},
+                     frame_locators=frame)
+    return page, next_button
+
+
+def _v2_page(grid_html, *, cards=2):
+    return _FakePage(page_locators={
+        "#jobListScreen": _FakeLocator(count=1),
+        infor._V2_READY: _FakeLocator(count=cards),
+        "#jobListScreen .gridContent": _FakeLocator(html=grid_html),
+        "#gridBottom": _FakeLocator(count=0, visible=False),
+    })
+
+
+def _never_ready_page():
+    return _FakePage(page_locators={"#jobListScreen": _FakeLocator(count=1)})
+
+
+def _run(browser, url="https://rush.test/careers", max_pages=5, ready_timeout_s=0.05):
+    with patch("app.adapters.infor.sync_playwright", return_value=_FakePlaywright(browser)), \
          patch("app.adapters.infor.assert_safe_url"), \
          patch("app.adapters.infor.install_ssrf_guard"), \
-         patch("app.adapters.infor.time.sleep"):
-        default_frame_fetcher("https://rush.test/careers", page_number=3)
-
-    assert next_locator.click.call_count == 2
-
-
-def test_default_frame_fetcher_returns_html_when_cards_present():
-    sync_playwright_cm, *_ = _make_page_mock(cell_count=1)
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
-
-    assert result == "<div class='inforCardstackCell'></div>"
+         patch("app.adapters.infor.time.sleep"), \
+         patch("app.adapters.infor._READY_TIMEOUT_S", ready_timeout_s):
+        return list(default_page_iterator(url, max_pages))
 
 
-def test_default_frame_fetcher_validates_url_before_launching_browser():
+def test_page_iterator_walks_all_v1_pages_in_one_browser_session():
+    page, next_button = _v1_page([PAGE_1_HTML, PAGE_2_HTML])
+    browser = _FakeBrowser([page])
+
+    htmls = _run(browser, max_pages=5)
+
+    assert htmls == [PAGE_1_HTML, PAGE_2_HTML]
+    assert len(browser.opened) == 1          # one page load, not one per results page
+    assert next_button.clicks == 2           # page 2, then the click that runs out of cards
+    assert browser.closed
+
+
+def test_page_iterator_respects_max_pages():
+    page, next_button = _v1_page([PAGE_1_HTML, PAGE_2_HTML, PAGE_1_HTML])
+
+    htmls = _run(_FakeBrowser([page]), max_pages=2)
+
+    assert len(htmls) == 2
+    assert next_button.clicks == 1
+
+
+def test_page_iterator_stops_when_next_button_is_disabled():
+    page, next_button = _v1_page([PAGE_1_HTML, PAGE_2_HTML])
+    next_button._disabled = True
+
+    assert _run(_FakeBrowser([page])) == [PAGE_1_HTML]
+
+
+def test_page_iterator_waits_for_slow_lawson_iframe_instead_of_assuming_v2():
+    # Regression for #153: RUMC's iframe rows sometimes take longer than the
+    # old fixed 15s probe; the old code then waited for v2 cards that never
+    # come and failed the whole source.
+    page, _ = _v1_page([PAGE_1_HTML], ready_after_polls=3)
+
+    assert _run(_FakeBrowser([page]), ready_timeout_s=5) == [PAGE_1_HTML]
+
+
+def test_page_iterator_reads_v2_grid_when_there_are_no_iframe_rows():
+    assert _run(_FakeBrowser([_v2_page(V2_PAGE_1_HTML)])) == [V2_PAGE_1_HTML]
+
+
+def test_page_iterator_retries_the_initial_load_once():
+    slow, good = _never_ready_page(), _v1_page([PAGE_1_HTML])[0]
+    browser = _FakeBrowser([slow, good])
+
+    assert _run(browser) == [PAGE_1_HTML]
+    assert slow.closed
+    assert browser.closed
+
+
+def test_page_iterator_raises_after_the_retry_also_times_out():
+    browser = _FakeBrowser([_never_ready_page(), _never_ready_page()])
+
+    with pytest.raises(PlaywrightTimeoutError):
+        _run(browser)
+    assert browser.closed
+
+
+def test_page_iterator_validates_url_before_launching_browser():
     from app.security.ssrf_guard import UnsafeUrlError
 
-    with patch("app.adapters.infor.assert_safe_url", side_effect=UnsafeUrlError("blocked")) as mock_assert, \
-         patch("app.adapters.infor.sync_playwright") as mock_sync_playwright:
-        try:
-            default_frame_fetcher("http://169.254.169.254/", page_number=1)
-        except UnsafeUrlError:
-            pass
+    with patch("app.adapters.infor.assert_safe_url", side_effect=UnsafeUrlError("blocked")), \
+         patch("app.adapters.infor.sync_playwright") as mock_sync_playwright, \
+         pytest.raises(UnsafeUrlError):
+        list(default_page_iterator("http://169.254.169.254/", 1))
 
-    mock_assert.assert_called_once_with("http://169.254.169.254/")
     mock_sync_playwright.assert_not_called()
-
-
-def test_default_frame_fetcher_v2_returns_html_when_cards_present():
-    sync_playwright_cm, *_ = _make_v2_page_mock(cell_count=2)
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
-
-    assert result == "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
-
-
-def test_default_frame_fetcher_v2_returns_none_when_zero_cards():
-    sync_playwright_cm, *_ = _make_v2_page_mock(cell_count=0)
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
-
-    assert result is None
-
-
-def test_default_frame_fetcher_v2_returns_none_when_no_load_more_button():
-    sync_playwright_cm, _, _, load_more_locator, _ = _make_v2_page_mock(
-        cell_count=2, has_load_more=False
-    )
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=2)
-
-    assert result is None
-    load_more_locator.click.assert_not_called()
-
-
-def test_default_frame_fetcher_v2_clicks_load_more_page_number_minus_one_times():
-    sync_playwright_cm, _, _, load_more_locator, _ = _make_v2_page_mock(
-        cell_count=2, has_load_more=True, cell_count_after_load=4
-    )
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"), \
-         patch("app.adapters.infor.time.sleep"):
-        default_frame_fetcher("https://rush.test/careers", page_number=3)
-
-    assert load_more_locator.click.call_count == 2
-
-
-def _make_lawson_hybrid_page_mock(*, cell_count=1, disabled=False):
-    """Builds a fake Playwright page for Lawson-hybrid portals (RUMC/Rush Oak Park).
-
-    These portals have *both* #jobListScreen in the main body (which would normally
-    trigger v2 detection) AND #parentIframe containing a Slickgrid card-stack.
-    The fetcher should detect Slickgrid rows in the iframe and take the v1 path.
-    """
-    # Main body: #jobListScreen present (count=1) but is just a filter shell
-    job_list_screen_locator = MagicMock()
-    job_list_screen_locator.count.return_value = 1
-
-    # Main body: #parentIframe present (count=1)
-    parent_iframe_locator = MagicMock()
-    parent_iframe_locator.count.return_value = 1
-
-    def page_locator_side_effect(selector):
-        return {
-            "#jobListScreen": job_list_screen_locator,
-            "#parentIframe": parent_iframe_locator,
-        }.get(selector, MagicMock())
-
-    # Inside the iframe: slick-row rows are already present (Slickgrid loaded)
-    slick_row_probe = MagicMock()
-    slick_row_probe.count.return_value = cell_count  # >0 triggers Lawson hybrid detection
-
-    slick_row_wait = MagicMock()  # same selector used for wait_for later
-
-    v2_heading = MagicMock()
-    v2_heading.count.return_value = 0
-
-    v1_heading = MagicMock()
-    v1_heading.count.return_value = 1
-    titles = (f"Title {i}" for i in range(1000))
-    v1_heading.first.text_content.side_effect = lambda: next(titles)
-
-    card_locator = MagicMock()
-    card_locator.count.return_value = cell_count
-
-    next_locator = MagicMock()
-    next_locator.count.return_value = 1
-    next_locator.is_disabled.return_value = disabled
-
-    body_locator = MagicMock()
-    body_locator.inner_html.return_value = "<div class='inforCardstackCell'><span class='inforCardstackHeading'>Radiation Therapist</span></div>"
-
-    iframe_call_count = [0]
-
-    def frame_locator_side_effect(selector):
-        # First call to _V1_SLICK_ROW is the probe (count() only).
-        # Subsequent calls are the actual wait and count checks.
-        if selector == infor._V1_SLICK_ROW:
-            iframe_call_count[0] += 1
-            return slick_row_probe if iframe_call_count[0] == 1 else slick_row_wait
-        return {
-            infor._CARD_SELECTOR: card_locator,
-            infor._NEXT_SELECTOR: next_locator,
-            "p.listview-heading": v2_heading,
-            ".inforCardstackHeading": v1_heading,
-            "body": body_locator,
-        }[selector]
-
-    frame = MagicMock()
-    frame.locator.side_effect = frame_locator_side_effect
-
-    page = MagicMock()
-    page.locator.side_effect = page_locator_side_effect
-    page.frame_locator.return_value = frame
-
-    pw_browser = MagicMock()
-    pw_browser.new_page.return_value = page
-
-    p = MagicMock()
-    p.chromium.launch.return_value = pw_browser
-
-    sync_playwright_cm = MagicMock()
-    sync_playwright_cm.__enter__.return_value = p
-    sync_playwright_cm.__exit__.return_value = False
-
-    return sync_playwright_cm, pw_browser, page, next_locator, card_locator
-
-
-def test_default_frame_fetcher_lawson_hybrid_uses_v1_iframe_path():
-    """Portals with #jobListScreen shell + Slickgrid iframe should take v1 path."""
-    sync_playwright_cm, *_ = _make_lawson_hybrid_page_mock(cell_count=5)
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
-
-    assert result is not None
-    assert "inforCardstackCell" in result
-
-
-def _make_v2_with_frozen_iframe_page_mock():
-    """Portals with #jobListScreen + a frozen #parentIframe (blank.html, no .slick-row).
-
-    This is the race-condition scenario: networkidle fires before the iframe XHR
-    completes and the .slick-row probe times out.  The fetcher should fall back to
-    the v2 path and read from .gridContent.
-    """
-    job_list_screen_locator = MagicMock()
-    job_list_screen_locator.count.return_value = 1
-
-    parent_iframe_locator = MagicMock()
-    parent_iframe_locator.count.return_value = 1
-
-    # Slick-row probe inside the iframe raises TimeoutError — rows never appear.
-    slick_row_probe = MagicMock()
-    slick_row_probe.first.wait_for.side_effect = PlaywrightTimeoutError("Timeout 15000ms exceeded")
-
-    frozen_frame = MagicMock()
-    frozen_frame.locator.return_value = slick_row_probe
-
-    # v2 grid content is available in the main body.
-    v2_card_locator = MagicMock()
-    v2_card_locator.count.return_value = 2
-
-    grid_content_locator = MagicMock()
-    grid_content_locator.first.inner_html.return_value = (
-        "<li job-req='1'><p class='listview-heading'>Test Job</p></li>"
-    )
-
-    def page_locator_side_effect(selector):
-        return {
-            "#jobListScreen": job_list_screen_locator,
-            "#parentIframe": parent_iframe_locator,
-            "#jobListScreen .gridContent > *": v2_card_locator,
-            "#gridBottom": MagicMock(count=lambda: 0, is_visible=lambda: False),
-            "#jobListScreen .gridContent": grid_content_locator,
-        }.get(selector, MagicMock())
-
-    page = MagicMock()
-    page.locator.side_effect = page_locator_side_effect
-    page.frame_locator.return_value = frozen_frame
-
-    pw_browser = MagicMock()
-    pw_browser.new_page.return_value = page
-
-    p = MagicMock()
-    p.chromium.launch.return_value = pw_browser
-
-    sync_playwright_cm = MagicMock()
-    sync_playwright_cm.__enter__.return_value = p
-    sync_playwright_cm.__exit__.return_value = False
-
-    return sync_playwright_cm
-
-
-def test_default_frame_fetcher_lawson_probe_timeout_falls_back_to_v2():
-    """Regression: if networkidle fires before iframe XHR completes the probe
-    wait_for times out.  The fetcher must not then be marked failed — it should
-    fall back to the v2 path and return content from .gridContent.
-    """
-    sync_playwright_cm = _make_v2_with_frozen_iframe_page_mock()
-
-    with patch("app.adapters.infor.sync_playwright", return_value=sync_playwright_cm), \
-         patch("app.adapters.infor.assert_safe_url"), \
-         patch("app.adapters.infor.install_ssrf_guard"):
-        result = default_frame_fetcher("https://rush.test/careers", page_number=1)
-
-    assert result is not None
-    assert "listview-heading" in result
