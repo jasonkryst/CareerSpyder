@@ -666,3 +666,59 @@ def test_create_scheduler_sets_misfire_grace_time_to_one_hour(pg_dsn):
             sched.shutdown()
     finally:
         pool.close()
+
+
+class _FakePool:
+    def connection(self):
+        from contextlib import nullcontext
+        return nullcontext(object())
+
+
+def _catch_up(monkeypatch, *, last_run, now, run_cron="0 8 * * *", tz="UTC"):
+    started = []
+
+    class _FakeThread:
+        def __init__(self, target, args, daemon, name):
+            self.target, self.args = target, args
+
+        def start(self):
+            started.append(self)
+
+    monkeypatch.setattr(scheduler.db, "get_last_run_date", lambda conn, tz: last_run)
+    monkeypatch.setattr(scheduler.threading, "Thread", _FakeThread)
+    fired = scheduler.catch_up_missed_run(_FakePool(), run_cron, tz, now=now)
+    assert fired == bool(started)
+    return fired
+
+
+def test_catch_up_fires_when_no_run_today_and_cron_hour_passed(monkeypatch):
+    from datetime import UTC, date, datetime
+    now = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
+    assert _catch_up(monkeypatch, last_run=date(2026, 9, 21), now=now) is True
+    assert _catch_up(monkeypatch, last_run=None, now=now) is True
+
+
+def test_catch_up_skips_when_already_ran_today(monkeypatch):
+    from datetime import UTC, date, datetime
+    now = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
+    assert _catch_up(monkeypatch, last_run=date(2026, 9, 22), now=now) is False
+
+
+def test_catch_up_skips_before_cron_hour(monkeypatch):
+    from datetime import UTC, datetime
+    now = datetime(2026, 9, 22, 7, 59, tzinfo=UTC)
+    assert _catch_up(monkeypatch, last_run=None, now=now) is False
+
+
+def test_catch_up_fires_when_cron_hour_is_not_a_plain_integer(monkeypatch):
+    from datetime import UTC, datetime
+    now = datetime(2026, 9, 22, 1, 0, tzinfo=UTC)
+    assert _catch_up(monkeypatch, last_run=None, now=now, run_cron="0 */6 * * *") is True
+
+
+def test_catch_up_defaults_now_to_the_configured_timezone(monkeypatch):
+    # With no `now`, the cron-hour check must use the configured tz — not the
+    # host's naive local time — so a UTC config compares against UTC hours.
+    from datetime import UTC, datetime
+    hour = datetime.now(UTC).hour
+    assert _catch_up(monkeypatch, last_run=None, now=None, run_cron=f"0 {hour} * * *") is True

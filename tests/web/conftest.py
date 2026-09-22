@@ -36,6 +36,10 @@ def _make_client(pg_dsn, monkeypatch, *, authenticated: bool = True):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key")
 
+    # The startup catch-up would otherwise fire a real run whenever the suite
+    # runs after RUN_CRON's hour, leaving a stray scrape row in the DB.
+    monkeypatch.setattr("app.web.main.catch_up_missed_run", lambda *a, **k: False)
+
     from app.web.main import app
 
     test_client = TestClient(app, raise_server_exceptions=True)

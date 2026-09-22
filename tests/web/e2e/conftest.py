@@ -55,7 +55,13 @@ def live_server(postgresql_proc):
     previous = {k: os.environ.get(k) for k in env_overrides}
     os.environ.update(env_overrides)
 
+    import app.web.main as main_module
     from app.web.main import app
+
+    # Session-scoped, so no monkeypatch: suppress the startup catch-up run so
+    # it can't add a stray scrape row when the suite runs after RUN_CRON's hour.
+    original_catch_up = main_module.catch_up_missed_run
+    main_module.catch_up_missed_run = lambda *a, **k: False
 
     server_port = _free_port()
     config = uvicorn.Config(app, host="127.0.0.1", port=server_port, log_level="warning")
@@ -72,6 +78,7 @@ def live_server(postgresql_proc):
 
     server.should_exit = True
     thread.join(timeout=5)
+    main_module.catch_up_missed_run = original_catch_up
     for k, v in previous.items():
         if v is None:
             os.environ.pop(k, None)

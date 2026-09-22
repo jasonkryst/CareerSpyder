@@ -1,10 +1,7 @@
 import logging
 import os
-import threading
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -14,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import db
-from app.scheduler import create_scheduler, run_and_notify
+from app.scheduler import catch_up_missed_run, create_scheduler
 from app.web.auth import UserContextMiddleware, hash_password
 from app.web.csrf_protection import OriginCheckMiddleware
 from app.web.routes_auth import router as auth_router
@@ -88,25 +85,7 @@ async def lifespan(app: FastAPI):
     app.state.tz = tz
     app.state.scheduler = create_scheduler(pool, run_cron, tz)
 
-    # If the container restarted after today's cron hour, today's run was
-    # missed. APScheduler's misfire_grace_time covers short outages; this
-    # catches any gap longer than that grace window.
-    with pool.connection() as conn:
-        local_tz = ZoneInfo(tz) if tz != "UTC" else None
-        now_local = datetime.now(local_tz)
-        last_run = db.get_last_run_date(conn, tz)
-        cron_parts = run_cron.split()
-        try:
-            sched_hour = int(cron_parts[1])
-        except (IndexError, ValueError):
-            sched_hour = None
-        if (last_run is None or last_run < now_local.date()) and (
-            sched_hour is None or now_local.hour >= sched_hour
-        ):
-            logger.info("Missed daily run detected — triggering catch-up run at startup")
-            threading.Thread(
-                target=run_and_notify, args=[pool, tz], daemon=True, name="catchup-run",
-            ).start()
+    catch_up_missed_run(pool, run_cron, tz)
 
     if not os.environ.get("PUBLIC_BASE_URL"):
         logger.warning(

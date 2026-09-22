@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -125,3 +126,30 @@ def create_scheduler(pool: ConnectionPool, run_cron: str, tz: str) -> Background
                   misfire_grace_time=3600)
     sched.start()
     return sched
+
+
+def catch_up_missed_run(pool: ConnectionPool, run_cron: str, tz: str,
+                        now: datetime | None = None) -> bool:
+    """Start a background run if today's scheduled run was missed.
+
+    misfire_grace_time covers short outages; this covers a restart that
+    happens more than an hour after the cron hour. Returns True if a
+    catch-up run was started.
+    """
+    now_local = now or datetime.now(_resolve_tz(tz))
+    with pool.connection() as conn:
+        last_run = db.get_last_run_date(conn, tz)
+    try:
+        sched_hour: int | None = int(run_cron.split()[1])
+    except (IndexError, ValueError):
+        # Non-literal hour field ("*/6", "8,20"): only the date check applies.
+        sched_hour = None
+    if last_run is not None and last_run >= now_local.date():
+        return False
+    if sched_hour is not None and now_local.hour < sched_hour:
+        return False
+    logger.info("Missed daily run detected — triggering catch-up run at startup")
+    threading.Thread(
+        target=run_and_notify, args=[pool, tz], daemon=True, name="catchup-run",
+    ).start()
+    return True

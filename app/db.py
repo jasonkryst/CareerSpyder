@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -79,7 +79,7 @@ def finish_run(
     conn.commit()
 
 
-def get_last_run_date(conn: psycopg.Connection, tz: str = "UTC") -> "datetime.date | None":
+def get_last_run_date(conn: psycopg.Connection, tz: str = "UTC") -> date | None:
     from zoneinfo import ZoneInfo
 
     row = conn.execute(
