@@ -327,7 +327,7 @@ def test_verify_reset_token_rejects_expired_token(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
     token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
-    result = verify_reset_token("test-secret-key", token, conn, max_age=0)
+    result = verify_reset_token("test-secret-key", token, conn, max_age=-1)
     assert result is None
 
 

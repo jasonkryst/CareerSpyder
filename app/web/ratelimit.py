@@ -65,3 +65,9 @@ def rate_limit(request: Request, endpoint: str, max_attempts: int, window_second
     """Convenience wrapper: build key from endpoint + client IP, return allowed."""
     ip = _client_ip(request)
     return check(f"{endpoint}:{ip}", max_attempts, window_seconds)
+
+
+def clear() -> None:
+    """Clear all rate-limit buckets. Call from test fixtures to isolate tests."""
+    with _lock:
+        _buckets.clear()

@@ -5,7 +5,7 @@ import logging
 import bcrypt as _bcrypt
 import psycopg
 from fastapi import Depends, HTTPException, Request
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import BadData, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp
@@ -97,7 +97,7 @@ def verify_reset_token(
     s = URLSafeTimedSerializer(secret_key)
     try:
         payload = s.loads(token, salt=_RESET_SALT, max_age=max_age)
-    except (BadSignature, SignatureExpired):
+    except BadData:
         return None
     user = db.get_user_by_id_with_hash(conn, payload["user_id"])
     if user is None or not user["is_active"]:
