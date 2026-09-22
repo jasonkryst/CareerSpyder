@@ -652,3 +652,17 @@ def test_create_scheduler_raises_on_invalid_cron(pg_dsn):
             scheduler.create_scheduler(pool, run_cron="not a cron", tz="UTC")
     finally:
         pool.close()
+
+
+def test_create_scheduler_sets_misfire_grace_time_to_one_hour(pg_dsn):
+    from psycopg_pool import ConnectionPool
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        sched = scheduler.create_scheduler(pool, run_cron="0 7 * * *", tz="UTC")
+        try:
+            job = sched.get_job("daily_run")
+            assert job.misfire_grace_time == 3600
+        finally:
+            sched.shutdown()
+    finally:
+        pool.close()

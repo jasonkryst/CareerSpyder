@@ -121,6 +121,7 @@ def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -
 def create_scheduler(pool: ConnectionPool, run_cron: str, tz: str) -> BackgroundScheduler:
     sched = BackgroundScheduler(timezone=tz)
     trigger = CronTrigger.from_crontab(run_cron, timezone=_resolve_tz(tz))
-    sched.add_job(run_and_notify, trigger, args=[pool, tz], id="daily_run")
+    sched.add_job(run_and_notify, trigger, args=[pool, tz], id="daily_run",
+                  misfire_grace_time=3600)
     sched.start()
     return sched

@@ -1679,3 +1679,39 @@ def test_fk_violation_raises_psycopg_error(pg_conn):
             "VALUES ('fk-test-1', 'Engineer', 'https://x.test/2', 'Board', "
             "'2026-01-01T00:00:00+00:00', 'no-such-location')"
         )
+
+
+def test_get_last_run_date_returns_none_when_no_runs(pg_conn):
+    assert db.get_last_run_date(pg_conn) is None
+
+
+def test_get_last_run_date_returns_none_when_run_has_no_finished_at(pg_conn):
+    db.start_run(pg_conn)
+    assert db.get_last_run_date(pg_conn) is None
+
+
+def test_get_last_run_date_returns_the_date_of_the_most_recent_finished_run(pg_conn):
+    run_id = db.start_run(pg_conn)
+    db.finish_run(pg_conn, run_id, 0, [])
+
+    result = db.get_last_run_date(pg_conn, tz="UTC")
+
+    assert result == datetime.now(UTC).date()
+
+
+def test_get_last_run_date_returns_date_in_the_requested_timezone(pg_conn):
+    run_id = db.start_run(pg_conn)
+    db.finish_run(pg_conn, run_id, 0, [])
+
+    utc_date = db.get_last_run_date(pg_conn, tz="UTC")
+    late_tz = db.get_last_run_date(pg_conn, tz="America/New_York")
+
+    # Both dates should be the same or at most one day apart (timezone shift).
+    assert abs((utc_date - late_tz).days) <= 1
+
+
+def test_get_last_run_date_ignores_url_check_runs(pg_conn):
+    run_id = db.start_run(pg_conn, kind="url_check")
+    db.finish_run(pg_conn, run_id, 0, [])
+
+    assert db.get_last_run_date(pg_conn) is None

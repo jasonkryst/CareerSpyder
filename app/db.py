@@ -79,6 +79,19 @@ def finish_run(
     conn.commit()
 
 
+def get_last_run_date(conn: psycopg.Connection, tz: str = "UTC") -> "datetime.date | None":
+    from zoneinfo import ZoneInfo
+
+    row = conn.execute(
+        "SELECT MAX(finished_at) FROM runs WHERE kind = 'scrape' AND finished_at IS NOT NULL"
+    ).fetchone()
+    if row is None or row[0] is None:
+        return None
+    local_tz = UTC if tz == "UTC" else ZoneInfo(tz)
+    finished = datetime.fromisoformat(row[0]) if isinstance(row[0], str) else row[0]
+    return finished.astimezone(local_tz).date()
+
+
 def _deserialize_failed_sources(raw: str) -> list[dict]:
     entries = json.loads(raw)
     result = []
