@@ -15,6 +15,7 @@ from app.web.auth import (
     verify_reset_token,
 )
 from app.web.flash import flash_redirect
+from app.web.ratelimit import rate_limit
 from app.web.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,13 @@ async def login_form(request: Request):
 
 @router.post("/login")
 async def login(request: Request):
+    if not rate_limit(request, "login", max_attempts=10, window_seconds=900):
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"error": "Too many login attempts. Please wait a few minutes before trying again."},
+            status_code=429,
+        )
+
     form = dict((await request.form()).items())
     username = str(form.get("username") or "").strip()
     password = str(form.get("password") or "")
@@ -77,6 +85,12 @@ async def account_recovery_form(request: Request):
 
 @router.post("/account-recovery", response_class=HTMLResponse)
 async def account_recovery(request: Request):
+    if not rate_limit(request, "account-recovery", max_attempts=5, window_seconds=3600):
+        return templates.TemplateResponse(
+            request, "account_recovery.html",
+            {"submitted": True},
+        )
+
     form = dict((await request.form()).items())
     email = str(form.get("email") or "").strip().lower()
 
