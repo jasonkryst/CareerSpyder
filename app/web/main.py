@@ -5,7 +5,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -23,6 +22,7 @@ from app.web.routes_settings import router as settings_router
 from app.web.routes_sources import router as sources_router
 from app.web.routes_users import router as users_router
 from app.web.security_headers import SecurityHeadersMiddleware
+from app.web.static_files import CachedStaticFiles
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
 app.mount(
     "/static",
-    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    CachedStaticFiles(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
 
