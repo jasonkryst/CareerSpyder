@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
@@ -14,6 +16,11 @@ from app.web.templating import templates
 from app.web.validation import fmt_validation_error
 
 router = APIRouter()
+
+# Caps concurrent Playwright browser launches from /sources/test-preview.
+# Without this, rapid repeated clicks each spin up a full Chromium process;
+# 3 in-flight at once is enough headroom for normal use (audit finding M3).
+_preview_semaphore = asyncio.Semaphore(3)
 
 PAGE_SIZE = 25
 
@@ -151,7 +158,8 @@ async def test_source_preview(
         # Adapters raise heterogeneous exceptions (requests, BeautifulSoup
         # selectors, Playwright) — this endpoint's job is to report any of
         # them back to the UI as a preview error, not to crash.
-        jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
+        async with _preview_semaphore:
+            jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {"jobs": [{"title": j.title, "url": safe_url_scheme(j.url)} for j in jobs]}
