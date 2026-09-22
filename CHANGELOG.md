@@ -5,6 +5,37 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-09-22
+
+### Fixed
+
+- **Missed daily scrape not caught up after a restart.** If the container restarted
+  after the scheduled cron hour, today's scrape would never run. APScheduler's
+  `misfire_grace_time` is now set to 3 600 s (covers brief outages), and a startup
+  check triggers an immediate catch-up run when the last completed scrape was before
+  today and the cron hour has already passed.
+
+- **Settings import accepted arbitrarily large uploads (DoS vector).** The
+  `/settings/data` import endpoint now rejects any upload larger than 1 MB with a
+  413 response and a user-visible error message.
+
+- **Concurrent test-preview requests could launch unlimited Playwright browsers.**
+  The `/sources/test-preview` route now acquires a module-level `asyncio.Semaphore(3)`
+  before launching the Playwright fetch, capping concurrent browser launches at three
+  regardless of how many requests arrive simultaneously.
+
+- **Special characters in `board_token` / `site_id` broke adapter API URLs.**
+  Tokens containing `/`, `?`, `#`, spaces, or other URL-unsafe characters were
+  interpolated directly into path segments of Greenhouse, Lever, and HealthcareSource
+  API URLs. All three adapters now percent-encode the token/site-id with
+  `urllib.parse.quote(token, safe="")` before embedding it.
+
+- **Non-numeric `max_pages` caused an unhandled 500 error.** Source-form parsing
+  for Infor, TalentBrew, Workday, and Findly sources called `int(form["max_pages"])`
+  directly. The bare `int()` call has been removed; Pydantic v2's `model_validate`
+  now handles the coercion and raises `ValidationError` (caught by the existing
+  handler) for non-numeric values.
+
 ## [1.2.2] — 2026-09-22
 
 ### Fixed
