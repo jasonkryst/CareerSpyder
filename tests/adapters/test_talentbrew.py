@@ -139,3 +139,29 @@ def test_fetch_handles_card_missing_location_gracefully():
     jobs = talentbrew.fetch(make_source(), http_get=fake_get)
 
     assert jobs[0].location is None
+
+
+def test_fetch_warns_when_total_pages_marker_is_missing(caplog):
+    # Without data-total-pages the adapter can only assume one page; that
+    # truncation must be visible in the logs, not silent (issue #164).
+    no_marker = {"results": f'<ul class="search-job-list-data">{make_card()}</ul>'}
+
+    def fake_get(url, params, timeout, headers):
+        return FakeResponse(no_marker)
+
+    with caplog.at_level("WARNING", logger="app.adapters.talentbrew"):
+        jobs = talentbrew.fetch(make_source(), http_get=fake_get)
+
+    assert len(jobs) == 1
+    assert any("data-total-pages" in r.getMessage() and "NM (TalentBrew)" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_fetch_does_not_warn_when_total_pages_marker_is_present(caplog):
+    def fake_get(url, params, timeout, headers):
+        return FakeResponse(make_envelope(1, make_card()))
+
+    with caplog.at_level("WARNING", logger="app.adapters.talentbrew"):
+        talentbrew.fetch(make_source(), http_get=fake_get)
+
+    assert not caplog.records
