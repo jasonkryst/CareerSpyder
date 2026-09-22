@@ -38,7 +38,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     # Rescue jobs saved in a prior run but never emailed because the process
     # crashed between save_jobs committing and mark_emailed running.
     current_keys = {j.key for j in jobs_to_send}
-    for rescued in db.get_unemailed_jobs(conn):
+    for rescued in db.get_unemailed_jobs(conn, user_id=user_id):
         if rescued.key not in current_keys:
             jobs_to_send.append(rescued)
             current_keys.add(rescued.key)

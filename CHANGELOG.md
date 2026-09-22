@@ -5,6 +5,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-09-21
+
+### Fixed
+
+- **Data isolation for multi-user deployments.** Several views were not properly
+  scoped to the requesting user's data:
+  - The jobs map (`/jobs/map/data`) now filters by the current user's jobs;
+    previously all users' jobs were visible on any user's map.
+  - "Check job URLs" now only checks the triggering user's active jobs (admin
+    still checks all jobs, matching the all-users run behaviour).
+  - The source-name filter dropdown on the jobs and map pages now only lists
+    source names belonging to the current user (admin sees all).
+  - The scheduler's unemailed-job rescue path now scopes to the user being
+    processed, preventing one user's undelivered jobs from appearing in another
+    user's digest email.
+
 ## [1.2.0] — 2026-09-21
 
 ### Added
