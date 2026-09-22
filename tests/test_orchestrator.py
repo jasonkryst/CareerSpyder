@@ -363,3 +363,26 @@ def test_run_once_failed_source_url_is_stored_in_db(pg_conn):
     assert runs[0]["failed_sources"] == [
         {"name": "Bad Co", "url": "https://boards.greenhouse.io/bad-co"}
     ]
+
+
+def test_run_once_refreshes_the_stored_url_of_a_known_job(pg_conn):
+    # An adapter URL fix (issue #175) must heal rows saved before the fix,
+    # not just jobs first seen after it.
+    conn = pg_conn
+    source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+    responses = [
+        [Job(key="gh:1", title="Backend Engineer", url="https://x.test/broken",
+             source_name=source.name, source_id=source.id)],
+        [Job(key="gh:1", title="Backend Engineer", url="https://x.test/fixed",
+             source_name=source.name, source_id=source.id)],
+    ]
+
+    def fake_fetch(source):
+        return responses.pop(0)
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source])
+
+    rows = {r["key"]: r for r in db.list_jobs(conn)}
+    assert rows["gh:1"]["url"] == "https://x.test/fixed"

@@ -1715,3 +1715,20 @@ def test_get_last_run_date_ignores_url_check_runs(pg_conn):
     db.finish_run(pg_conn, run_id, 0, [])
 
     assert db.get_last_run_date(pg_conn) is None
+
+
+def test_refresh_job_urls_updates_stored_url_for_known_keys(pg_conn):
+    run_id = db.start_run(pg_conn)
+    db.save_jobs(pg_conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+
+    fixed = Job(key="k1", title="Engineer", url="https://x.test/fixed", company="Acme",
+                location="Remote", posted_date=None, source_name="Acme Board", source_id="s1")
+    updated = db.refresh_job_urls(pg_conn, [fixed, make_job(key="unknown")])
+
+    urls = dict(pg_conn.execute("SELECT key, url FROM jobs").fetchall())
+    assert urls == {"k1": "https://x.test/fixed", "k2": "https://x.test/1"}
+    assert updated == 1
+
+
+def test_refresh_job_urls_with_no_jobs_is_a_noop(pg_conn):
+    assert db.refresh_job_urls(pg_conn, []) == 0

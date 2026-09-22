@@ -58,6 +58,10 @@ def run_once(
 
         new_jobs = db.get_new_jobs(conn, deduped_jobs)
         db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
+        # Heal URLs of already-known jobs (e.g. after an adapter URL fix) before
+        # the checker below HEADs them -- a stale broken URL would 404 and get
+        # the job marked removed.
+        db.refresh_job_urls(conn, deduped_raw_jobs)
 
         configured_source_ids = {s.id for s in sources}
         db.reconcile_jobs(conn, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
