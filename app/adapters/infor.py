@@ -140,7 +140,8 @@ def _board_kind(page) -> str | None:
     shell *and* their real cards in the iframe, so neither marker can be used
     to rule the other out -- we poll for whichever shows up first.
     """
-    if page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0:
+    if (page.locator("#parentIframe").count() > 0
+            and page.frame_locator("#parentIframe").locator(_V1_SLICK_ROW).count() > 0):
         return "v1"
     if page.locator(_V2_READY).count() > 0:
         return "v2"
