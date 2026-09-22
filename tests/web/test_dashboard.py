@@ -450,7 +450,7 @@ def test_check_urls_and_orchestrator_run_are_mutually_exclusive(client):
     started = threading.Event()
     release = threading.Event()
 
-    def blocking_check_urls(_conn):
+    def blocking_check_urls(_conn, **_kwargs):
         started.set()
         release.wait(timeout=2)
         return 0

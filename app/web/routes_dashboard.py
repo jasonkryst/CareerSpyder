@@ -62,13 +62,13 @@ def run_now(
     return RedirectResponse(url="/", status_code=303)
 
 
-def _run_url_check(pool: ConnectionPool, run_id: int) -> None:
+def _run_url_check(pool: ConnectionPool, run_id: int, user_id: str | None = None) -> None:
     # Serializes against orchestrator.run_once the same way two overlapping
     # runs already serialize against each other (see #132) -- without this,
     # clicking "Check job URLs" mid-scrape writes through the shared
     # connection from two threads with no coordination.
     with _run_lock, pool.connection() as conn:
-        removed = checker.check_job_urls(conn)
+        removed = checker.check_job_urls(conn, user_id=user_id)
         db.finish_run(conn, run_id, removed, [])
 
 
@@ -78,7 +78,9 @@ def check_urls(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_user),
 ):
+    is_admin = current_user["role"] == "admin"
+    check_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
         run_id = db.start_run(conn, kind="url_check", user_id=current_user["id"])
-    background_tasks.add_task(_run_url_check, request.app.state.pool, run_id)
+    background_tasks.add_task(_run_url_check, request.app.state.pool, run_id, check_user_id)
     return RedirectResponse(url="/", status_code=303)

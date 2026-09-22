@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import db
 from app.scheduler import create_scheduler
@@ -80,8 +81,16 @@ async def lifespan(app: FastAPI):
             )
 
     app.state.pool = pool
+    app.state.secret_key = _resolve_secret_key()
     app.state.tz = tz
     app.state.scheduler = create_scheduler(pool, run_cron, tz)
+
+    if not os.environ.get("PUBLIC_BASE_URL"):
+        logger.warning(
+            "PUBLIC_BASE_URL is not set — password-reset links will use the "
+            "Host header from the incoming request, which may be spoofable. "
+            "Set PUBLIC_BASE_URL to the canonical public URL of this instance."
+        )
 
     yield
 
@@ -101,6 +110,14 @@ app.add_middleware(SessionMiddleware, secret_key=_resolve_secret_key(),
                    max_age=7 * 24 * 3600)
 app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+_ALLOWED_HOSTS_RAW = os.environ.get("ALLOWED_HOSTS", "")
+_ALLOWED_HOSTS: list[str] = (
+    [h.strip() for h in _ALLOWED_HOSTS_RAW.split(",") if h.strip()]
+    if _ALLOWED_HOSTS_RAW
+    else ["*"]
+)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
 app.mount(
     "/static",

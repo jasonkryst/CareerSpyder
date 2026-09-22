@@ -161,6 +161,17 @@ def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
     }
 
 
+def get_admin_smtp_settings(conn: psycopg.Connection) -> dict | None:
+    row = conn.execute(
+        "SELECT s.smtp_host, s.smtp_port, s.smtp_user, s.email_from "
+        "FROM settings s JOIN users u ON s.user_id = u.id "
+        "WHERE u.role = 'admin' LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+    return {"smtp_host": row[0], "smtp_port": row[1], "smtp_user": row[2], "email_from": row[3]}
+
+
 def save_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_port: int,
                    smtp_user: str, email_from: str) -> None:
     conn.execute(
@@ -203,8 +214,8 @@ def _seed_settings(conn: psycopg.Connection, user_id: str, smtp_host: str, smtp_
     # on the next restart without requiring a settings-page visit.  Preference columns
     # (email_to, email_days, resend_jobs, …) are untouched on conflict — they belong to the user.
     conn.execute(
-        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to) "
-        "VALUES (%s, %s, %s, %s, %s, %s) "
+        "INSERT INTO settings (user_id, smtp_host, smtp_port, smtp_user, email_from, email_to, email_days) "
+        "VALUES (%s, %s, %s, %s, %s, %s, 'mon,tue,wed,thu,fri,sat,sun') "
         "ON CONFLICT (user_id) DO UPDATE SET "
         "smtp_host = EXCLUDED.smtp_host, smtp_port = EXCLUDED.smtp_port, "
         "smtp_user = EXCLUDED.smtp_user, email_from = EXCLUDED.email_from",
@@ -353,11 +364,18 @@ def count_jobs(
     return row[0] if row else 0
 
 
-def list_job_source_names(conn: psycopg.Connection) -> list[str]:
-    rows = conn.execute(
-        "SELECT source_name FROM (SELECT DISTINCT source_name FROM jobs) t "
-        "ORDER BY LOWER(source_name)"
-    ).fetchall()
+def list_job_source_names(conn: psycopg.Connection, user_id: str | None = None) -> list[str]:
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT source_name FROM (SELECT DISTINCT source_name FROM jobs WHERE user_id = %s) t "
+            "ORDER BY LOWER(source_name)",
+            (user_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT source_name FROM (SELECT DISTINCT source_name FROM jobs) t "
+            "ORDER BY LOWER(source_name)"
+        ).fetchall()
     return [r[0] for r in rows]
 
 
@@ -388,10 +406,12 @@ def list_mappable_jobs(
     exclude_status: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
+        user_id=user_id,
     )
     clauses = ["geocoded_locations.status IN ('resolved', 'manual')"]
     if exclude_status:
@@ -424,17 +444,25 @@ def mark_emailed(conn: psycopg.Connection, keys: list[str]) -> None:
     conn.commit()
 
 
-def get_unemailed_jobs(conn: psycopg.Connection) -> list[Job]:
+def get_unemailed_jobs(conn: psycopg.Connection, user_id: str | None = None) -> list[Job]:
     """Return Job objects for active jobs that have never been included in a digest email.
 
     Used to rescue jobs dropped by a crash between save_jobs committing and
     mark_emailed running.  Only active (removed_at IS NULL) rows are returned so
     we don't re-surface jobs that were posted, missed, and then taken down.
+    Pass user_id to restrict to one user's jobs; None returns across all users.
     """
-    rows = conn.execute(
-        "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary "
-        "FROM jobs WHERE emailed_at IS NULL AND removed_at IS NULL"
-    ).fetchall()
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary "
+            "FROM jobs WHERE emailed_at IS NULL AND removed_at IS NULL AND user_id = %s",
+            (user_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT key, title, company, location, url, posted_date, source_name, source_id, summary "
+            "FROM jobs WHERE emailed_at IS NULL AND removed_at IS NULL"
+        ).fetchall()
     return [
         Job(key=r[0], title=r[1], company=r[2], location=r[3], url=r[4],
             posted_date=r[5], source_name=r[6] or "", source_id=r[7], summary=r[8])
@@ -623,6 +651,26 @@ def get_user_by_id(conn: psycopg.Connection, user_id: str) -> dict | None:
         return None
     return {"id": str(row[0]), "username": row[1], "email": row[2],
             "role": row[3], "is_active": row[4], "created_at": str(row[5])}
+
+
+def get_user_by_id_with_hash(conn: psycopg.Connection, user_id: str) -> dict | None:
+    row = conn.execute(
+        "SELECT id, username, email, password_hash, role, is_active, created_at "
+        "FROM users WHERE id = %s",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": str(row[0]), "username": row[1], "email": row[2],
+        "password_hash": row[3], "role": row[4], "is_active": row[5],
+        "created_at": str(row[6]),
+    }
+
+
+def update_password(conn: psycopg.Connection, user_id: str, new_hash: str) -> None:
+    conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user_id))
+    conn.commit()
 
 
 def get_user_by_username(conn: psycopg.Connection, username: str) -> dict | None:

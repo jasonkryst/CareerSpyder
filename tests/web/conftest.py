@@ -3,6 +3,15 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
+def _clear_rate_limits():
+    """Rate-limit buckets are process-global; reset before each test so tests
+    that POST /login or /account-recovery don't bleed into each other."""
+    from app.web import ratelimit
+    ratelimit.clear()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _clear_geocode_zip_cache():
     """The _geocode_zip lru_cache persists across tests; clear it so each test
     gets a fresh geocode call rather than a stale cached result."""
