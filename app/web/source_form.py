@@ -70,7 +70,7 @@ def source_from_form(form: dict):
         if "infor_url" in form:
             common["url"] = _strip(form["infor_url"])
         if form.get("max_pages"):
-            common["max_pages"] = int(form["max_pages"])
+            common["max_pages"] = form["max_pages"]
     elif source_type == "healthcaresource":
         if "site_id" in form:
             common["site_id"] = _strip(form["site_id"])
@@ -78,12 +78,12 @@ def source_from_form(form: dict):
         if "base_url" in form:
             common["base_url"] = _strip(form["base_url"])
         if form.get("max_pages"):
-            common["max_pages"] = int(form["max_pages"])
+            common["max_pages"] = form["max_pages"]
     elif source_type == "workday":
         if "career_site_url" in form:
             common["career_site_url"] = _strip(form["career_site_url"])
         if form.get("max_pages"):
-            common["max_pages"] = int(form["max_pages"])
+            common["max_pages"] = form["max_pages"]
     elif source_type == "phenompeople":
         if "phenompeople_career_site_url" in form:
             common["career_site_url"] = _strip(form["phenompeople_career_site_url"])
@@ -95,7 +95,7 @@ def source_from_form(form: dict):
         if "findly_career_site_url" in form:
             common["career_site_url"] = _strip(form["findly_career_site_url"])
         if form.get("max_pages"):
-            common["max_pages"] = int(form["max_pages"])
+            common["max_pages"] = form["max_pages"]
     else:
         if "url" in form:
             common["url"] = _strip(form["url"])

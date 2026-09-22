@@ -4,6 +4,22 @@ from pydantic import ValidationError
 from app.web.source_form import source_from_form
 
 
+@pytest.mark.parametrize("source_type,extra_fields", [
+    ("infor", {"infor_url": "https://rush.test/careers"}),
+    ("talentbrew", {"base_url": "https://jobs.nm.org"}),
+    ("workday", {"career_site_url": "https://duly.test/jobs"}),
+    ("findly", {"org_id": "2297", "findly_career_site_url": "https://careers.aah.org"}),
+])
+def test_non_numeric_max_pages_raises_validation_error(source_type, extra_fields):
+    form = {
+        "type": source_type, "name": "Test", "max_pages": "abc",
+        "include_keywords": "", "exclude_keywords": "",
+        **extra_fields,
+    }
+    with pytest.raises(ValidationError):
+        source_from_form(form)
+
+
 def test_parses_greenhouse_fields():
     form = {
         "type": "greenhouse", "name": "Acme", "company": "Acme Corp",
