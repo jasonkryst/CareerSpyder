@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 from app import db
 from app.config import SourceConfig
 from app.models import Job
+from tests.conftest import owner_id_for
 
 _ta = TypeAdapter(SourceConfig)
 
@@ -29,7 +30,7 @@ def _save_job(key, title, source_id="src-1", source_name="Acme Board"):
     conn = psycopg.connect(os.environ["DATABASE_URL"])
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key=key, title=title, url=f"https://example.com/job/{key}",
-                             source_name=source_name, source_id=source_id)], run_id)
+                             source_name=source_name, source_id=source_id)], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
     return conn
 
@@ -77,7 +78,7 @@ def test_duplicate_modal_accepts_reference_text(live_server, page):
 
 def test_clearing_duplicate_flag_restores_job(live_server, page):
     conn = _save_job("e2e-dup-3", "E2E Clearable Duplicate")
-    db.set_job_duplicate(conn, "e2e-dup-3")
+    db.set_job_duplicate(conn, owner_id_for(conn), "e2e-dup-3")
 
     page.goto(live_server + "/jobs?duplicates=only")
     row = page.locator("tr", has_text="E2E Clearable Duplicate")

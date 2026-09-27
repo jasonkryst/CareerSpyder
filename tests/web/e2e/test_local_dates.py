@@ -4,13 +4,14 @@ import psycopg
 
 from app import db
 from app.models import Job
+from tests.conftest import owner_id_for
 
 
 def test_jobs_page_date_found_is_reformatted_from_raw_iso(live_server, page):
     conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-local-dates", title="E2E Local Dates Job", url="https://example.com/job/e2e-local-dates")
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
     raw_iso = db.list_jobs(conn)[0]["first_seen_at"]
 

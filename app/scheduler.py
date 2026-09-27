@@ -56,7 +56,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     jobs_to_send = [j for j in jobs_to_send if j.key not in duplicate_keys]
 
     secondary_source_ids = {s.id for s in sources if s.secondary}
-    statuses = db.get_job_statuses(conn, [j.key for j in jobs_to_send])
+    statuses = db.get_job_statuses(conn, user_id, [j.key for j in jobs_to_send])
 
     exclude_statuses = {
         s for s in ((settings or {}).get("digest_exclude_statuses") or "").split(",") if s
@@ -69,7 +69,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
 
     # When resend is on, the email includes both new and re-seen jobs; split them
     # into "Newly identified" / "Already identified" sections per company.
-    emailed_keys = db.get_emailed_keys(conn, [j.key for j in jobs_to_send]) if resend else None
+    emailed_keys = db.get_emailed_keys(conn, user_id, [j.key for j in jobs_to_send]) if resend else None
 
     d = digest.build_digest(
         jobs_to_send, summary.failed_sources, job_label,
@@ -101,16 +101,23 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
             os.environ.get("SMTP_PASSWORD", ""), smtp["email_from"], email_to,
             d.subject, d.html_body,
         )
-        db.mark_emailed(conn, [j.key for j in jobs_to_send])
+        db.mark_emailed(conn, user_id, [j.key for j in jobs_to_send])
     except Exception:
         logger.exception("Failed to send digest email for run %s", summary.run_id)
+
+
+def _record_empty_run(conn, user_id: str | None = None) -> None:
+    """Record a run row when there is nothing to scrape, so the dashboard
+    still shows the scheduler fired."""
+    run_id = db.start_run(conn, user_id=user_id)
+    db.finish_run(conn, run_id, 0, [])
 
 
 def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -> None:
     with pool.connection() as conn:
         sources_by_user = db.list_all_sources_by_user(conn)
         if not sources_by_user:
-            orchestrator.run_once(conn, [])
+            _record_empty_run(conn)
             return
         for user_id, sources in sources_by_user.items():
             try:

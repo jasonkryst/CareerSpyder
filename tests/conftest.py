@@ -95,3 +95,10 @@ def seed_admin(conn, *, username: str = "admin", password: str = "password123") 
     )
     db.save_settings(conn, user["id"], "smtp.example.com", 587, "user", "from@x.test")
     return user
+
+
+def owner_id_for(conn) -> str:
+    """Id of the 'admin' user, seeding one on a bare pg_conn. Jobs are owned
+    per user since migration 0003, so tests that save jobs need an owner."""
+    user = db.get_user_by_username(conn, "admin")
+    return user["id"] if user is not None else seed_admin(conn)["id"]

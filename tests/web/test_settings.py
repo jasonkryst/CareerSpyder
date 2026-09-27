@@ -1,3 +1,6 @@
+from tests.conftest import owner_id_for
+
+
 def test_settings_redirects_to_email_tab_for_admin(client):
     resp = client.get("/settings", follow_redirects=False)
     assert resp.status_code in (301, 302, 303, 307, 308)
@@ -274,9 +277,9 @@ def test_post_clear_cache_empties_jobs_and_redirects(client):
     conn = client.app.state.conn
     job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="Acme")
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    assert db.get_new_jobs(conn, [job]) == []
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == []
 
     resp = client.post("/settings/data/clear-cache", follow_redirects=False)
 
@@ -286,7 +289,7 @@ def test_post_clear_cache_empties_jobs_and_redirects(client):
     assert parse_qs(location.query)["flash"] == [
         "Job cache cleared. The next run will re-report every currently known job as new."
     ]
-    assert db.get_new_jobs(conn, [job]) == [job]
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == [job]
 
 
 def test_post_clear_cache_shows_toast_after_redirect(client):

@@ -6,6 +6,7 @@ from app import db, orchestrator
 from app.config import GreenhouseSource, LeverSource
 from app.geocoding.base import GeocodeResult
 from app.models import FailedSource, Job
+from tests.conftest import owner_id_for
 
 
 class _FakeGeocoder:
@@ -56,7 +57,7 @@ def test_run_once_geocodes_pending_locations_via_an_injected_geocoder(pg_conn):
                      source_name=source.name, location="Chicago, IL")]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source], geocoder=_FakeGeocoder())
+        orchestrator.run_once(conn, [source], geocoder=_FakeGeocoder(), user_id=owner_id_for(conn))
 
     row = conn.execute(
         "SELECT status, display_name FROM geocoded_locations WHERE location = 'Chicago, IL'"
@@ -77,7 +78,7 @@ def test_run_once_does_not_abort_when_the_geocoding_step_raises(pg_conn, monkeyp
     monkeypatch.setattr(orchestrator, "geocode_pending", boom)
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        summary = orchestrator.run_once(conn, [source])
+        summary = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
     runs = db.list_runs(conn)
@@ -96,7 +97,7 @@ def test_run_once_collects_new_jobs_and_isolates_failures(pg_conn):
         raise RuntimeError("site is down")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_greenhouse_fetch, "lever": fake_lever_fetch}):
-        summary = orchestrator.run_once(conn, [good_source, bad_source])
+        summary = orchestrator.run_once(conn, [good_source, bad_source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
     assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
@@ -115,8 +116,8 @@ def test_run_once_does_not_report_previously_seen_jobs_as_new(pg_conn):
         return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        first = orchestrator.run_once(conn, [source])
-        second = orchestrator.run_once(conn, [source])
+        first = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        second = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert len(first.new_jobs) == 1
     assert len(second.new_jobs) == 0
@@ -134,7 +135,7 @@ def test_run_once_applies_keyword_filters(pg_conn):
         ]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        summary = orchestrator.run_once(conn, [source])
+        summary = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
 
@@ -148,7 +149,7 @@ def test_run_once_dedupes_jobs_with_same_key_across_sources(pg_conn):
         return [Job(key="dup:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch, "lever": fake_fetch}):
-        summary = orchestrator.run_once(conn, [source_a, source_b])
+        summary = orchestrator.run_once(conn, [source_a, source_b], user_id=owner_id_for(conn))
 
     assert len(summary.new_jobs) == 1
 
@@ -162,7 +163,7 @@ def test_run_once_handles_unknown_source_type_without_aborting_run(pg_conn):
         return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}, clear=True):
-        summary = orchestrator.run_once(conn, [good_source, bad_source])
+        summary = orchestrator.run_once(conn, [good_source, bad_source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
     assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
@@ -178,8 +179,8 @@ def test_run_once_found_jobs_includes_already_known_jobs(pg_conn):
         return [Job(key="gh:1", title="Backend Engineer", url="https://x.test/1", source_name=source.name)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        first = orchestrator.run_once(conn, [source])
-        second = orchestrator.run_once(conn, [source])
+        first = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        second = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert [j.key for j in first.found_jobs] == ["gh:1"]
     assert [j.key for j in second.found_jobs] == ["gh:1"]
@@ -195,7 +196,7 @@ def test_run_once_sets_source_id_on_saved_jobs(pg_conn):
                      source_name=source.name, source_id=source.id)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
     assert rows[0]["source_id"] == "s1"
@@ -214,8 +215,8 @@ def test_run_once_marks_a_job_removed_when_it_stops_appearing(pg_conn):
         return []
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["removed_at"] is not None
@@ -236,9 +237,9 @@ def test_run_once_reactivates_a_removed_job_that_reappears(pg_conn):
         return responses.pop(0)
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["removed_at"] is None
@@ -257,8 +258,8 @@ def test_run_once_does_not_mark_jobs_removed_for_a_source_that_failed_this_run(p
         raise RuntimeError("site is down")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["removed_at"] is None
@@ -273,8 +274,8 @@ def test_run_once_marks_jobs_removed_when_their_source_is_deleted_between_runs(p
                      source_name=source.name, source_id=source.id)]
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [])  # source deleted from sources.json
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [], user_id=owner_id_for(conn))  # source deleted from sources.json
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["removed_at"] is not None
@@ -293,10 +294,10 @@ def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
         run_id = db.start_run(conn)
         db.save_jobs(conn, [Job(key="gh:1", title="Sales Rep", url="https://x.test/1",
-                                 source_name=source.name, source_id="s1")], run_id)
+                                 source_name=source.name, source_id="s1")], run_id, user_id=owner_id_for(conn))
         db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["removed_at"] is None
@@ -305,6 +306,10 @@ def test_run_once_does_not_mark_a_job_removed_when_only_keyword_filters_exclude_
 def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported(pg_conn):
     conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
+    # Seed the owner before spawning threads: owner_id_for() itself queries/writes
+    # via the shared connection, and psycopg's Connection isn't safe for concurrent
+    # use from multiple threads without the locking run_once already does.
+    owner = owner_id_for(conn)
 
     def slow_fetch(source):
         time.sleep(0.05)
@@ -313,7 +318,7 @@ def test_run_once_serializes_concurrent_runs_so_new_jobs_are_not_double_reported
     results = []
 
     def worker():
-        results.append(orchestrator.run_once(conn, [source]))
+        results.append(orchestrator.run_once(conn, [source], user_id=owner))
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": slow_fetch}):
         t1 = threading.Thread(target=worker)
@@ -334,7 +339,7 @@ def test_run_once_failed_source_includes_constructed_greenhouse_url(pg_conn):
     source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
-        summary = orchestrator.run_once(conn, [source])
+        summary = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert len(summary.failed_sources) == 1
     assert summary.failed_sources[0].name == "Bad Co"
@@ -346,7 +351,7 @@ def test_run_once_failed_source_includes_constructed_lever_url(pg_conn):
     source = LeverSource(id="s1", name="Lever Co", type="lever", board_token="lever-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"lever": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
-        summary = orchestrator.run_once(conn, [source])
+        summary = orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     assert len(summary.failed_sources) == 1
     assert summary.failed_sources[0].url == "https://jobs.lever.co/lever-co"
@@ -357,7 +362,7 @@ def test_run_once_failed_source_url_is_stored_in_db(pg_conn):
     source = GreenhouseSource(id="s1", name="Bad Co", type="greenhouse", board_token="bad-co")
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": lambda s: (_ for _ in ()).throw(RuntimeError("down"))}):
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     runs = db.list_runs(conn)
     assert runs[0]["failed_sources"] == [
@@ -381,8 +386,8 @@ def test_run_once_refreshes_the_stored_url_of_a_known_job(pg_conn):
         return responses.pop(0)
 
     with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
-        orchestrator.run_once(conn, [source])
-        orchestrator.run_once(conn, [source])
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
+        orchestrator.run_once(conn, [source], user_id=owner_id_for(conn))
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["gh:1"]["url"] == "https://x.test/fixed"

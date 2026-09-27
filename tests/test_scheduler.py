@@ -276,8 +276,8 @@ def test_run_and_notify_passes_emailed_keys_to_digest_when_resend_enabled(pg_dsn
             run_id = db.start_run(conn)
             old_job = Job(key="job-a", title="Old", url="https://x.test/a", source_name="s")
             new_job = Job(key="job-b", title="New", url="https://x.test/b", source_name="s")
-            db.save_jobs(conn, [old_job, new_job], run_id)
-            db.mark_emailed(conn, ["job-a"])
+            db.save_jobs(conn, [old_job, new_job], run_id, user_id=user_id)
+            db.mark_emailed(conn, user_id, ["job-a"])
 
         fake_summary = type("S", (), {
             "new_jobs": [new_job],
@@ -336,7 +336,7 @@ def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(pg_dsn, m
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
@@ -363,7 +363,7 @@ def test_run_and_notify_does_not_mark_emailed_when_send_fails(pg_dsn, monkeypatc
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
@@ -390,7 +390,7 @@ def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(pg_dsn, mo
             _configure(conn, user_id, resend_jobs=True)
             run_id = db.start_run(conn)
             old_job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [old_job], run_id)
+            db.save_jobs(conn, [old_job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {
@@ -468,9 +468,9 @@ def test_run_and_notify_includes_source_and_existing_status_in_real_digest(pg_ds
             _seed_gh_source(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-            db.set_job_status(conn, "k1", "not_interested")
+            db.set_job_status(conn, user_id, "k1", "not_interested")
         monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
 
         with patch("app.scheduler.emailer.send_email") as mock_send:
@@ -576,7 +576,7 @@ def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(pg_dsn,
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             new_job = Job(key="new-1", title="New Job", url="https://x.test/n", source_name="s")
-            db.save_jobs(conn, [new_job], run_id)
+            db.save_jobs(conn, [new_job], run_id, user_id=user_id)
 
         fake_summary = type("S", (), {"new_jobs": [new_job], "found_jobs": [new_job], "failed_sources": [], "run_id": run_id})()
 

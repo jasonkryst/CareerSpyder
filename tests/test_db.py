@@ -5,6 +5,7 @@ import pytest
 from app import db
 from app.models import FailedSource, Job
 from app.web.auth import hash_password as _hash_password
+from tests.conftest import owner_id_for
 
 
 def _make_user(conn, username="u1"):
@@ -39,11 +40,13 @@ def test_schema_has_geocoded_locations_table_and_jobs_fk(pg_conn):
 def test_fk_enforcement_rejects_a_job_location_with_no_geocoded_locations_row(pg_conn):
     import psycopg.errors
     conn = pg_conn
+    owner = owner_id_for(conn)
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         conn.execute(
-            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location) "
+            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location, user_id) "
             "VALUES ('k1', 'Engineer', 'https://x.test/1', 'Acme Board', "
-            "'2026-01-01T00:00:00+00:00', 'Nowhere, XX')"
+            "'2026-01-01T00:00:00+00:00', 'Nowhere, XX', %s)",
+            (owner,),
         )
 
 
@@ -52,7 +55,7 @@ def test_save_jobs_creates_a_pending_geocoded_locations_stub_for_a_new_location(
     run_id = db.start_run(conn)
 
     db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
-                             source_name="Acme Board", location="Chicago, IL")], run_id)
+                             source_name="Acme Board", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
 
     row = conn.execute(
         "SELECT status FROM geocoded_locations WHERE location = 'Chicago, IL'"
@@ -64,7 +67,7 @@ def test_save_jobs_reuses_an_existing_geocoded_locations_row_for_a_repeated_loca
     conn = pg_conn
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
-                             source_name="Acme Board", location="Chicago, IL")], run_id)
+                             source_name="Acme Board", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8, lng = -87.6 "
         "WHERE location = 'Chicago, IL'"
@@ -72,7 +75,7 @@ def test_save_jobs_reuses_an_existing_geocoded_locations_row_for_a_repeated_loca
     conn.commit()
 
     db.save_jobs(conn, [Job(key="k2", title="Sales", url="https://x.test/2",
-                             source_name="Acme Board", location="Chicago, IL")], run_id)
+                             source_name="Acme Board", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
 
     row = conn.execute(
         "SELECT status, lat FROM geocoded_locations WHERE location = 'Chicago, IL'"
@@ -85,7 +88,7 @@ def test_save_jobs_with_no_location_does_not_touch_geocoded_locations(pg_conn):
     run_id = db.start_run(conn)
 
     db.save_jobs(conn, [Job(key="k1", title="Engineer", url="https://x.test/1",
-                             source_name="Acme Board")], run_id)
+                             source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
 
     count = conn.execute("SELECT COUNT(*) FROM geocoded_locations").fetchone()[0]
     assert count == 0
@@ -95,33 +98,33 @@ def test_new_job_then_seen_on_second_run(pg_conn):
     conn = pg_conn
     job = make_job()
 
-    assert db.get_new_jobs(conn, [job]) == [job]
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == [job]
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
-    assert db.get_new_jobs(conn, [job]) == []
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == []
 
 
 def test_clear_jobs_empties_the_table(pg_conn):
     conn = pg_conn
     job = make_job()
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-    assert db.get_new_jobs(conn, [job]) == []
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == []
 
-    db.clear_jobs(conn)
+    db.clear_jobs(conn, owner_id_for(conn))
 
-    assert db.get_new_jobs(conn, [job]) == [job]
+    assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == [job]
 
 
 def test_clear_jobs_on_empty_table_does_not_raise(pg_conn):
     conn = pg_conn
 
-    db.clear_jobs(conn)  # should not raise
+    db.clear_jobs(conn, owner_id_for(conn))  # should not raise
 
-    assert db.get_new_jobs(conn, [make_job()]) == [make_job()]
+    assert db.get_new_jobs(conn, owner_id_for(conn), [make_job()]) == [make_job()]
 
 
 def test_list_runs_returns_most_recent_first(pg_conn):
@@ -389,7 +392,7 @@ def test_save_jobs_persists_source_id_and_summary(pg_conn):
     job = make_job(source_id="src-1", summary="A great role.")
     run_id = db.start_run(conn)
 
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
     assert rows[0]["source_id"] == "src-1"
@@ -400,8 +403,8 @@ def test_save_jobs_persists_source_id_and_summary(pg_conn):
 
 def test_list_jobs_orders_newest_first(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
 
@@ -411,7 +414,7 @@ def test_list_jobs_orders_newest_first(pg_conn):
 def test_list_jobs_respects_limit_and_offset(pg_conn):
     conn = pg_conn
     for i in range(3):
-        db.save_jobs(conn, [make_job(key=f"k{i}")], db.start_run(conn))
+        db.save_jobs(conn, [make_job(key=f"k{i}")], db.start_run(conn), user_id=owner_id_for(conn))
 
     page = db.list_jobs(conn, limit=1, offset=1)
 
@@ -420,16 +423,16 @@ def test_list_jobs_respects_limit_and_offset(pg_conn):
 
 def test_count_jobs_returns_total(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
 
     assert db.count_jobs(conn) == 2
 
 
 def test_mark_emailed_sets_timestamp_for_given_keys_only(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.mark_emailed(conn, ["k1"])
+    db.mark_emailed(conn, owner_id_for(conn), ["k1"])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["emailed_at"] is not None
@@ -439,14 +442,14 @@ def test_mark_emailed_sets_timestamp_for_given_keys_only(pg_conn):
 def test_mark_emailed_with_empty_list_does_not_raise(pg_conn):
     conn = pg_conn
 
-    db.mark_emailed(conn, [])  # should not raise
+    db.mark_emailed(conn, owner_id_for(conn), [])  # should not raise
 
 
 def test_reconcile_jobs_marks_missing_job_removed_when_its_source_succeeded(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["removed_at"] is not None
@@ -455,9 +458,9 @@ def test_reconcile_jobs_marks_missing_job_removed_when_its_source_succeeded(pg_c
 def test_reconcile_jobs_leaves_job_untouched_when_still_found(pg_conn):
     conn = pg_conn
     job = make_job(key="k1", source_id="s1")
-    db.save_jobs(conn, [job], db.start_run(conn))
+    db.save_jobs(conn, [job], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["removed_at"] is None
@@ -466,21 +469,21 @@ def test_reconcile_jobs_leaves_job_untouched_when_still_found(pg_conn):
 def test_reconcile_jobs_reactivates_a_removed_job_that_reappears(pg_conn):
     conn = pg_conn
     job = make_job(key="k1", source_id="s1")
-    db.save_jobs(conn, [job], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    db.save_jobs(conn, [job], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
 
     assert db.list_jobs(conn)[0]["removed_at"] is None
 
 
 def test_reconcile_jobs_ignores_jobs_from_a_source_that_merely_failed_this_run(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     # s1 is still configured but did not succeed this run (e.g. it raised) -- must not be touched.
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids=set(), found_jobs=[])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids=set(), found_jobs=[])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["removed_at"] is None
@@ -488,10 +491,10 @@ def test_reconcile_jobs_ignores_jobs_from_a_source_that_merely_failed_this_run(p
 
 def test_reconcile_jobs_marks_removed_when_its_source_is_deleted_from_config(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     # s1 no longer appears in configured_source_ids at all -- deleted from sources.json.
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["removed_at"] is not None
@@ -499,9 +502,9 @@ def test_reconcile_jobs_marks_removed_when_its_source_is_deleted_from_config(pg_
 
 def test_reconcile_jobs_leaves_legacy_rows_with_no_source_id_untouched(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1", source_id=None)], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id=None)], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids=set(), found_jobs=[])
 
     rows = {r["key"]: r for r in db.list_jobs(conn)}
     assert rows["k1"]["removed_at"] is None
@@ -509,20 +512,20 @@ def test_reconcile_jobs_leaves_legacy_rows_with_no_source_id_untouched(pg_conn):
 
 def test_mark_job_removed_sets_removed_at(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.mark_job_removed(conn, "k1")
+    db.mark_job_removed(conn, owner_id_for(conn), "k1")
 
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
 
 def test_mark_job_removed_is_idempotent_on_already_removed_job(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.mark_job_removed(conn, "k1")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_job_removed(conn, owner_id_for(conn), "k1")
     first_removed_at = db.list_jobs(conn)[0]["removed_at"]
 
-    db.mark_job_removed(conn, "k1")
+    db.mark_job_removed(conn, owner_id_for(conn), "k1")
 
     assert db.list_jobs(conn)[0]["removed_at"] == first_removed_at
 
@@ -531,7 +534,7 @@ def test_mark_job_removed_raises_key_error_for_unknown_key(pg_conn):
     conn = pg_conn
 
     with pytest.raises(KeyError):
-        db.mark_job_removed(conn, "no-such-key")
+        db.mark_job_removed(conn, owner_id_for(conn), "no-such-key")
 
 
 def _job(key, company="Acme", title="Engineer", source_name="Acme Board", source_id="s1"):
@@ -543,8 +546,8 @@ def _job(key, company="Acme", title="Engineer", source_name="Acme Board", source
 def test_list_jobs_sorts_by_company_ascending(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", company="Zeta")], run_id)
-    db.save_jobs(conn, [_job("b", company="Acme")], run_id)
+    db.save_jobs(conn, [_job("a", company="Zeta")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Acme")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, sort="company", direction="asc")
 
@@ -554,8 +557,8 @@ def test_list_jobs_sorts_by_company_ascending(pg_conn):
 def test_list_jobs_sorts_by_company_descending(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", company="Zeta")], run_id)
-    db.save_jobs(conn, [_job("b", company="Acme")], run_id)
+    db.save_jobs(conn, [_job("a", company="Zeta")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Acme")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, sort="company", direction="desc")
 
@@ -565,8 +568,8 @@ def test_list_jobs_sorts_by_company_descending(pg_conn):
 def test_list_jobs_sorts_by_age_days(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("young")], run_id)
-    db.save_jobs(conn, [_job("old")], run_id)
+    db.save_jobs(conn, [_job("young")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("old")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE jobs SET first_seen_at = %s WHERE key = 'old'",
         ((datetime.now(UTC) - timedelta(days=30)).isoformat(),),
@@ -580,8 +583,8 @@ def test_list_jobs_sorts_by_age_days(pg_conn):
 
 def test_list_jobs_default_ordering_unchanged_with_no_new_kwargs(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a")], db.start_run(conn))
-    db.save_jobs(conn, [_job("b")], db.start_run(conn))
+    db.save_jobs(conn, [_job("a")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b")], db.start_run(conn), user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
 
@@ -590,7 +593,7 @@ def test_list_jobs_default_ordering_unchanged_with_no_new_kwargs(pg_conn):
 
 def test_list_jobs_unrecognized_sort_falls_back_to_default(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a")], db.start_run(conn))
+    db.save_jobs(conn, [_job("a")], db.start_run(conn), user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, sort="'; DROP TABLE jobs; --")
 
@@ -600,8 +603,8 @@ def test_list_jobs_unrecognized_sort_falls_back_to_default(pg_conn):
 def test_list_jobs_filters_by_company_substring_case_insensitive(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", company="Acme Corp")], run_id)
-    db.save_jobs(conn, [_job("b", company="Zenith")], run_id)
+    db.save_jobs(conn, [_job("a", company="Acme Corp")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Zenith")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, company="acme")
 
@@ -611,8 +614,8 @@ def test_list_jobs_filters_by_company_substring_case_insensitive(pg_conn):
 def test_list_jobs_filters_by_source_name(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id)
-    db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id)
+    db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, source_name=["Zeta Board"])
 
@@ -622,9 +625,9 @@ def test_list_jobs_filters_by_source_name(pg_conn):
 def test_list_jobs_multi_source_name_returns_union(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id)
-    db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id)
-    db.save_jobs(conn, [_job("c", source_name="Other Board")], run_id)
+    db.save_jobs(conn, [_job("a", source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", source_name="Zeta Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("c", source_name="Other Board")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, source_name=["Acme Board", "Zeta Board"])
 
@@ -634,8 +637,8 @@ def test_list_jobs_multi_source_name_returns_union(pg_conn):
 def test_list_jobs_filters_by_removed_status(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", source_id="src")], run_id)
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src"}, found_jobs=[])
+    db.save_jobs(conn, [_job("a", source_id="src")], run_id, user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"src"}, found_jobs=[])
 
     active = db.list_jobs(conn, removed="active")
     removed = db.list_jobs(conn, removed="removed")
@@ -646,8 +649,8 @@ def test_list_jobs_filters_by_removed_status(pg_conn):
 
 def test_list_jobs_filters_by_emailed_status(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a")], db.start_run(conn))
-    db.mark_emailed(conn, ["a"])
+    db.save_jobs(conn, [_job("a")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["a"])
 
     assert len(db.list_jobs(conn, emailed="sent")) == 1
     assert db.list_jobs(conn, emailed="not_sent") == []
@@ -656,8 +659,8 @@ def test_list_jobs_filters_by_emailed_status(pg_conn):
 def test_list_jobs_combines_filters(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", company="Acme", source_name="Acme Board")], run_id)
-    db.save_jobs(conn, [_job("b", company="Acme", source_name="Zeta Board")], run_id)
+    db.save_jobs(conn, [_job("a", company="Acme", source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Acme", source_name="Zeta Board")], run_id, user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn, company="acme", source_name=["Zeta Board"])
 
@@ -666,7 +669,7 @@ def test_list_jobs_combines_filters(pg_conn):
 
 def test_count_jobs_respects_filters(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a", company="Acme")], db.start_run(conn))
+    db.save_jobs(conn, [_job("a", company="Acme")], db.start_run(conn), user_id=owner_id_for(conn))
 
     assert db.count_jobs(conn, company="acme") == 1
     assert db.count_jobs(conn, company="nope") == 0
@@ -675,9 +678,9 @@ def test_count_jobs_respects_filters(pg_conn):
 def test_list_job_source_names_returns_distinct_sorted_names(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [_job("a", source_name="Zeta Board")], run_id)
-    db.save_jobs(conn, [_job("b", source_name="Acme Board")], run_id)
-    db.save_jobs(conn, [_job("c", source_name="Acme Board")], run_id)
+    db.save_jobs(conn, [_job("a", source_name="Zeta Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("c", source_name="Acme Board")], run_id, user_id=owner_id_for(conn))
 
     assert db.list_job_source_names(conn) == ["Acme Board", "Zeta Board"]
 
@@ -699,9 +702,9 @@ def test_schema_has_job_status_history_table(pg_conn):
 
 def test_set_job_status_updates_current_status(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.set_job_status(conn, "k1", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
     row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
     assert row[0] == "applied"
@@ -709,56 +712,56 @@ def test_set_job_status_updates_current_status(pg_conn):
 
 def test_set_job_status_records_a_history_entry(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.set_job_status(conn, "k1", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
-    history = db.get_job_status_history(conn, ["k1"])
-    assert len(history["k1"]) == 1
-    assert history["k1"][0]["status"] == "applied"
-    assert history["k1"][0]["changed_at"] is not None
+    history = db.get_job_status_history(conn, [(owner_id_for(conn), "k1")])
+    assert len(history[(owner_id_for(conn), "k1")]) == 1
+    assert history[(owner_id_for(conn), "k1")][0]["status"] == "applied"
+    assert history[(owner_id_for(conn), "k1")][0]["changed_at"] is not None
 
 
 def test_set_job_status_appends_rather_than_replacing_history(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.set_job_status(conn, "k1", "applied")
-    db.set_job_status(conn, "k1", "rejected")
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "k1", "rejected")
 
-    history = db.get_job_status_history(conn, ["k1"])
-    assert [h["status"] for h in history["k1"]] == ["rejected", "applied"]
+    history = db.get_job_status_history(conn, [(owner_id_for(conn), "k1")])
+    assert [h["status"] for h in history[(owner_id_for(conn), "k1")]] == ["rejected", "applied"]
     row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
     assert row[0] == "rejected"
 
 
 def test_set_job_status_to_none_clears_current_status_and_is_recorded(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
-    db.set_job_status(conn, "k1", None)
+    db.set_job_status(conn, owner_id_for(conn), "k1", None)
 
     row = conn.execute("SELECT status FROM jobs WHERE key = 'k1'").fetchone()
     assert row[0] is None
-    history = db.get_job_status_history(conn, ["k1"])
-    assert [h["status"] for h in history["k1"]] == [None, "applied"]
+    history = db.get_job_status_history(conn, [(owner_id_for(conn), "k1")])
+    assert [h["status"] for h in history[(owner_id_for(conn), "k1")]] == [None, "applied"]
 
 
 def test_set_job_status_on_unknown_key_raises_key_error(pg_conn):
     conn = pg_conn
 
     with pytest.raises(KeyError):
-        db.set_job_status(conn, "does-not-exist", "applied")
+        db.set_job_status(conn, owner_id_for(conn), "does-not-exist", "applied")
 
 
 def test_get_job_status_history_omits_key_with_no_changes(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    history = db.get_job_status_history(conn, ["k1"])
+    history = db.get_job_status_history(conn, [(owner_id_for(conn), "k1")])
 
-    assert history.get("k1", []) == []
+    assert history.get((owner_id_for(conn), "k1"), []) == []
 
 
 def test_get_job_status_history_with_empty_keys_list_returns_empty_dict(pg_conn):
@@ -769,23 +772,24 @@ def test_get_job_status_history_with_empty_keys_list_returns_empty_dict(pg_conn)
 
 def test_get_job_status_history_groups_by_key_for_a_batch(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
-    db.set_job_status(conn, "k2", "ignored")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "k2", "ignored")
 
-    history = db.get_job_status_history(conn, ["k1", "k2"])
+    owner = owner_id_for(conn)
+    history = db.get_job_status_history(conn, [(owner, "k1"), (owner, "k2")])
 
-    assert set(history.keys()) == {"k1", "k2"}
-    assert history["k1"][0]["status"] == "applied"
-    assert history["k2"][0]["status"] == "ignored"
+    assert set(history.keys()) == {(owner, "k1"), (owner, "k2")}
+    assert history[(owner, "k1")][0]["status"] == "applied"
+    assert history[(owner, "k2")][0]["status"] == "ignored"
 
 
 def test_get_job_statuses_returns_current_status_per_key(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "not_interested")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "not_interested")
 
-    statuses = db.get_job_statuses(conn, ["k1", "k2"])
+    statuses = db.get_job_statuses(conn, owner_id_for(conn), ["k1", "k2"])
 
     assert statuses == {"k1": "not_interested", "k2": None}
 
@@ -793,36 +797,36 @@ def test_get_job_statuses_returns_current_status_per_key(pg_conn):
 def test_get_job_statuses_with_empty_keys_list_returns_empty_dict(pg_conn):
     conn = pg_conn
 
-    assert db.get_job_statuses(conn, []) == {}
+    assert db.get_job_statuses(conn, owner_id_for(conn), []) == {}
 
 
 def test_get_emailed_keys_returns_only_keys_with_emailed_at_set(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn))
-    db.mark_emailed(conn, ["k1"])
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k1"])
 
-    result = db.get_emailed_keys(conn, ["k1", "k2"])
+    result = db.get_emailed_keys(conn, owner_id_for(conn), ["k1", "k2"])
 
     assert result == {"k1"}
 
 
 def test_get_emailed_keys_returns_empty_set_when_none_emailed(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    assert db.get_emailed_keys(conn, ["k1"]) == set()
+    assert db.get_emailed_keys(conn, owner_id_for(conn), ["k1"]) == set()
 
 
 def test_get_emailed_keys_with_empty_list_returns_empty_set(pg_conn):
     conn = pg_conn
 
-    assert db.get_emailed_keys(conn, []) == set()
+    assert db.get_emailed_keys(conn, owner_id_for(conn), []) == set()
 
 
 def test_list_jobs_filters_by_status(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn))
-    db.set_job_status(conn, "a", "applied")
+    db.save_jobs(conn, [_job("a"), _job("b")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "a", "applied")
 
     applied = db.list_jobs(conn, status=["applied"])
     none_status = db.list_jobs(conn, status=["none"])
@@ -833,9 +837,9 @@ def test_list_jobs_filters_by_status(pg_conn):
 
 def test_list_jobs_multi_status_returns_union(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn))
-    db.set_job_status(conn, "a", "applied")
-    db.set_job_status(conn, "b", "rejected")
+    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "a", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "b", "rejected")
 
     rows = db.list_jobs(conn, status=["applied", "rejected"])
 
@@ -844,8 +848,8 @@ def test_list_jobs_multi_status_returns_union(pg_conn):
 
 def test_list_jobs_multi_status_with_none_returns_union_including_no_status(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn))
-    db.set_job_status(conn, "a", "applied")
+    db.save_jobs(conn, [_job("a"), _job("b"), _job("c")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "a", "applied")
 
     rows = db.list_jobs(conn, status=["applied", "none"])
 
@@ -854,8 +858,8 @@ def test_list_jobs_multi_status_with_none_returns_union_including_no_status(pg_c
 
 def test_count_jobs_respects_status_filter(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a")], db.start_run(conn))
-    db.set_job_status(conn, "a", "rejected")
+    db.save_jobs(conn, [_job("a")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "a", "rejected")
 
     assert db.count_jobs(conn, status=["rejected"]) == 1
     assert db.count_jobs(conn, status=["applied"]) == 0
@@ -863,7 +867,7 @@ def test_count_jobs_respects_status_filter(pg_conn):
 
 def test_list_jobs_returns_status_field_defaulting_to_none(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [_job("a")], db.start_run(conn))
+    db.save_jobs(conn, [_job("a")], db.start_run(conn), user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
 
@@ -889,7 +893,7 @@ def test_list_jobs_location_filter_matches_by_resolved_display_name(pg_conn):
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Austin, TX"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
         "WHERE location = 'Chicago, IL'"
@@ -908,7 +912,7 @@ def test_list_jobs_unresolved_location_sentinel_matches_pending_and_failed(pg_co
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", source_name="Src", location="Remote"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
         "WHERE location = 'Chicago, IL'"
@@ -926,7 +930,7 @@ def test_count_jobs_location_filter_matches_list_jobs(pg_conn):
     run_id = db.start_run(conn)
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", source_name="Src", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
         "WHERE location = 'Chicago, IL'"
@@ -943,7 +947,7 @@ def test_list_mappable_jobs_returns_only_resolved_locations(pg_conn):
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Remote"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -966,7 +970,7 @@ def test_list_mappable_jobs_applies_the_same_filters_as_list_jobs(pg_conn):
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", company="Zeta", source_name="Src", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -984,13 +988,13 @@ def test_list_mappable_jobs_exclude_status_omits_matching_jobs(pg_conn):
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
     )
     conn.commit()
-    db.set_job_status(conn, "b", "not_interested")
+    db.set_job_status(conn, owner_id_for(conn), "b", "not_interested")
 
     rows = db.list_mappable_jobs(conn, exclude_status="not_interested")
 
@@ -1003,13 +1007,13 @@ def test_list_mappable_jobs_without_exclude_status_includes_everything(pg_conn):
     db.save_jobs(conn, [
         Job(key="a", title="A", url="https://x.test/a", company="Acme", source_name="Src", location="Chicago, IL"),
         Job(key="b", title="B", url="https://x.test/b", company="Acme", source_name="Src", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
     )
     conn.commit()
-    db.set_job_status(conn, "b", "not_interested")
+    db.set_job_status(conn, owner_id_for(conn), "b", "not_interested")
 
     rows = db.list_mappable_jobs(conn)
 
@@ -1023,7 +1027,7 @@ def _make_chicago_job(conn, key="job1"):
     db.save_jobs(conn, [
         Job(key=key, title="Engineer", url="https://x.test/1", company="Acme",
             location="Remote", source_name="Src", source_id="s1"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     return key
 
 def test_set_location_override_stores_geocoded_entry_and_links_job(pg_conn):
@@ -1031,7 +1035,7 @@ def test_set_location_override_stores_geocoded_entry_and_links_job(pg_conn):
     _make_chicago_job(conn)
 
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Chicago, Cook County, Illinois, United States",
         city="Chicago", region="Illinois", country="United States",
         lat=41.8781, lng=-87.6298, provider="nominatim",
@@ -1056,7 +1060,7 @@ def test_set_location_override_raises_for_unknown_job(pg_conn):
     conn = pg_conn
     with pytest.raises(KeyError):
         db.set_location_override(
-            conn, "no-such-key", "Chicago, IL",
+            conn, owner_id_for(conn), "no-such-key", "Chicago, IL",
             display_name="Chicago", city="Chicago", region="IL", country="US",
             lat=41.8, lng=-87.6, provider="nominatim",
         )
@@ -1066,13 +1070,13 @@ def test_set_location_override_upserts_existing_geocoded_entry(pg_conn):
     conn = pg_conn
     _make_chicago_job(conn)
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Old Name", city="Chicago", region="IL", country="US",
         lat=41.0, lng=-87.0, provider="nominatim",
     )
 
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Chicago, Illinois, USA", city="Chicago", region="Illinois", country="USA",
         lat=41.8781, lng=-87.6298, provider="nominatim",
     )
@@ -1087,12 +1091,12 @@ def test_clear_location_override_removes_override(pg_conn):
     conn = pg_conn
     _make_chicago_job(conn)
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Chicago", city="Chicago", region="IL", country="US",
         lat=41.8, lng=-87.6, provider="nominatim",
     )
 
-    db.clear_location_override(conn, "job1")
+    db.clear_location_override(conn, owner_id_for(conn), "job1")
 
     row = conn.execute("SELECT location_override FROM jobs WHERE key = 'job1'").fetchone()
     assert row == (None,)
@@ -1101,7 +1105,7 @@ def test_clear_location_override_removes_override(pg_conn):
 def test_clear_location_override_raises_for_unknown_job(pg_conn):
     conn = pg_conn
     with pytest.raises(KeyError):
-        db.clear_location_override(conn, "no-such-key")
+        db.clear_location_override(conn, owner_id_for(conn), "no-such-key")
 
 
 def test_list_jobs_includes_is_overridden_false_when_no_override(pg_conn):
@@ -1118,7 +1122,7 @@ def test_list_jobs_includes_is_overridden_true_and_shows_override_display_name(p
     conn = pg_conn
     _make_chicago_job(conn)
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Chicago, Illinois, USA", city="Chicago", region="IL", country="US",
         lat=41.8781, lng=-87.6298, provider="nominatim",
     )
@@ -1134,7 +1138,7 @@ def test_list_mappable_jobs_uses_override_location_for_map(pg_conn):
     conn = pg_conn
     _make_chicago_job(conn)
     db.set_location_override(
-        conn, "job1", "Chicago, IL",
+        conn, owner_id_for(conn), "job1", "Chicago, IL",
         display_name="Chicago, Illinois, USA", city="Chicago", region="IL", country="US",
         lat=41.8781, lng=-87.6298, provider="nominatim",
     )
@@ -1156,7 +1160,7 @@ def test_list_mappable_jobs_original_location_not_on_map_after_override(pg_conn)
     assert rows_before == []
 
     db.set_location_override(
-        conn, "job1", "Austin, TX",
+        conn, owner_id_for(conn), "job1", "Austin, TX",
         display_name="Austin, TX, USA", city="Austin", region="Texas", country="USA",
         lat=30.2672, lng=-97.7431, provider="nominatim",
     )
@@ -1170,9 +1174,9 @@ def test_list_mappable_jobs_original_location_not_on_map_after_override(pg_conn)
 
 def test_set_job_duplicate_marks_job_and_stores_reference(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.set_job_duplicate(conn, "k1", duplicate_of="Acme — Engineer (Greenhouse)")
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1", duplicate_of="Acme — Engineer (Greenhouse)")
 
     rows = db.list_jobs(conn, duplicates="include")
     assert rows[0]["is_duplicate"] is True
@@ -1181,9 +1185,9 @@ def test_set_job_duplicate_marks_job_and_stores_reference(pg_conn):
 
 def test_set_job_duplicate_without_reference(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
-    db.set_job_duplicate(conn, "k1")
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1")
 
     rows = db.list_jobs(conn, duplicates="include")
     assert rows[0]["is_duplicate"] is True
@@ -1192,10 +1196,10 @@ def test_set_job_duplicate_without_reference(pg_conn):
 
 def test_clear_job_duplicate_removes_flag(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_duplicate(conn, "k1", duplicate_of="Some Job")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1", duplicate_of="Some Job")
 
-    db.clear_job_duplicate(conn, "k1")
+    db.clear_job_duplicate(conn, owner_id_for(conn), "k1")
 
     rows = db.list_jobs(conn)
     assert rows[0]["is_duplicate"] is False
@@ -1206,21 +1210,21 @@ def test_set_job_duplicate_raises_for_unknown_key(pg_conn):
     conn = pg_conn
 
     with pytest.raises(KeyError):
-        db.set_job_duplicate(conn, "no-such-key")
+        db.set_job_duplicate(conn, owner_id_for(conn), "no-such-key")
 
 
 def test_clear_job_duplicate_raises_for_unknown_key(pg_conn):
     conn = pg_conn
 
     with pytest.raises(KeyError):
-        db.clear_job_duplicate(conn, "no-such-key")
+        db.clear_job_duplicate(conn, owner_id_for(conn), "no-such-key")
 
 
 def test_list_jobs_hides_duplicates_by_default(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     rows = db.list_jobs(conn)
 
@@ -1231,8 +1235,8 @@ def test_list_jobs_hides_duplicates_by_default(pg_conn):
 def test_list_jobs_includes_duplicates_when_requested(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     rows = db.list_jobs(conn, duplicates="include")
 
@@ -1242,8 +1246,8 @@ def test_list_jobs_includes_duplicates_when_requested(pg_conn):
 def test_list_jobs_returns_only_duplicates(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     rows = db.list_jobs(conn, duplicates="only")
 
@@ -1254,8 +1258,8 @@ def test_list_jobs_returns_only_duplicates(pg_conn):
 def test_count_jobs_excludes_duplicates_by_default(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     assert db.count_jobs(conn) == 1
     assert db.count_jobs(conn, duplicates="include") == 2
@@ -1269,12 +1273,12 @@ def test_list_mappable_jobs_excludes_duplicates_by_default(pg_conn):
             location="Chicago, IL", source_name="Board", source_id="s1"),
         Job(key="k2", title="Engineer 2", url="https://x.test/2", company="Acme",
             location="Chicago, IL", source_name="Indeed", source_id="s2"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status='resolved', lat=41.8, lng=-87.6 WHERE location='Chicago, IL'"
     )
     conn.commit()
-    db.set_job_duplicate(conn, "k2")
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     rows = db.list_mappable_jobs(conn)
 
@@ -1375,7 +1379,7 @@ def test_list_job_states_returns_distinct_geocoded_regions(pg_conn):
     db.save_jobs(conn, [
         Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
         Job(key="k2", title="B", url="https://x.test/2", source_name="Board", location="Milwaukee, WI"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
         "WHERE location = 'Chicago, IL'"
@@ -1397,7 +1401,7 @@ def test_list_job_states_excludes_pending_locations(pg_conn):
     from app.models import Job
     db.save_jobs(conn, [
         Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     # location stays 'pending', no region set
 
     states = db.list_job_states(conn)
@@ -1412,7 +1416,7 @@ def test_list_job_states_deduplicates_same_region(pg_conn):
     db.save_jobs(conn, [
         Job(key="k1", title="A", url="https://x.test/1", source_name="Board", location="Chicago, IL"),
         Job(key="k2", title="B", url="https://x.test/2", source_name="Board", location="Naperville, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
         "WHERE location IN ('Chicago, IL', 'Naperville, IL')"
@@ -1431,7 +1435,7 @@ def _make_geocoded_job(conn, key, title, location, region, lat=None, lng=None):
     from app.models import Job
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key=key, title=title, url=f"https://x.test/{key}",
-                             source_name="Board", location=location)], run_id)
+                             source_name="Board", location=location)], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = %s WHERE location = %s",
         [region, location],
@@ -1527,7 +1531,7 @@ def test_haversine_filter_excludes_job_with_null_coordinates(pg_conn):
     from app.models import Job
     run_id = db.start_run(conn)
     db.save_jobs(conn, [Job(key="k1", title="No Coords", url="https://x.test/1",
-                             source_name="Board", location="Remote")], run_id)
+                             source_name="Board", location="Remote")], run_id, user_id=owner_id_for(conn))
     # geocoded_locations row exists but lat/lng are null
 
     rows = db.list_jobs(conn, zip_lat=41.8781, zip_lng=-87.6298, radius_miles=50.0)
@@ -1597,14 +1601,14 @@ def test_get_geocoded_location_ignores_a_pending_or_failed_row(pg_conn):
 def test_reconcile_jobs_clears_emailed_at_when_reactivating(pg_conn):
     conn = pg_conn
     job = make_job(key="k1", source_id="s1")
-    db.save_jobs(conn, [job], db.start_run(conn))
-    db.mark_emailed(conn, ["k1"])
+    db.save_jobs(conn, [job], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k1"])
     assert db.list_jobs(conn)[0]["emailed_at"] is not None
 
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[job])
 
     row = db.list_jobs(conn)[0]
     assert row["removed_at"] is None
@@ -1618,8 +1622,8 @@ def test_get_unemailed_jobs_returns_active_unemailed_jobs(pg_conn):
     run_id = db.start_run(conn)
     j1 = make_job(key="k1")
     j2 = make_job(key="k2")
-    db.save_jobs(conn, [j1, j2], run_id)
-    db.mark_emailed(conn, ["k2"])
+    db.save_jobs(conn, [j1, j2], run_id, user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k2"])
 
     result = db.get_unemailed_jobs(conn)
 
@@ -1631,8 +1635,8 @@ def test_get_unemailed_jobs_excludes_removed_jobs(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
     job = make_job(key="k1", source_id="s1")
-    db.save_jobs(conn, [job], run_id)
-    db.reconcile_jobs(conn, configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids={"s1"}, succeeded_source_ids={"s1"}, found_jobs=[])
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
     result = db.get_unemailed_jobs(conn)
@@ -1644,8 +1648,8 @@ def test_get_unemailed_jobs_returns_empty_when_all_emailed(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
     job = make_job(key="k1")
-    db.save_jobs(conn, [job], run_id)
-    db.mark_emailed(conn, ["k1"])
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k1"])
 
     assert db.get_unemailed_jobs(conn) == []
 
@@ -1657,8 +1661,8 @@ def test_save_jobs_duplicate_key_is_silently_ignored(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)
     job = make_job(key="dup-key-1")
-    db.save_jobs(conn, [job], run_id)
-    db.save_jobs(conn, [job], run_id)  # must not raise
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))  # must not raise
     conn.commit()
     assert db.count_jobs(conn) == 1
 
@@ -1673,11 +1677,13 @@ def test_start_run_returns_integer_id(pg_conn):
 def test_fk_violation_raises_psycopg_error(pg_conn):
     import psycopg.errors
     conn = pg_conn
+    owner = owner_id_for(conn)
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         conn.execute(
-            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location) "
+            "INSERT INTO jobs (key, title, url, source_name, first_seen_at, location, user_id) "
             "VALUES ('fk-test-1', 'Engineer', 'https://x.test/2', 'Board', "
-            "'2026-01-01T00:00:00+00:00', 'no-such-location')"
+            "'2026-01-01T00:00:00+00:00', 'no-such-location', %s)",
+            (owner,),
         )
 
 
@@ -1719,11 +1725,11 @@ def test_get_last_run_date_ignores_url_check_runs(pg_conn):
 
 def test_refresh_job_urls_updates_stored_url_for_known_keys(pg_conn):
     run_id = db.start_run(pg_conn)
-    db.save_jobs(pg_conn, [make_job(key="k1"), make_job(key="k2")], run_id)
+    db.save_jobs(pg_conn, [make_job(key="k1"), make_job(key="k2")], run_id, user_id=owner_id_for(pg_conn))
 
     fixed = Job(key="k1", title="Engineer", url="https://x.test/fixed", company="Acme",
                 location="Remote", posted_date=None, source_name="Acme Board", source_id="s1")
-    updated = db.refresh_job_urls(pg_conn, [fixed, make_job(key="unknown")])
+    updated = db.refresh_job_urls(pg_conn, owner_id_for(pg_conn), [fixed, make_job(key="unknown")])
 
     urls = dict(pg_conn.execute("SELECT key, url FROM jobs").fetchall())
     assert urls == {"k1": "https://x.test/fixed", "k2": "https://x.test/1"}
@@ -1731,4 +1737,4 @@ def test_refresh_job_urls_updates_stored_url_for_known_keys(pg_conn):
 
 
 def test_refresh_job_urls_with_no_jobs_is_a_noop(pg_conn):
-    assert db.refresh_job_urls(pg_conn, []) == 0
+    assert db.refresh_job_urls(pg_conn, owner_id_for(pg_conn), []) == 0

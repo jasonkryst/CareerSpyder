@@ -1,5 +1,6 @@
 from app import checker, db
 from app.models import Job
+from tests.conftest import owner_id_for
 
 
 def make_job(key="k1", url="https://example.com/jobs/1", source_id="s1"):
@@ -28,7 +29,7 @@ def _head_raising(exc):
 
 def test_check_job_urls_marks_removed_on_404(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(404))
 
@@ -38,7 +39,7 @@ def test_check_job_urls_marks_removed_on_404(pg_conn):
 
 def test_check_job_urls_marks_removed_on_410(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(410))
 
@@ -48,7 +49,7 @@ def test_check_job_urls_marks_removed_on_410(pg_conn):
 
 def test_check_job_urls_returns_count_of_removed(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job("k1"), make_job("k2"), make_job("k3")], db.start_run(conn))
+    db.save_jobs(conn, [make_job("k1"), make_job("k2"), make_job("k3")], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(404))
 
@@ -59,7 +60,7 @@ def test_check_job_urls_returns_count_of_removed(pg_conn):
 
 def test_check_job_urls_leaves_active_job_untouched_on_200(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(200))
 
@@ -69,7 +70,7 @@ def test_check_job_urls_leaves_active_job_untouched_on_200(pg_conn):
 
 def test_check_job_urls_leaves_active_job_untouched_on_301(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(301))
 
@@ -79,7 +80,7 @@ def test_check_job_urls_leaves_active_job_untouched_on_301(pg_conn):
 
 def test_check_job_urls_leaves_active_job_untouched_on_500(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     count = checker.check_job_urls(conn, http_head=_head_returning(500))
 
@@ -89,7 +90,7 @@ def test_check_job_urls_leaves_active_job_untouched_on_500(pg_conn):
 
 def test_check_job_urls_leaves_active_job_untouched_when_request_raises(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     import requests
     count = checker.check_job_urls(conn, http_head=_head_raising(requests.ConnectionError("timeout")))
@@ -100,8 +101,8 @@ def test_check_job_urls_leaves_active_job_untouched_when_request_raises(pg_conn)
 
 def test_check_job_urls_skips_already_removed_jobs(pg_conn):
     conn = pg_conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
     calls = []
@@ -129,7 +130,7 @@ def test_check_job_urls_only_removes_jobs_that_return_404_or_410(pg_conn):
         make_job("gone-410", url="https://example.com/2"),
         make_job("still-live", url="https://example.com/3"),
     ]
-    db.save_jobs(conn, jobs, db.start_run(conn))
+    db.save_jobs(conn, jobs, db.start_run(conn), user_id=owner_id_for(conn))
 
     status_by_url = {
         "https://example.com/1": 404,
@@ -155,7 +156,7 @@ def test_check_job_urls_checks_urls_concurrently(pg_conn):
     import threading
     conn = pg_conn
     db.save_jobs(conn, [make_job(key=f"k{i}", url=f"https://example.com/{i}") for i in range(3)],
-                 db.start_run(conn))
+                 db.start_run(conn), user_id=owner_id_for(conn))
     # Every call waits at the barrier until all three are in flight at once --
     # a sequential checker would time out here instead of passing through.
     barrier = threading.Barrier(3, timeout=5)
@@ -175,7 +176,7 @@ def test_check_job_urls_stops_waiting_at_the_overall_deadline(pg_conn):
     conn = pg_conn
     db.save_jobs(conn, [make_job(key="fast", url="https://example.com/fast"),
                         make_job(key="slow", url="https://example.com/slow")],
-                 db.start_run(conn))
+                 db.start_run(conn), user_id=owner_id_for(conn))
     release = threading.Event()
 
     def _head(url, *, timeout, allow_redirects):

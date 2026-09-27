@@ -32,7 +32,7 @@ class RunSummary:
 
 def run_once(
     conn: psycopg.Connection, sources: list[SourceConfig],
-    geocoder: Geocoder | None = None, user_id: str | None = None,
+    geocoder: Geocoder | None = None, *, user_id: str,
 ) -> RunSummary:
     with _run_lock:
         run_id = db.start_run(conn, user_id=user_id)
@@ -56,15 +56,15 @@ def run_once(
         deduped_jobs = list({j.key: j for j in all_jobs}.values())
         deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
 
-        new_jobs = db.get_new_jobs(conn, deduped_jobs)
+        new_jobs = db.get_new_jobs(conn, user_id, deduped_jobs)
         db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
         # Heal URLs of already-known jobs (e.g. after an adapter URL fix) before
         # the checker below HEADs them -- a stale broken URL would 404 and get
         # the job marked removed.
-        db.refresh_job_urls(conn, deduped_raw_jobs)
+        db.refresh_job_urls(conn, user_id, deduped_raw_jobs)
 
         configured_source_ids = {s.id for s in sources}
-        db.reconcile_jobs(conn, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
+        db.reconcile_jobs(conn, user_id, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
 
         try:
             geocode_pending(conn, geocoder or get_geocoder())
@@ -72,7 +72,7 @@ def run_once(
             logger.exception("Geocoding step failed for run %s", run_id)
 
         try:
-            url_removed_count = checker.check_job_urls(conn)
+            url_removed_count = checker.check_job_urls(conn, user_id=user_id)
         except Exception:
             logger.exception("URL check step failed for run %s", run_id)
             url_removed_count = 0

@@ -4,6 +4,7 @@ import psycopg
 
 from app import db
 from app.models import Job
+from tests.conftest import owner_id_for
 
 
 def test_toast_appears_after_deleting_a_source_and_can_be_dismissed(live_server, page):
@@ -42,7 +43,7 @@ def test_clicking_job_title_opens_a_new_tab_to_the_job_url(live_server, page):
     job = Job(key="e2e-external-link", title="E2E External Link Job",
               url="https://example.com/job/e2e-external-link")
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
     page.context.route("https://example.com/**", lambda route: route.fulfill(
