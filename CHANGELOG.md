@@ -5,6 +5,51 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-09-27
+
+### Security
+
+(Tenant isolation — phase 1 of the 2026-09-27 security audit,
+docs/audits/2026-09-27-security-audit.md.)
+
+- **H1 — job actions were not limited to the job's owner.** Status, remove,
+  duplicate, and location-override on `/jobs` looked jobs up by key alone,
+  so any signed-in user could change another user's jobs. They now act only
+  on the caller's own jobs (404 otherwise).
+
+- **H2 — "Clear job cache" deleted every user's jobs.** It now clears only
+  the caller's jobs.
+
+- **H3 — scrape runs affected other users' jobs.** Each user's run marked
+  every other user's jobs removed (and they were re-emailed when reactivated),
+  and two users tracking the same job board collided so the second never
+  received those jobs. Jobs are now owned per user: the primary key is
+  `(user_id, key)` and every pipeline step (new-job detection, save, URL
+  refresh, reconcile, emailed/status lookups, the URL checker) is scoped to
+  the owner. Users whose sources were all deleted still have those jobs marked
+  removed.
+
+- **M3 — any user's "Run now" ran everyone's sources and emailed everyone.**
+  Members now run only their own sources; admins still run everyone. "Run now"
+  and "Check job URLs" are limited to 3 per user per 10 minutes.
+
+- **M4 — importing a shared settings file could overwrite another user's
+  sources.** Imported sources whose id belongs to someone else get a new id;
+  a new source never reuses a submitted id.
+
+- **L2 — job filter dropdowns listed other users' locations.** Location and
+  state filters now list only the viewer's own jobs' locations (admins still
+  see all).
+
+### Changed
+
+- **Database migration 0003 runs on upgrade.** It changes the `jobs` primary
+  key to `(user_id, key)`; any jobs without an owner are assigned to the
+  first admin. Runs automatically at container start (`alembic upgrade head`).
+
+- **The admin's all-users job view is read-only for other users' rows.**
+  Action controls are shown only on the admin's own jobs.
+
 ## [1.4.0] — 2026-09-22
 
 ### Fixed
