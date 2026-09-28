@@ -11,7 +11,13 @@ from starlette.datastructures import UploadFile
 from app import db
 from app.config import SourcesFile
 from app.models import JOB_STATUSES
-from app.web.auth import hash_password, require_admin, require_user, verify_password
+from app.web.auth import (
+    hash_password,
+    require_admin,
+    require_user,
+    start_session,
+    verify_password,
+)
 from app.web.flash import flash_redirect
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -335,5 +341,8 @@ async def change_password(
 
     with request.app.state.pool.connection() as conn:
         db.update_password(conn, current_user["id"], hash_password(new_password))
+        refreshed = db.get_user_by_id_with_hash(conn, current_user["id"])
+        if refreshed is not None:
+            start_session(request, refreshed)
 
     return flash_redirect("/settings/account", "Password updated.")

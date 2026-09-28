@@ -23,17 +23,37 @@ def verify_password(plaintext: str, hashed: str) -> bool:
     return _bcrypt.checkpw(plaintext.encode(), hashed.encode())
 
 
-def get_current_user(request: Request) -> dict | None:
-    """Returns the session user dict, or None if the session has no valid user."""
+def password_fingerprint(pw_hash: str) -> str:
+    """Short digest of the stored hash. Kept in the session so any password
+    change or reset invalidates every other session (audit M5)."""
+    return hashlib.sha256(pw_hash.encode()).hexdigest()[:16]
+
+
+def start_session(request: Request, user_with_hash: dict) -> None:
+    request.session["user_id"] = user_with_hash["id"]
+    request.session["pw_fp"] = password_fingerprint(user_with_hash["password_hash"])
+
+
+def load_session_user(request: Request) -> dict | None:
+    """The session's user (without password_hash), or None -- clearing the
+    session if the user is gone, deactivated, or changed password since."""
     user_id = request.session.get("user_id")
     if not user_id:
         return None
     with request.app.state.pool.connection() as conn:
-        user = db.get_user_by_id(conn, user_id)
-    if user is None or not user["is_active"]:
+        user = db.get_user_by_id_with_hash(conn, user_id)
+    if (
+        user is None or not user["is_active"]
+        or request.session.get("pw_fp") != password_fingerprint(user["password_hash"])
+    ):
         request.session.clear()
         return None
-    return user
+    return {k: v for k, v in user.items() if k != "password_hash"}
+
+
+def get_current_user(request: Request) -> dict | None:
+    """Returns the session user dict, or None if the session has no valid user."""
+    return load_session_user(request)
 
 
 def require_user(user: dict | None = Depends(get_current_user)) -> dict:
@@ -64,20 +84,10 @@ class UserContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if not request.url.path.startswith("/static"):
-            user_id = request.session.get("user_id")
-            if user_id:
-                try:
-                    with request.app.state.pool.connection() as conn:
-                        user = db.get_user_by_id(conn, user_id)
-                    if user and user["is_active"]:
-                        request.state.user = user
-                    else:
-                        request.session.clear()
-                        request.state.user = None
-                except Exception:
-                    logger.exception("UserContextMiddleware: failed to load user %s", user_id)
-                    request.state.user = None
-            else:
+            try:
+                request.state.user = load_session_user(request)
+            except Exception:
+                logger.exception("UserContextMiddleware: failed to load session user")
                 request.state.user = None
         return await call_next(request)
 

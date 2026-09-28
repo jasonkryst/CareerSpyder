@@ -11,6 +11,7 @@ from app import db, emailer
 from app.web.auth import (
     generate_reset_token,
     hash_password,
+    start_session,
     verify_password,
     verify_reset_token,
 )
@@ -63,7 +64,7 @@ async def login(request: Request):
             status_code=401,
         )
 
-    request.session["user_id"] = user["id"]
+    start_session(request, user)
 
     # Reject anything with a scheme or host (catches //evil.com, http://…, etc.)
     parsed = urlparse(next_url)
@@ -268,8 +269,10 @@ async def register(request: Request):
         user = db.create_user(conn, username, invite["email"], hash_password(password))  # type: ignore[index]
         db.use_invite(conn, token)
         db._seed_settings(conn, user["id"], "", 587, "", "", "")
+        user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
+        if user_with_hash is not None:
+            start_session(request, user_with_hash)
 
-    request.session["user_id"] = user["id"]
     return RedirectResponse(url="/", status_code=303)
 
 
