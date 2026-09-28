@@ -804,6 +804,13 @@ def create_invite(
 
 
 def get_invite(conn: psycopg.Connection, token: str) -> dict | None:
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        # Not a well-formed UUID -- treat as "not found" rather than letting an
+        # untrusted, arbitrary token string reach the database as a query param
+        # (Postgres would otherwise raise InvalidTextRepresentation).
+        return None
     row = conn.execute(
         "SELECT token, email, created_by, expires_at, used_at FROM invite_tokens WHERE token = %s",
         (token,),

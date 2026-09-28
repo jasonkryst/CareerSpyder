@@ -4,13 +4,15 @@ from datetime import UTC, datetime
 from html import escape as _esc
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db, emailer
 from app.web.auth import (
     generate_reset_token,
     hash_password,
+    password_too_long,
     start_session,
     verify_password,
     verify_reset_token,
@@ -23,6 +25,11 @@ from app.web.templating import templates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_TOO_LONG = "Password must be at most 72 bytes."
+# Verified against for unknown usernames so a miss costs the same bcrypt time
+# as a hit -- response timing must not reveal which usernames exist.
+_DUMMY_HASH = hash_password("not-a-real-password")
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -57,7 +64,9 @@ async def login(request: Request):
     with request.app.state.pool.connection() as conn:
         user = db.get_user_by_username(conn, username)
 
-    if user is None or not user["is_active"] or not verify_password(password, user["password_hash"]):
+    stored_hash = user["password_hash"] if user is not None else _DUMMY_HASH
+    password_ok = await run_in_threadpool(verify_password, password, stored_hash)
+    if user is None or not user["is_active"] or not password_ok:
         return templates.TemplateResponse(
             request, "login.html",
             {"error": "Invalid username or password.", "next": next_url},
@@ -86,7 +95,7 @@ async def account_recovery_form(request: Request):
 
 
 @router.post("/account-recovery", response_class=HTMLResponse)
-async def account_recovery(request: Request):
+async def account_recovery(request: Request, background_tasks: BackgroundTasks):
     if not rate_limit(request, "account-recovery", max_attempts=5, window_seconds=3600):
         return templates.TemplateResponse(
             request, "account_recovery.html",
@@ -125,19 +134,9 @@ async def account_recovery(request: Request):
             user_with_hash["password_hash"],
         )
         reset_url = base_url + f"/reset-password?token={token}"
-        try:
-            emailer.send_email(
-                smtp_host=smtp["smtp_host"],
-                smtp_port=smtp["smtp_port"],
-                smtp_user=smtp["smtp_user"],
-                smtp_password=os.environ.get("SMTP_PASSWORD", ""),
-                email_from=smtp["email_from"],
-                email_to=[email],
-                subject="CareerSpyder account recovery",
-                html_body=_recovery_email_html(user_with_hash["username"], reset_url),
-            )
-        except Exception:
-            logger.exception("Failed to send recovery email to %s", email)
+        background_tasks.add_task(
+            _send_recovery_email, smtp, email, user_with_hash["username"], reset_url,
+        )
 
     return templates.TemplateResponse(
         request, "account_recovery.html",
@@ -164,6 +163,13 @@ async def reset_password_form(request: Request):
 
 @router.post("/reset-password", response_class=HTMLResponse)
 async def reset_password(request: Request):
+    if not rate_limit(request, "reset-password", max_attempts=10, window_seconds=900):
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": "Too many attempts. Please wait a few minutes and try again."},
+            status_code=429,
+        )
+
     form = dict((await request.form()).items())
     token = str(form.get("token") or "").strip()
     password = str(form.get("password") or "")
@@ -192,9 +198,12 @@ async def reset_password(request: Request):
             return _token_error()
         if len(password) < 8:
             return _form_error("Password must be at least 8 characters.")
+        if password_too_long(password):
+            return _form_error(_TOO_LONG)
         if password != password_confirm:
             return _form_error("Passwords do not match.")
-        db.update_password(conn, user["id"], hash_password(password))
+        new_hash = await run_in_threadpool(hash_password, password)
+        db.update_password(conn, user["id"], new_hash)
 
     request.session.clear()
     return flash_redirect("/login", "Password reset. Please sign in with your new password.")
@@ -226,6 +235,12 @@ async def register_form(request: Request):
 
 @router.post("/register")
 async def register(request: Request):
+    if not rate_limit(request, "register", max_attempts=10, window_seconds=3600):
+        return templates.TemplateResponse(
+            request, "register.html",
+            {"error": "Too many attempts. Please wait and try again."}, status_code=429,
+        )
+
     form = dict((await request.form()).items())
     token = str(form.get("token") or "").strip()
     username = str(form.get("username") or "").strip()
@@ -257,8 +272,12 @@ async def register(request: Request):
         return _error("Password is required.")
     if len(password) < 8:
         return _error("Password must be at least 8 characters.")
+    if password_too_long(password):
+        return _error(_TOO_LONG)
     if password != password_confirm:
         return _error("Passwords do not match.")
+
+    pw_hash = await run_in_threadpool(hash_password, password)
 
     with request.app.state.pool.connection() as conn:
         if db.get_user_by_username(conn, username):
@@ -266,7 +285,7 @@ async def register(request: Request):
         if db.get_user_by_email(conn, invite["email"]):  # type: ignore[index]
             return _error("An account with that email already exists.")
 
-        user = db.create_user(conn, username, invite["email"], hash_password(password))  # type: ignore[index]
+        user = db.create_user(conn, username, invite["email"], pw_hash)  # type: ignore[index]
         db.use_invite(conn, token)
         db._seed_settings(conn, user["id"], "", 587, "", "", "")
         user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
@@ -274,6 +293,20 @@ async def register(request: Request):
             start_session(request, user_with_hash)
 
     return RedirectResponse(url="/", status_code=303)
+
+
+def _send_recovery_email(smtp: dict, to: str, username: str, reset_url: str) -> None:
+    """Runs after the response is sent: keeps SMTP off the event loop and makes
+    known and unknown emails respond in the same time (audit M7)."""
+    try:
+        emailer.send_email(
+            smtp_host=smtp["smtp_host"], smtp_port=smtp["smtp_port"], smtp_user=smtp["smtp_user"],
+            smtp_password=os.environ.get("SMTP_PASSWORD", ""), email_from=smtp["email_from"],
+            email_to=[to], subject="CareerSpyder account recovery",
+            html_body=_recovery_email_html(username, reset_url),
+        )
+    except Exception:
+        logger.exception("Failed to send recovery email to %s", to)
 
 
 def _recovery_email_html(username: str, reset_url: str) -> str:

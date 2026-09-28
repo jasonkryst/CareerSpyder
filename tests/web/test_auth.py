@@ -609,3 +609,40 @@ def test_recovery_email_is_not_sent_without_public_base_url(unauthed_client, mon
     resp = unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
     assert resp.status_code == 200  # same "check your email" page -- no enumeration signal
     assert sent == []
+
+
+# ── Event loop / rate limit / bcrypt length (M7, L1) ───────────────────────────
+
+def test_login_with_an_overlong_password_is_a_plain_401(unauthed_client):
+    resp = unauthed_client.post("/login", data={"username": "admin", "password": "x" * 100})
+    assert resp.status_code == 401
+
+
+def test_reset_password_post_is_rate_limited(unauthed_client):
+    for _ in range(10):
+        unauthed_client.post("/reset-password", data={"token": "bogus", "password": "a", "password_confirm": "a"})
+    resp = unauthed_client.post("/reset-password", data={"token": "bogus", "password": "a", "password_confirm": "a"})
+    assert resp.status_code == 429
+
+
+def test_register_post_is_rate_limited(unauthed_client):
+    for _ in range(10):
+        unauthed_client.post("/register", data={"token": "bogus"})
+    assert unauthed_client.post("/register", data={"token": "bogus"}).status_code == 429
+
+
+def _invite_token(tc, email: str) -> str:
+    """Create an invite from the seeded admin. Uses the one client's pool --
+    requesting both `client` and `unauthed_client` would run the lifespan twice."""
+    with tc.app.state.pool.connection() as conn:
+        admin = db.get_user_by_username(conn, "admin")
+        return str(db.create_invite(conn, email, admin["id"])["token"])
+
+
+def test_register_rejects_passwords_over_72_bytes(unauthed_client):
+    resp = unauthed_client.post("/register", data={
+        "token": _invite_token(unauthed_client, "new@test.local"), "username": "newbie",
+        "password": "é" * 40, "password_confirm": "é" * 40,   # 80 UTF-8 bytes
+    })
+    assert resp.status_code == 400
+    assert "72 bytes" in resp.text

@@ -83,3 +83,22 @@ def test_change_password_unauthenticated_redirects_to_login(unauthed_client):
     }, follow_redirects=False)
     assert resp.status_code in (302, 303)
     assert "/login" in resp.headers["location"]
+
+
+def test_change_password_rejects_passwords_over_72_bytes(member_client):
+    resp = member_client.post("/settings/account/password", data={
+        "current_password": "member123", "new_password": "x" * 73, "new_password_confirm": "x" * 73,
+    })
+    assert resp.status_code == 400
+    assert "72 bytes" in resp.text
+
+
+def test_change_password_current_password_guess_is_rate_limited(member_client):
+    for _ in range(10):
+        member_client.post("/settings/account/password", data={
+            "current_password": "wrong", "new_password": "newpass123", "new_password_confirm": "newpass123",
+        })
+    resp = member_client.post("/settings/account/password", data={
+        "current_password": "wrong", "new_password": "newpass123", "new_password_confirm": "newpass123",
+    })
+    assert resp.status_code == 429

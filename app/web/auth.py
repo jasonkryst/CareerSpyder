@@ -15,11 +15,21 @@ from app import db
 logger = logging.getLogger(__name__)
 
 
+# bcrypt only hashes the first 72 bytes and bcrypt>=5 raises beyond that.
+MAX_PASSWORD_BYTES = 72
+
+
+def password_too_long(plaintext: str) -> bool:
+    return len(plaintext.encode()) > MAX_PASSWORD_BYTES
+
+
 def hash_password(plaintext: str) -> str:
     return _bcrypt.hashpw(plaintext.encode(), _bcrypt.gensalt()).decode()
 
 
 def verify_password(plaintext: str, hashed: str) -> bool:
+    if password_too_long(plaintext):
+        return False
     return _bcrypt.checkpw(plaintext.encode(), hashed.encode())
 
 
