@@ -1,6 +1,6 @@
 import pytest
 
-from app import db, orchestrator
+from app import checker, db, orchestrator
 from app.models import Job
 
 KEY = "greenhouse:1"
@@ -75,6 +75,21 @@ def test_clear_jobs_only_deletes_the_callers_jobs(pg_conn, two_users):
     assert owners == [alice]
 
 
+def test_clear_jobs_also_deletes_only_the_callers_job_status_history(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice)
+    _save(pg_conn, bob)
+    db.set_job_status(pg_conn, alice, KEY, "applied")
+    db.set_job_status(pg_conn, bob, KEY, "rejected")
+
+    db.clear_jobs(pg_conn, bob)
+
+    owners = [
+        r[0] for r in pg_conn.execute("SELECT user_id::text FROM job_status_history").fetchall()
+    ]
+    assert owners == [alice]
+
+
 def test_mark_emailed_only_touches_the_callers_copy_of_a_shared_key(pg_conn, two_users):
     alice, bob = two_users
     _save(pg_conn, alice)
@@ -84,6 +99,35 @@ def test_mark_emailed_only_touches_the_callers_copy_of_a_shared_key(pg_conn, two
         "SELECT emailed_at FROM jobs WHERE user_id = %s AND key = %s", (bob, KEY),
     ).fetchone()[0]
     assert bob_emailed is None
+
+
+def test_check_job_urls_with_no_user_id_checks_each_owners_own_url(pg_conn, two_users):
+    """None means "check every user's jobs" (the admin's manual Check job
+    URLs) -- it must still check each owner's own copy of a shared key
+    against that owner's own URL, not cross-contaminate results."""
+    alice, bob = two_users
+    key = "lever:dead"
+    _save(pg_conn, alice, Job(key=key, title="E", url="https://alice.example/dead",
+                               source_name="S", source_id="s"))
+    _save(pg_conn, bob, Job(key=key, title="E", url="https://bob.example/alive",
+                             source_name="S", source_id="s"))
+
+    def fake_http_head(url, **kwargs):
+        status = 404 if url == "https://alice.example/dead" else 200
+        return type("Resp", (), {"status_code": status})()
+
+    removed = checker.check_job_urls(pg_conn, http_head=fake_http_head, user_id=None)
+
+    alice_removed = pg_conn.execute(
+        "SELECT removed_at FROM jobs WHERE user_id = %s AND key = %s", (alice, key),
+    ).fetchone()[0]
+    bob_removed = pg_conn.execute(
+        "SELECT removed_at FROM jobs WHERE user_id = %s AND key = %s", (bob, key),
+    ).fetchone()[0]
+
+    assert removed == 1
+    assert alice_removed is not None
+    assert bob_removed is None
 
 
 def test_status_history_is_kept_per_owner(pg_conn, two_users):

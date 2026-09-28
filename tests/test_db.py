@@ -1745,3 +1745,64 @@ def test_refresh_job_urls_updates_stored_url_for_known_keys(pg_conn):
 
 def test_refresh_job_urls_with_no_jobs_is_a_noop(pg_conn):
     assert db.refresh_job_urls(pg_conn, owner_id_for(pg_conn), []) == 0
+
+
+def test_import_sources_counts_each_upserted_source_in_the_normal_case(pg_conn):
+    from app.config import GreenhouseSource
+
+    user_id = owner_id_for(pg_conn)
+    sources = [
+        GreenhouseSource(id="s1", name="A", type="greenhouse", board_token="a"),
+        GreenhouseSource(id="s2", name="B", type="greenhouse", board_token="b"),
+    ]
+    assert db.import_sources(pg_conn, user_id, sources) == 2
+    # Re-importing the same, already-owned sources still counts as upserted.
+    assert db.import_sources(pg_conn, user_id, sources) == 2
+
+
+class _FakeCursor:
+    def __init__(self, fetchone_result=None, rowcount=1):
+        self._fetchone_result = fetchone_result
+        self.rowcount = rowcount
+
+    def fetchone(self):
+        return self._fetchone_result
+
+
+class _FakeConnForImport:
+    """Stubs just enough of psycopg.Connection for import_sources: an ownership
+    check SELECT (returns queued fetchone() results) and an upsert whose
+    rowcount is queued separately, so a race-guarded no-op upsert (the
+    ON CONFLICT ... WHERE sources.user_id = excluded.user_id guard matching
+    zero rows) can be simulated deterministically without real concurrency."""
+
+    def __init__(self, ownership_answers, upsert_rowcounts):
+        self._ownership_answers = list(ownership_answers)
+        self._upsert_rowcounts = list(upsert_rowcounts)
+
+    def execute(self, query, params=None):
+        if query.strip().startswith("SELECT user_id"):
+            return _FakeCursor(fetchone_result=self._ownership_answers.pop(0))
+        return _FakeCursor(rowcount=self._upsert_rowcounts.pop(0))
+
+    def commit(self):
+        pass
+
+
+def test_import_sources_counts_only_rows_actually_written_by_the_upsert():
+    """A source id can be claimed by a concurrent import between import_sources'
+    ownership check and its upsert; the upsert's WHERE guard then makes that
+    upsert a no-op (0 rows). That must not be counted as an imported row."""
+    from app.config import GreenhouseSource
+
+    source_a = GreenhouseSource(id="a", name="A", type="greenhouse", board_token="a")
+    source_b = GreenhouseSource(id="b", name="B", type="greenhouse", board_token="b")
+
+    conn = _FakeConnForImport(
+        ownership_answers=[None, None],  # neither id has a known owner yet
+        upsert_rowcounts=[1, 0],  # source_b's upsert loses the race: 0 rows
+    )
+
+    count = db.import_sources(conn, "user-1", [source_a, source_b])
+
+    assert count == 1

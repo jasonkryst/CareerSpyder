@@ -24,7 +24,9 @@ def check_job_urls(
 ) -> int:
     """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs.
 
-    Pass user_id to restrict checks to that user's jobs; None checks all (admin/scheduler use).
+    Pass user_id to restrict checks to that user's jobs. None checks every
+    user's jobs -- this is only used by the admin's manual "Check job URLs";
+    the scheduler always passes the run's own user_id.
     HEADs run in a thread pool; URLs not answered within deadline_s are left
     untouched until the next pass. Only the calling thread touches `conn`.
     """

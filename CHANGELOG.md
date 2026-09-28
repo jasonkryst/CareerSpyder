@@ -27,7 +27,8 @@ docs/audits/2026-09-27-security-audit.md.)
   `(user_id, key)` and every pipeline step (new-job detection, save, URL
   refresh, reconcile, emailed/status lookups, the URL checker) is scoped to
   the owner. Users whose sources were all deleted still have those jobs marked
-  removed.
+  removed. The URL checker run by the scheduler is scoped to that run's
+  owner; the admin's manual "Check job URLs" still checks every user's jobs.
 
 - **M3 — any user's "Run now" ran everyone's sources and emailed everyone.**
   Members now run only their own sources; admins still run everyone. "Run now"
@@ -45,7 +46,10 @@ docs/audits/2026-09-27-security-audit.md.)
 
 - **Database migration 0003 runs on upgrade.** It changes the `jobs` primary
   key to `(user_id, key)`; any jobs without an owner are assigned to the
-  first admin. Runs automatically at container start (`alembic upgrade head`).
+  first admin, or -- if no admin exists yet at upgrade time -- held in a
+  side table and claimed by the admin account the first time it's created
+  (or the next time the app starts, if one already exists). Runs
+  automatically at container start (`alembic upgrade head`).
 
 - **The admin's all-users job view is read-only for other users' rows.**
   Action controls are shown only on the admin's own jobs.

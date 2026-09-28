@@ -72,6 +72,7 @@ def refresh_job_urls(conn: psycopg.Connection, user_id: str, jobs: list[Job]) ->
 
 def clear_jobs(conn: psycopg.Connection, user_id: str) -> None:
     conn.execute("DELETE FROM jobs WHERE user_id = %s", (user_id,))
+    conn.execute("DELETE FROM job_status_history WHERE user_id = %s", (user_id,))
     conn.commit()
 
 
@@ -931,7 +932,7 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
         if owner is not None and owner[0] != str(user_id):
             source = source.model_copy(update={"id": uuid.uuid4().hex[:12]})
         data = source.model_dump()
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO sources (id, user_id, type, name, secondary, config) "
             "VALUES (%s, %s, %s, %s, %s, %s) "
             "ON CONFLICT(id) DO UPDATE SET "
@@ -941,7 +942,7 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
             (source.id, user_id, source.type, source.name, source.secondary,
              json.dumps(data)),
         )
-        count += 1
+        count += cur.rowcount
     conn.commit()
     return count
 
@@ -949,6 +950,40 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
 # ---------------------------------------------------------------------------
 # Admin bootstrap
 # ---------------------------------------------------------------------------
+
+def claim_unowned_rows(conn: psycopg.Connection, admin_id: str) -> int:
+    """Move rows held in jobs_unowned / job_status_history_unowned onto admin_id.
+
+    Migration 0003 parks any job/job_status_history rows that were still
+    ownerless at upgrade time (a single-user install upgrading before an
+    admin account existed) in these holding tables instead of deleting them,
+    since NULL user_id is no longer allowed on the live tables. Once an admin
+    exists, those rows belong to them. Returns the number of job rows
+    claimed.
+    """
+    cur = conn.execute(
+        "INSERT INTO jobs "
+        "(key, title, company, location, location_override, url, posted_date, "
+        "source_name, source_id, summary, first_seen_run_id, first_seen_at, "
+        "removed_at, emailed_at, status, is_duplicate, duplicate_of, user_id) "
+        "SELECT key, title, company, location, location_override, url, posted_date, "
+        "source_name, source_id, summary, first_seen_run_id, first_seen_at, "
+        "removed_at, emailed_at, status, is_duplicate, duplicate_of, %s "
+        "FROM jobs_unowned "
+        "ON CONFLICT (user_id, key) DO NOTHING",
+        (admin_id,),
+    )
+    claimed = cur.rowcount
+    conn.execute(
+        "INSERT INTO job_status_history (user_id, job_key, status, changed_at) "
+        "SELECT %s, job_key, status, changed_at FROM job_status_history_unowned",
+        (admin_id,),
+    )
+    conn.execute("DELETE FROM jobs_unowned")
+    conn.execute("DELETE FROM job_status_history_unowned")
+    conn.commit()
+    return claimed
+
 
 def seed_admin_if_empty(
     conn: psycopg.Connection,
@@ -961,6 +996,7 @@ def seed_admin_if_empty(
     """
     existing = get_user_by_username(conn, username)
     if existing:
+        claim_unowned_rows(conn, existing["id"])
         return existing
 
     admin = create_user(conn, username, email, password_hash, role="admin")
@@ -975,4 +1011,6 @@ def seed_admin_if_empty(
         "UPDATE job_status_history SET user_id = %s WHERE user_id IS NULL", (admin_id,)
     )
     conn.commit()
+
+    claim_unowned_rows(conn, admin_id)
     return admin

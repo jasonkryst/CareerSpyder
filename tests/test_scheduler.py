@@ -700,6 +700,34 @@ def test_run_and_notify_reconciles_jobs_when_no_user_has_sources(pg_dsn, monkeyp
         pool.close()
 
 
+def test_reconcile_users_with_no_sources_rechecks_under_lock_before_reconciling(monkeypatch):
+    """A user whose source appears mid-loop (a concurrent Run now / source add
+    racing the scheduled loop, Task 3) must be skipped: sources_by_user is a
+    snapshot taken before this loop runs, so it can be stale by the time we
+    get to a given candidate user."""
+    monkeypatch.setattr(scheduler.db, "list_users_with_active_jobs", lambda conn: {"b"})
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: ["fresh-source"])
+    reconciled = []
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler._reconcile_users_with_no_sources("conn", {})
+    assert reconciled == []
+
+
+def test_reconcile_users_with_no_sources_reconciles_when_still_empty(monkeypatch):
+    monkeypatch.setattr(scheduler.db, "list_users_with_active_jobs", lambda conn: {"b"})
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: [])
+    reconciled = []
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler._reconcile_users_with_no_sources("conn", {})
+    assert reconciled == ["b"]
+
+
 def test_create_scheduler_registers_daily_cron_job(pg_dsn):
     from psycopg_pool import ConnectionPool
     pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
@@ -819,6 +847,7 @@ def test_run_and_notify_only_user_id_without_sources_records_an_empty_run(monkey
     monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"]})
     monkeypatch.setattr(scheduler, "_run_user", lambda *args: pytest.fail("no sources, nothing to run"))
     monkeypatch.setattr(scheduler, "_record_empty_run", lambda conn, user_id=None: recorded.append(user_id))
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: [])
     monkeypatch.setattr(
         scheduler.db, "reconcile_jobs",
         lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
@@ -826,3 +855,23 @@ def test_run_and_notify_only_user_id_without_sources_records_an_empty_run(monkey
     scheduler.run_and_notify(_FakePool(), only_user_id="b")
     assert recorded == ["b"]
     assert reconciled == ["b"]
+
+
+def test_run_and_notify_only_user_id_no_sources_rechecks_under_lock_before_reconciling(monkeypatch):
+    """Task 3 made a member's Run now able to run concurrently (BackgroundTasks
+    thread) with the scheduled loop, so sources_by_user (a snapshot) can be
+    stale by the time we get here. If this same user's source shows up by
+    then, their active job must not be reconciled away."""
+    recorded = []
+    reconciled = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda *args: pytest.fail("no sources, nothing to run"))
+    monkeypatch.setattr(scheduler, "_record_empty_run", lambda conn, user_id=None: recorded.append(user_id))
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: ["fresh-source"])
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert recorded == ["b"]
+    assert reconciled == []

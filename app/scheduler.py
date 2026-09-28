@@ -120,12 +120,24 @@ def _reconcile_users_with_no_sources(conn, sources_by_user: dict) -> None:
     zero sources. Mirrors the reconcile_jobs(user_id, set(), set(), []) call
     orchestrator.run_once used to make for every user (including one with no
     sources) before the run_once -> _record_empty_run swap for the
-    no-sources-at-all case."""
+    no-sources-at-all case.
+
+    sources_by_user is a snapshot taken before this loop runs. A member's
+    "Run now" can run concurrently with the scheduled loop (BackgroundTasks
+    thread), so a user who adds a source after that snapshot but before we
+    get here would otherwise have their fresh job(s) marked removed. Take
+    orchestrator._run_lock (the same lock a run holds while saving jobs) and
+    re-check db.list_sources for each candidate right before reconciling, so
+    a source added mid-loop is seen and that user is skipped.
+    """
     for user_id in db.list_users_with_active_jobs(conn):
         if user_id in sources_by_user:
             continue
         try:
-            db.reconcile_jobs(conn, user_id, set(), set(), [])
+            with orchestrator._run_lock:
+                if db.list_sources(conn, user_id):
+                    continue
+                db.reconcile_jobs(conn, user_id, set(), set(), [])
         except Exception:
             logger.exception("Failed reconcile for user %s", user_id)
 
@@ -146,7 +158,12 @@ def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False,
             if not sources:
                 _record_empty_run(conn, only_user_id)
                 try:
-                    db.reconcile_jobs(conn, only_user_id, set(), set(), [])
+                    # Re-check under _run_lock: sources_by_user is a snapshot,
+                    # and a concurrent Run now / source add for this same user
+                    # could have added a source since it was taken.
+                    with orchestrator._run_lock:
+                        if not db.list_sources(conn, only_user_id):
+                            db.reconcile_jobs(conn, only_user_id, set(), set(), [])
                 except Exception:
                     logger.exception("Failed reconcile for user %s", only_user_id)
                 return

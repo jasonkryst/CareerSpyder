@@ -50,10 +50,14 @@
       var button = runForm.querySelector("button[type=submit]");
       if (button) button.disabled = true;
       if (runStatus) runStatus.textContent = "Starting run…";
+      var flash = null;
       fetch(runForm.getAttribute("action"), { method: "POST" })
+        .then(function (resp) {
+          flash = new URL(resp.url).searchParams.get("flash");
+        })
         .then(refresh)
         .then(function () {
-          if (runStatus) runStatus.textContent = "Run started";
+          if (runStatus) runStatus.textContent = flash || "Run started";
           if (button) button.disabled = false;
         });
     });
@@ -64,9 +68,14 @@
       event.preventDefault();
       var button = checkUrlsForm.querySelector("button[type=submit]");
       if (button) button.disabled = true;
+      var flash = null;
       fetch(checkUrlsForm.getAttribute("action"), { method: "POST" })
+        .then(function (resp) {
+          flash = new URL(resp.url).searchParams.get("flash");
+        })
         .then(refresh)
         .then(function () {
+          if (flash && runStatus) runStatus.textContent = flash;
           if (button) button.disabled = false;
         });
     });
