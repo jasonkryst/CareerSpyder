@@ -56,7 +56,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     jobs_to_send = [j for j in jobs_to_send if j.key not in duplicate_keys]
 
     secondary_source_ids = {s.id for s in sources if s.secondary}
-    statuses = db.get_job_statuses(conn, [j.key for j in jobs_to_send])
+    statuses = db.get_job_statuses(conn, user_id, [j.key for j in jobs_to_send])
 
     exclude_statuses = {
         s for s in ((settings or {}).get("digest_exclude_statuses") or "").split(",") if s
@@ -69,7 +69,7 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
 
     # When resend is on, the email includes both new and re-seen jobs; split them
     # into "Newly identified" / "Already identified" sections per company.
-    emailed_keys = db.get_emailed_keys(conn, [j.key for j in jobs_to_send]) if resend else None
+    emailed_keys = db.get_emailed_keys(conn, user_id, [j.key for j in jobs_to_send]) if resend else None
 
     d = digest.build_digest(
         jobs_to_send, summary.failed_sources, job_label,
@@ -101,22 +101,87 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
             os.environ.get("SMTP_PASSWORD", ""), smtp["email_from"], email_to,
             d.subject, d.html_body,
         )
-        db.mark_emailed(conn, [j.key for j in jobs_to_send])
+        db.mark_emailed(conn, user_id, [j.key for j in jobs_to_send])
     except Exception:
         logger.exception("Failed to send digest email for run %s", summary.run_id)
 
 
-def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -> None:
+def _record_empty_run(conn, user_id: str | None = None) -> None:
+    """Record a run row when there is nothing to scrape, so the dashboard
+    still shows the scheduler fired."""
+    run_id = db.start_run(conn, user_id=user_id)
+    db.finish_run(conn, run_id, 0, [])
+
+
+def _reconcile_users_with_no_sources(conn, sources_by_user: dict) -> None:
+    """A user whose last source was deleted has no entry in sources_by_user,
+    so the per-user loop below never reconciles their jobs -- without this,
+    their already-scraped jobs would stay "active" forever once they have
+    zero sources. Mirrors the reconcile_jobs(user_id, set(), set(), []) call
+    orchestrator.run_once used to make for every user (including one with no
+    sources) before the run_once -> _record_empty_run swap for the
+    no-sources-at-all case.
+
+    sources_by_user is a snapshot taken before this loop runs. A member's
+    "Run now" can run concurrently with the scheduled loop (BackgroundTasks
+    thread), so a user who adds a source after that snapshot but before we
+    get here would otherwise have their fresh job(s) marked removed. Take
+    orchestrator._run_lock (the same lock a run holds while saving jobs) and
+    re-check db.list_sources for each candidate right before reconciling, so
+    a source added mid-loop is seen and that user is skipped.
+    """
+    for user_id in db.list_users_with_active_jobs(conn):
+        if user_id in sources_by_user:
+            continue
+        try:
+            with orchestrator._run_lock:
+                if db.list_sources(conn, user_id):
+                    continue
+                db.reconcile_jobs(conn, user_id, set(), set(), [])
+        except Exception:
+            logger.exception("Failed reconcile for user %s", user_id)
+
+
+def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False,
+                    only_user_id: str | None = None) -> None:
+    """Run every user's sources (the scheduled cron job), or -- when
+    `only_user_id` is given -- just that one user's (a member's "Run now").
+
+    The `only_user_id` path never runs or reconciles any other user: a
+    member mashing "Run now" must not be able to trigger scans for other
+    tenants or touch their reconcile state (M3).
+    """
     with pool.connection() as conn:
         sources_by_user = db.list_all_sources_by_user(conn)
+        if only_user_id is not None:
+            sources = sources_by_user.get(only_user_id)
+            if not sources:
+                _record_empty_run(conn, only_user_id)
+                try:
+                    # Re-check under _run_lock: sources_by_user is a snapshot,
+                    # and a concurrent Run now / source add for this same user
+                    # could have added a source since it was taken.
+                    with orchestrator._run_lock:
+                        if not db.list_sources(conn, only_user_id):
+                            db.reconcile_jobs(conn, only_user_id, set(), set(), [])
+                except Exception:
+                    logger.exception("Failed reconcile for user %s", only_user_id)
+                return
+            try:
+                _run_user(conn, only_user_id, sources, tz, force)
+            except Exception:
+                logger.exception("Failed run for user %s", only_user_id)
+            return
         if not sources_by_user:
-            orchestrator.run_once(conn, [])
+            _record_empty_run(conn)
+            _reconcile_users_with_no_sources(conn, sources_by_user)
             return
         for user_id, sources in sources_by_user.items():
             try:
                 _run_user(conn, user_id, sources, tz, force)
             except Exception:
                 logger.exception("Failed run for user %s", user_id)
+        _reconcile_users_with_no_sources(conn, sources_by_user)
 
 
 def create_scheduler(pool: ConnectionPool, run_cron: str, tz: str) -> BackgroundScheduler:

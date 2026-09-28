@@ -165,7 +165,7 @@ def clear_cache(
     current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
-        db.clear_jobs(conn)
+        db.clear_jobs(conn, current_user["id"])
     return flash_redirect(
         "/settings/data",
         "Job cache cleared. The next run will re-report every currently known job as new.",

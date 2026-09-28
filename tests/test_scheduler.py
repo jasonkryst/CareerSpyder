@@ -1,4 +1,7 @@
+from contextlib import contextmanager
 from unittest.mock import patch
+
+import pytest
 
 from app import db, orchestrator, scheduler
 from app.digest import Digest
@@ -276,8 +279,8 @@ def test_run_and_notify_passes_emailed_keys_to_digest_when_resend_enabled(pg_dsn
             run_id = db.start_run(conn)
             old_job = Job(key="job-a", title="Old", url="https://x.test/a", source_name="s")
             new_job = Job(key="job-b", title="New", url="https://x.test/b", source_name="s")
-            db.save_jobs(conn, [old_job, new_job], run_id)
-            db.mark_emailed(conn, ["job-a"])
+            db.save_jobs(conn, [old_job, new_job], run_id, user_id=user_id)
+            db.mark_emailed(conn, user_id, ["job-a"])
 
         fake_summary = type("S", (), {
             "new_jobs": [new_job],
@@ -336,7 +339,7 @@ def test_run_and_notify_marks_new_jobs_emailed_after_a_successful_send(pg_dsn, m
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
@@ -363,7 +366,7 @@ def test_run_and_notify_does_not_mark_emailed_when_send_fails(pg_dsn, monkeypatc
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {"new_jobs": [job], "failed_sources": [], "run_id": run_id})()
@@ -390,7 +393,7 @@ def test_run_and_notify_marks_resent_jobs_emailed_when_resend_enabled(pg_dsn, mo
             _configure(conn, user_id, resend_jobs=True)
             run_id = db.start_run(conn)
             old_job = Job(key="k1", title="Engineer", url="https://x.test/1", source_name="s")
-            db.save_jobs(conn, [old_job], run_id)
+            db.save_jobs(conn, [old_job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
         fake_summary = type("S", (), {
@@ -468,9 +471,9 @@ def test_run_and_notify_includes_source_and_existing_status_in_real_digest(pg_ds
             _seed_gh_source(conn, user_id)
             run_id = db.start_run(conn)
             job = Job(key="k1", title="Engineer", url="https://x.test/1", company="Acme", source_name="Acme Board")
-            db.save_jobs(conn, [job], run_id)
+            db.save_jobs(conn, [job], run_id, user_id=user_id)
             db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
-            db.set_job_status(conn, "k1", "not_interested")
+            db.set_job_status(conn, user_id, "k1", "not_interested")
         monkeypatch.setitem(orchestrator.ADAPTERS, "greenhouse", lambda source: [job])
 
         with patch("app.scheduler.emailer.send_email") as mock_send:
@@ -576,7 +579,7 @@ def test_run_and_notify_does_not_double_add_jobs_already_in_jobs_to_send(pg_dsn,
             _configure(conn, user_id)
             run_id = db.start_run(conn)
             new_job = Job(key="new-1", title="New Job", url="https://x.test/n", source_name="s")
-            db.save_jobs(conn, [new_job], run_id)
+            db.save_jobs(conn, [new_job], run_id, user_id=user_id)
 
         fake_summary = type("S", (), {"new_jobs": [new_job], "found_jobs": [new_job], "failed_sources": [], "run_id": run_id})()
 
@@ -625,6 +628,104 @@ def test_run_and_notify_non_admin_user_uses_admin_smtp(pg_dsn, monkeypatch):
         assert args[5] == ["bob@x.test"]         # member's own recipients
     finally:
         pool.close()
+
+
+def test_run_and_notify_reconciles_jobs_for_a_user_with_no_sources_left(pg_dsn, monkeypatch):
+    """Regression: a user whose last source was deleted has no entry in
+    list_all_sources_by_user, but their previously-scraped jobs still need to
+    be marked removed the same way orchestrator.run_once's reconcile_jobs
+    call would have done before the run_once -> _record_empty_run swap."""
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_a = _seed_user(conn, "usera")
+            _configure(conn, user_a)
+
+            user_b = _seed_user(conn, "userb")
+            _configure(conn, user_b)
+            run_id = db.start_run(conn, user_id=user_b)
+            gone_job = Job(key="gone-1", title="Old", url="https://x.test/gone",
+                            source_name="s", source_id="gone")
+            db.save_jobs(conn, [gone_job], run_id, user_id=user_b)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+        fake_summary = type("S", (), {
+            "new_jobs": [], "found_jobs": [], "failed_sources": [], "run_id": 1,
+        })()
+
+        # Only user_a has sources -- user_b has none, matching list_all_sources_by_user's
+        # "returns only users with >=1 source" contract.
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={user_a: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=None):
+            scheduler.run_and_notify(pool)
+
+        with pool.connection() as conn:
+            removed_at = conn.execute(
+                "SELECT removed_at FROM jobs WHERE user_id = %s AND key = 'gone-1'", (user_b,),
+            ).fetchone()[0]
+        assert removed_at is not None
+    finally:
+        pool.close()
+
+
+def test_run_and_notify_reconciles_jobs_when_no_user_has_sources(pg_dsn, monkeypatch):
+    """Same regression as above, but for the all-empty branch (no user has
+    any sources at all) -- _record_empty_run must not be the only thing that
+    happens; existing users' active jobs still need reconciling."""
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_b = _seed_user(conn, "userb")
+            _configure(conn, user_b)
+            run_id = db.start_run(conn, user_id=user_b)
+            gone_job = Job(key="gone-2", title="Old", url="https://x.test/gone2",
+                            source_name="s", source_id="gone")
+            db.save_jobs(conn, [gone_job], run_id, user_id=user_b)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={}):
+            scheduler.run_and_notify(pool)
+
+        with pool.connection() as conn:
+            removed_at = conn.execute(
+                "SELECT removed_at FROM jobs WHERE user_id = %s AND key = 'gone-2'", (user_b,),
+            ).fetchone()[0]
+        assert removed_at is not None
+    finally:
+        pool.close()
+
+
+def test_reconcile_users_with_no_sources_rechecks_under_lock_before_reconciling(monkeypatch):
+    """A user whose source appears mid-loop (a concurrent Run now / source add
+    racing the scheduled loop, Task 3) must be skipped: sources_by_user is a
+    snapshot taken before this loop runs, so it can be stale by the time we
+    get to a given candidate user."""
+    monkeypatch.setattr(scheduler.db, "list_users_with_active_jobs", lambda conn: {"b"})
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: ["fresh-source"])
+    reconciled = []
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler._reconcile_users_with_no_sources("conn", {})
+    assert reconciled == []
+
+
+def test_reconcile_users_with_no_sources_reconciles_when_still_empty(monkeypatch):
+    monkeypatch.setattr(scheduler.db, "list_users_with_active_jobs", lambda conn: {"b"})
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: [])
+    reconciled = []
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler._reconcile_users_with_no_sources("conn", {})
+    assert reconciled == ["b"]
 
 
 def test_create_scheduler_registers_daily_cron_job(pg_dsn):
@@ -722,3 +823,55 @@ def test_catch_up_defaults_now_to_the_configured_timezone(monkeypatch):
     from datetime import UTC, datetime
     hour = datetime.now(UTC).hour
     assert _catch_up(monkeypatch, last_run=None, now=None, run_cron=f"0 {hour} * * *") is True
+
+
+# --- only_user_id scoping (M3): a member's "Run now" must run just their sources ---
+
+class _FakePool:
+    @contextmanager
+    def connection(self):
+        yield "conn"
+
+
+def test_run_and_notify_only_user_id_runs_just_that_user(monkeypatch):
+    ran = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"], "b": ["sb"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda conn, uid, sources, tz, force: ran.append((uid, sources)))
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert ran == [("b", ["sb"])]
+
+
+def test_run_and_notify_only_user_id_without_sources_records_an_empty_run(monkeypatch):
+    recorded = []
+    reconciled = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda *args: pytest.fail("no sources, nothing to run"))
+    monkeypatch.setattr(scheduler, "_record_empty_run", lambda conn, user_id=None: recorded.append(user_id))
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: [])
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert recorded == ["b"]
+    assert reconciled == ["b"]
+
+
+def test_run_and_notify_only_user_id_no_sources_rechecks_under_lock_before_reconciling(monkeypatch):
+    """Task 3 made a member's Run now able to run concurrently (BackgroundTasks
+    thread) with the scheduled loop, so sources_by_user (a snapshot) can be
+    stale by the time we get here. If this same user's source shows up by
+    then, their active job must not be reconciled away."""
+    recorded = []
+    reconciled = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda *args: pytest.fail("no sources, nothing to run"))
+    monkeypatch.setattr(scheduler, "_record_empty_run", lambda conn, user_id=None: recorded.append(user_id))
+    monkeypatch.setattr(scheduler.db, "list_sources", lambda conn, uid: ["fresh-source"])
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert recorded == ["b"]
+    assert reconciled == []

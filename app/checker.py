@@ -24,18 +24,20 @@ def check_job_urls(
 ) -> int:
     """HEAD each active job URL and mark removed on 404/410. Returns count of newly removed jobs.
 
-    Pass user_id to restrict checks to that user's jobs; None checks all (admin/scheduler use).
+    Pass user_id to restrict checks to that user's jobs. None checks every
+    user's jobs -- this is only used by the admin's manual "Check job URLs";
+    the scheduler always passes the run's own user_id.
     HEADs run in a thread pool; URLs not answered within deadline_s are left
     untouched until the next pass. Only the calling thread touches `conn`.
     """
     if user_id is not None:
         rows = conn.execute(
-            "SELECT key, url FROM jobs WHERE removed_at IS NULL AND user_id = %s",
+            "SELECT user_id::text, key, url FROM jobs WHERE removed_at IS NULL AND user_id = %s",
             (user_id,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT key, url FROM jobs WHERE removed_at IS NULL"
+            "SELECT user_id::text, key, url FROM jobs WHERE removed_at IS NULL"
         ).fetchall()
 
     def _is_removed(key: str, url: str) -> bool:
@@ -49,28 +51,28 @@ def check_job_urls(
             return True
         return False
 
-    removed_keys: list[str] = []
+    removed: list[tuple[str, str]] = []
     if rows:
         executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="url-check")
-        futures = {executor.submit(_is_removed, key, url): key for key, url in rows}
+        futures = {executor.submit(_is_removed, key, url): (owner, key) for owner, key, url in rows}
         done, not_done = wait(futures, timeout=deadline_s)
         # Don't block on stragglers: queued checks are cancelled, in-flight
         # ones finish on their own (bounded by the per-request timeout).
         executor.shutdown(wait=False, cancel_futures=True)
-        removed_keys = [futures[f] for f in done if f.result()]
+        removed = [futures[f] for f in done if f.result()]
         if not_done:
             logger.warning(
                 "URL check deadline (%.0fs) reached; %d of %d URLs left unchecked this pass",
                 deadline_s, len(not_done), len(rows),
             )
 
-    if removed_keys:
+    if removed:
         now = datetime.now(UTC).isoformat()
-        placeholders = ",".join(["%s"] * len(removed_keys))
-        conn.execute(
-            f"UPDATE jobs SET removed_at = %s WHERE key IN ({placeholders})",  # noqa: S608
-            [now, *removed_keys],
-        )
+        with conn.cursor() as cur:
+            cur.executemany(
+                "UPDATE jobs SET removed_at = %s WHERE user_id = %s AND key = %s",
+                [(now, owner, key) for owner, key in removed],
+            )
         conn.commit()
 
-    return len(removed_keys)
+    return len(removed)

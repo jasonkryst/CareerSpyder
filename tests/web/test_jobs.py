@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlparse
 from app import db
 from app.models import Job
 from app.web.routes_jobs import _age_days
+from tests.conftest import owner_id_for
 
 
 def make_job(key="k1", title="Engineer", url="https://x.test/1", company="Acme",
@@ -32,7 +33,7 @@ def test_jobs_page_empty_state(client):
 
 def test_jobs_page_lists_active_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -47,8 +48,8 @@ def test_jobs_page_lists_active_job(client):
 
 def test_jobs_page_shows_removed_date_and_class_for_a_removed_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
+    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
     removed_at = db.list_jobs(conn)[0]["removed_at"]
     assert removed_at is not None
 
@@ -60,8 +61,8 @@ def test_jobs_page_shows_removed_date_and_class_for_a_removed_job(client):
 
 def test_jobs_page_shows_emailed_timestamp(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn))
-    db.mark_emailed(conn, ["k3"])
+    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k3"])
     emailed_at = db.list_jobs(conn)[0]["emailed_at"]
 
     resp = client.get("/jobs")
@@ -71,7 +72,7 @@ def test_jobs_page_shows_emailed_timestamp(client):
 
 def test_jobs_page_title_link_opens_in_new_tab_with_icon(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -95,7 +96,7 @@ def test_jobs_page_internal_nav_link_is_not_target_blank(client):
 def test_jobs_page_second_page_shows_older_jobs(client):
     conn = client.app.state.conn
     jobs = [make_job(key=f"k{i}", title=f"Job {i}") for i in range(30)]
-    db.save_jobs(conn, jobs, db.start_run(conn))
+    db.save_jobs(conn, jobs, db.start_run(conn), user_id=owner_id_for(conn))
 
     page1 = client.get("/jobs?page=1")
     page2 = client.get("/jobs?page=2")
@@ -127,7 +128,7 @@ def test_jobs_table_has_scoped_headers_and_scroll_wrapper(client):
 
 def test_jobs_page_neutralizes_a_javascript_url(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k4", url="javascript:alert(1)")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k4", url="javascript:alert(1)")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -143,7 +144,7 @@ def test_nav_includes_jobs_link(client):
 
 def test_jobs_table_cells_have_data_labels(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job()], db.start_run(conn))
+    db.save_jobs(conn, [make_job()], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -155,8 +156,8 @@ def test_jobs_table_cells_have_data_labels(client):
 def test_jobs_page_sort_by_company_orders_rows(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="a", company="Zeta")], run_id)
-    db.save_jobs(conn, [make_job(key="b", company="Acme")], run_id)
+    db.save_jobs(conn, [make_job(key="a", company="Zeta")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="b", company="Acme")], run_id, user_id=owner_id_for(conn))
 
     resp = client.get("/jobs?sort=company&dir=asc")
 
@@ -166,8 +167,8 @@ def test_jobs_page_sort_by_company_orders_rows(client):
 def test_jobs_page_filters_by_company(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="a", company="Acme")], run_id)
-    db.save_jobs(conn, [make_job(key="b", company="Zeta")], run_id)
+    db.save_jobs(conn, [make_job(key="a", company="Acme")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="b", company="Zeta")], run_id, user_id=owner_id_for(conn))
 
     resp = client.get("/jobs?company=Acme")
 
@@ -177,7 +178,7 @@ def test_jobs_page_filters_by_company(client):
 
 def test_jobs_page_filter_dropdown_lists_distinct_source_names(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", source_name="Acme Board")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", source_name="Acme Board")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -186,7 +187,7 @@ def test_jobs_page_filter_dropdown_lists_distinct_source_names(client):
 
 def test_jobs_page_filter_dropdown_lists_distinct_resolved_locations(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn), user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
         "WHERE location = 'Chicago, IL'"
@@ -201,8 +202,8 @@ def test_jobs_page_filter_dropdown_lists_distinct_resolved_locations(client):
 def test_jobs_page_location_filter_narrows_results(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id)
-    db.save_jobs(conn, [make_job(key="b", title="Austin Job", location="Austin, TX")], run_id)
+    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="b", title="Austin Job", location="Austin, TX")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL' "
         "WHERE location = 'Chicago, IL'"
@@ -232,7 +233,7 @@ def test_jobs_map_data_groups_jobs_by_location(client):
     db.save_jobs(conn, [
         make_job(key="a", title="Job A", location="Chicago, IL"),
         make_job(key="b", title="Job B", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -251,7 +252,7 @@ def test_jobs_map_data_groups_jobs_by_location(client):
 
 def test_jobs_map_data_excludes_unresolved_locations(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", location="Remote")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", location="Remote")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs/map/data")
 
@@ -261,8 +262,8 @@ def test_jobs_map_data_excludes_unresolved_locations(client):
 def test_jobs_map_data_respects_filters(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="a", company="Acme", location="Chicago, IL")], run_id)
-    db.save_jobs(conn, [make_job(key="b", company="Zeta", location="Chicago, IL")], run_id)
+    db.save_jobs(conn, [make_job(key="a", company="Acme", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="b", company="Zeta", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -280,13 +281,13 @@ def test_jobs_map_data_hides_not_interested_jobs_by_default(client):
     db.save_jobs(conn, [
         make_job(key="a", location="Chicago, IL"),
         make_job(key="b", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
     )
     conn.commit()
-    db.set_job_status(conn, "b", "not_interested")
+    db.set_job_status(conn, owner_id_for(conn), "b", "not_interested")
 
     resp = client.get("/jobs/map/data")
 
@@ -300,13 +301,13 @@ def test_jobs_map_data_shows_not_interested_jobs_when_preference_is_off(client, 
     db.save_jobs(conn, [
         make_job(key="a", location="Chicago, IL"),
         make_job(key="b", location="Chicago, IL"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
     )
     conn.commit()
-    db.set_job_status(conn, "b", "not_interested")
+    db.set_job_status(conn, owner_id_for(conn), "b", "not_interested")
 
     resp = client.get("/jobs/map/data")
 
@@ -326,7 +327,7 @@ def test_jobs_page_invalid_sort_does_not_error(client):
 
 def test_jobs_page_empty_filter_matches_none_renders_empty_table(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", company="Acme")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", company="Acme")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs?company=NoSuchCompany")
 
@@ -353,8 +354,8 @@ def test_jobs_page_sortable_headers_have_aria_sort_when_active(client):
 
 def test_jobs_page_removed_and_emailed_filters_narrow_results(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a")], db.start_run(conn))
-    db.mark_emailed(conn, ["a"])
+    db.save_jobs(conn, [make_job(key="a")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["a"])
 
     company_cell = 'data-label="Company">Acme'
     assert company_cell in client.get("/jobs?emailed=sent").text
@@ -372,7 +373,7 @@ def test_jobs_page_filter_form_preserves_active_sort_via_hidden_fields(client):
 
 def test_post_job_remove_marks_job_removed_and_redirects(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
 
@@ -385,8 +386,8 @@ def test_post_job_remove_marks_job_removed_and_redirects(client):
 
 def test_post_job_remove_is_idempotent_on_already_removed_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
 
     resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
 
@@ -408,7 +409,7 @@ def test_post_job_remove_returns_400_when_key_missing(client):
 
 def test_jobs_page_shows_remove_button_for_active_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -417,8 +418,8 @@ def test_jobs_page_shows_remove_button_for_active_job(client):
 
 def test_jobs_page_does_not_show_remove_button_for_already_removed_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
+    db.save_jobs(conn, [make_job(key="k1", source_id="s1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"s1"}, found_jobs=[])
 
     resp = client.get("/jobs?removed=removed")
 
@@ -427,7 +428,7 @@ def test_jobs_page_does_not_show_remove_button_for_already_removed_job(client):
 
 def test_post_job_status_sets_status_and_redirects_with_flash(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, follow_redirects=False)
 
@@ -441,7 +442,7 @@ def test_post_job_status_sets_status_and_redirects_with_flash(client):
 
 def test_post_job_status_accepts_not_interested(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "not_interested"}, follow_redirects=False)
 
@@ -454,8 +455,8 @@ def test_post_job_status_accepts_not_interested(client):
 
 def test_post_job_status_clearing_redirects_with_cleared_message(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": ""}, follow_redirects=False)
 
@@ -467,7 +468,7 @@ def test_post_job_status_clearing_redirects_with_cleared_message(client):
 
 def test_post_job_status_invalid_status_returns_400(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "bogus"})
 
@@ -484,8 +485,8 @@ def test_post_job_status_unknown_key_returns_404(client):
 
 def test_jobs_page_shows_status_select_with_current_status_selected(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
     resp = client.get("/jobs")
 
@@ -499,9 +500,9 @@ def test_jobs_page_shows_status_select_with_current_status_selected(client):
 
 def test_jobs_page_shows_status_history_entries(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
-    db.set_job_status(conn, "k1", "rejected")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
+    db.set_job_status(conn, owner_id_for(conn), "k1", "rejected")
 
     resp = client.get("/jobs")
 
@@ -512,7 +513,7 @@ def test_jobs_page_shows_status_history_entries(client):
 
 def test_jobs_page_hides_history_details_when_no_changes(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -525,8 +526,8 @@ def test_jobs_page_status_filter_shows_only_matching_jobs(client):
         conn,
         [make_job(key="k1", title="Applied Job"), make_job(key="k2", title="Other Job")],
         db.start_run(conn),
-    )
-    db.set_job_status(conn, "k1", "applied")
+     user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
     resp = client.get("/jobs?status=applied")
 
@@ -536,7 +537,7 @@ def test_jobs_page_status_filter_shows_only_matching_jobs(client):
 
 def test_jobs_page_wraps_first_seen_at_in_a_time_element(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
     first_seen_at = db.list_jobs(conn)[0]["first_seen_at"]
 
     resp = client.get("/jobs")
@@ -546,8 +547,8 @@ def test_jobs_page_wraps_first_seen_at_in_a_time_element(client):
 
 def test_jobs_page_wraps_removed_at_in_a_time_element(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn))
-    db.reconcile_jobs(conn, configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
+    db.save_jobs(conn, [make_job(key="k2", source_id="src-2")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.reconcile_jobs(conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"src-2"}, found_jobs=[])
     removed_at = db.list_jobs(conn)[0]["removed_at"]
 
     resp = client.get("/jobs?removed=removed")
@@ -557,7 +558,7 @@ def test_jobs_page_wraps_removed_at_in_a_time_element(client):
 
 def test_jobs_page_shows_remove_button_and_no_time_element_for_active_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -570,8 +571,8 @@ def test_jobs_page_shows_remove_button_and_no_time_element_for_active_job(client
 
 def test_jobs_page_wraps_emailed_at_in_a_time_element(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn))
-    db.mark_emailed(conn, ["k3"])
+    db.save_jobs(conn, [make_job(key="k3")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.mark_emailed(conn, owner_id_for(conn), ["k3"])
     emailed_at = db.list_jobs(conn)[0]["emailed_at"]
 
     resp = client.get("/jobs")
@@ -581,9 +582,9 @@ def test_jobs_page_wraps_emailed_at_in_a_time_element(client):
 
 def test_jobs_page_wraps_status_history_timestamp_in_a_time_element(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
-    changed_at = db.get_job_status_history(conn, ["k1"])["k1"][0]["changed_at"]
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
+    changed_at = db.get_job_status_history(conn, [(owner_id_for(conn), "k1")])[(owner_id_for(conn), "k1")][0]["changed_at"]
 
     resp = client.get("/jobs")
 
@@ -595,10 +596,10 @@ def test_jobs_page_wraps_status_history_timestamp_in_a_time_element(client):
 def test_jobs_page_defaults_to_active_only(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id)
-    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id)
+    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id, user_id=owner_id_for(conn))
     db.reconcile_jobs(
-        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+        conn, owner_id_for(conn), configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
     )
 
     resp = client.get("/jobs")
@@ -616,10 +617,10 @@ def test_jobs_page_active_filter_selected_in_dropdown_by_default(client):
 def test_jobs_page_all_status_shows_both_active_and_removed(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id)
-    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id)
+    db.save_jobs(conn, [make_job(key="active", title="Active Job", source_id="src-active")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="gone", title="Removed Job", source_id="src-gone")], run_id, user_id=owner_id_for(conn))
     db.reconcile_jobs(
-        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+        conn, owner_id_for(conn), configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
     )
 
     resp = client.get("/jobs?removed=")
@@ -666,9 +667,9 @@ def test_jobs_map_data_defaults_to_active_only(client):
     db.save_jobs(conn, [
         make_job(key="active", title="Active Job", location="Chicago, IL", source_id="src-active"),
         make_job(key="gone", title="Removed Job", location="Chicago, IL", source_id="src-gone"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     db.reconcile_jobs(
-        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+        conn, owner_id_for(conn), configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
     )
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
@@ -690,9 +691,9 @@ def test_jobs_map_data_shows_removed_when_explicitly_requested(client):
     db.save_jobs(conn, [
         make_job(key="active", title="Active Job", location="Chicago, IL", source_id="src-active"),
         make_job(key="gone", title="Removed Job", location="Chicago, IL", source_id="src-gone"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     db.reconcile_jobs(
-        conn, configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
+        conn, owner_id_for(conn), configured_source_ids={"src-active"}, succeeded_source_ids={"src-gone"}, found_jobs=[],
     )
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
@@ -711,9 +712,9 @@ def test_jobs_map_data_shows_removed_when_explicitly_requested(client):
 def test_jobs_map_data_empty_when_all_jobs_are_removed(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="gone", location="Chicago, IL", source_id="src-gone")], run_id)
+    db.save_jobs(conn, [make_job(key="gone", location="Chicago, IL", source_id="src-gone")], run_id, user_id=owner_id_for(conn))
     db.reconcile_jobs(
-        conn, configured_source_ids=set(), succeeded_source_ids={"src-gone"}, found_jobs=[],
+        conn, owner_id_for(conn), configured_source_ids=set(), succeeded_source_ids={"src-gone"}, found_jobs=[],
     )
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
@@ -744,7 +745,7 @@ def _fake_geocode_response(lat="41.8781136", lon="-87.6297982",
 
 def test_location_override_saves_and_returns_ok(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import patch
     with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
@@ -759,7 +760,7 @@ def test_location_override_saves_and_returns_ok(client):
 
 def test_location_override_clears_when_location_empty(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import patch
     with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
@@ -776,7 +777,7 @@ def test_location_override_clears_when_location_empty(client):
 
 def test_location_override_returns_400_when_geocode_returns_none(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import Mock, patch
     empty_resp = Mock()
@@ -792,7 +793,7 @@ def test_location_override_returns_400_when_geocode_returns_none(client):
 def test_location_override_returns_400_on_geocoder_exception(client):
     """NominatimGeocoder raises GeocoderTransientError on RequestException; the route treats it as 400."""
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import patch
 
@@ -824,7 +825,7 @@ def test_jobs_page_state_filter_narrows_to_matching_region(client):
     db.save_jobs(conn, [
         make_job(key="a", title="IL Job", location="Chicago, IL"),
         make_job(key="b", title="WI Job", location="Milwaukee, WI"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
         "WHERE location = 'Chicago, IL'"
@@ -844,7 +845,7 @@ def test_jobs_page_state_filter_narrows_to_matching_region(client):
 
 def test_jobs_page_state_dropdown_lists_geocoded_states(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn), user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
         "WHERE location = 'Chicago, IL'"
@@ -881,7 +882,7 @@ def test_jobs_page_bare_zip_uses_structured_nominatim_params(client):
 def test_jobs_page_zip_filter_includes_nearby_job(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id)
+    db.save_jobs(conn, [make_job(key="a", title="Chicago Job", location="Chicago, IL")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8781, lng = -87.6298 "
         "WHERE location = 'Chicago, IL'"
@@ -901,7 +902,7 @@ def test_jobs_page_zip_filter_includes_nearby_job(client):
 def test_jobs_page_zip_filter_excludes_distant_job(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="b", title="LA Job", location="Los Angeles, CA")], run_id)
+    db.save_jobs(conn, [make_job(key="b", title="LA Job", location="Los Angeles, CA")], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', lat = 34.0522, lng = -118.2437 "
         "WHERE location = 'Los Angeles, CA'"
@@ -919,7 +920,7 @@ def test_jobs_page_zip_filter_excludes_distant_job(client):
 
 def test_jobs_page_invalid_zip_shows_warning_and_returns_unfiltered_results(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", title="Any Job")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", title="Any Job")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import Mock, patch
     empty_resp = Mock()
@@ -950,7 +951,7 @@ def test_jobs_map_data_state_filter(client):
     db.save_jobs(conn, [
         make_job(key="a", title="IL Job", location="Chicago, IL"),
         make_job(key="b", title="WI Job", location="Milwaukee, WI"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -975,7 +976,7 @@ def test_jobs_map_data_zip_radius_filter(client):
     db.save_jobs(conn, [
         make_job(key="a", title="Chicago Job", location="Chicago, IL"),
         make_job(key="b", title="LA Job", location="Los Angeles, CA"),
-    ], run_id)
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', lat = 41.8781, lng = -87.6298 "
         "WHERE location = 'Chicago, IL'"
@@ -1004,7 +1005,7 @@ def test_location_override_clear_returns_404_for_unknown_job(client):
 
 def test_jobs_page_shows_pin_button_in_location_cell(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -1014,9 +1015,9 @@ def test_jobs_page_shows_pin_button_in_location_cell(client):
 
 def test_jobs_page_shows_override_badge_for_overridden_location(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
     db.set_location_override(
-        conn, "k1", "Chicago, IL",
+        conn, owner_id_for(conn), "k1", "Chicago, IL",
         display_name="Chicago, IL, USA", city="Chicago", region="IL", country="US",
         lat=41.8781, lng=-87.6298, provider="nominatim",
     )
@@ -1035,7 +1036,7 @@ def test_jobs_page_shows_override_modal_dialog(client):
 
 def test_jobs_map_data_shows_is_overridden_false_without_override(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn), user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', display_name = 'Chicago, IL', "
         "lat = 41.8, lng = -87.6 WHERE location = 'Chicago, IL'"
@@ -1050,9 +1051,9 @@ def test_jobs_map_data_shows_is_overridden_false_without_override(client):
 
 def test_jobs_map_data_shows_is_overridden_true_and_override_coords(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1", location="Remote")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", location="Remote")], db.start_run(conn), user_id=owner_id_for(conn))
     db.set_location_override(
-        conn, "k1", "Chicago, IL",
+        conn, owner_id_for(conn), "k1", "Chicago, IL",
         display_name="Chicago, IL, USA", city="Chicago", region="IL", country="US",
         lat=41.8781, lng=-87.6298, provider="nominatim",
     )
@@ -1071,8 +1072,8 @@ def test_jobs_map_data_shows_is_overridden_true_and_override_coords(client):
 def test_jobs_page_hides_duplicate_by_default(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     resp = client.get("/jobs")
 
@@ -1083,8 +1084,8 @@ def test_jobs_page_hides_duplicate_by_default(client):
 def test_jobs_page_shows_duplicate_when_filter_is_include(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     resp = client.get("/jobs?duplicates=include")
 
@@ -1095,8 +1096,8 @@ def test_jobs_page_shows_duplicate_when_filter_is_include(client):
 def test_jobs_page_shows_only_duplicate_when_filter_is_only(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id)
-    db.set_job_duplicate(conn, "k2")
+    db.save_jobs(conn, [make_job(key="k1"), make_job(key="k2", title="Dupe Job")], run_id, user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k2")
 
     resp = client.get("/jobs?duplicates=only")
 
@@ -1106,8 +1107,8 @@ def test_jobs_page_shows_only_duplicate_when_filter_is_only(client):
 
 def test_jobs_page_duplicate_shows_badge_when_included(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_duplicate(conn, "k1", duplicate_of="Acme — Engineer")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1", duplicate_of="Acme — Engineer")
 
     resp = client.get("/jobs?duplicates=include")
 
@@ -1116,7 +1117,7 @@ def test_jobs_page_duplicate_shows_badge_when_included(client):
 
 def test_post_duplicate_marks_job(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark", "duplicate_of": "Greenhouse listing"}, follow_redirects=False)
 
@@ -1128,7 +1129,7 @@ def test_post_duplicate_marks_job(client):
 
 def test_post_duplicate_mark_without_reference(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, follow_redirects=False)
 
@@ -1140,8 +1141,8 @@ def test_post_duplicate_mark_without_reference(client):
 
 def test_post_duplicate_clear_removes_flag(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_duplicate(conn, "k1")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1")
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "clear"}, follow_redirects=False)
 
@@ -1174,7 +1175,7 @@ def test_jobs_page_secondary_source_shows_badge(client, admin_user_id):
     with client.app.state.pool.connection() as c:
         db.add_source(c, admin_user_id, source)
 
-    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Indeed Board")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Indeed Board")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -1193,7 +1194,7 @@ def test_jobs_page_non_secondary_source_has_no_badge(client, admin_user_id):
     with client.app.state.pool.connection() as c:
         db.add_source(c, admin_user_id, source)
 
-    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Greenhouse Board")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", source_id="src-1", source_name="Greenhouse Board")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -1209,7 +1210,7 @@ JSON = {"Accept": "application/json"}
 
 def test_post_job_status_json_returns_ok_message_and_status(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, headers=JSON)
 
@@ -1223,8 +1224,8 @@ def test_post_job_status_json_returns_ok_message_and_status(client):
 
 def test_post_job_status_json_clears_status(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_status(conn, "k1", "applied")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_status(conn, owner_id_for(conn), "k1", "applied")
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": ""}, headers=JSON)
 
@@ -1238,7 +1239,7 @@ def test_post_job_status_json_clears_status(client):
 
 def test_post_job_status_json_invalid_status_returns_400(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "bogus"}, headers=JSON)
 
@@ -1255,7 +1256,7 @@ def test_post_job_status_json_unknown_key_returns_404(client):
 
 def test_post_job_remove_json_returns_ok_and_removed_at(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/remove", data={"key": "k1"}, headers=JSON)
 
@@ -1283,7 +1284,7 @@ def test_post_job_remove_json_missing_key_returns_400(client):
 
 def test_post_job_duplicate_json_mark_returns_ok(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post(
         "/jobs/duplicate",
@@ -1301,7 +1302,7 @@ def test_post_job_duplicate_json_mark_returns_ok(client):
 
 def test_post_job_duplicate_json_mark_without_reference(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, headers=JSON)
 
@@ -1314,8 +1315,8 @@ def test_post_job_duplicate_json_mark_without_reference(client):
 
 def test_post_job_duplicate_json_clear_returns_ok(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.set_job_duplicate(conn, "k1")
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_duplicate(conn, owner_id_for(conn), "k1")
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "clear"}, headers=JSON)
 
@@ -1343,7 +1344,7 @@ def test_post_job_duplicate_json_missing_key_returns_400(client):
 
 def test_location_override_save_response_includes_display_name(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import patch
     with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
@@ -1364,8 +1365,8 @@ def test_location_override_uses_cached_geocode_result_without_calling_nominatim(
     must hit the geocoded_locations cache instead of Nominatim again."""
     from unittest.mock import patch
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
-    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="k2")], db.start_run(conn), user_id=owner_id_for(conn))
 
     with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()) as mock_get:
         client.post("/jobs/location-override", data={"key": "k1", "location": "Chicago, IL"})
@@ -1384,7 +1385,7 @@ def test_location_override_calls_geocoder_via_threadpool_not_the_event_loop(clie
     from unittest.mock import patch
 
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
     calling_thread_names = []
 
     def fake_geocode(location):
@@ -1403,7 +1404,7 @@ def test_location_override_calls_geocoder_via_threadpool_not_the_event_loop(clie
 
 def test_location_override_clear_response_includes_message(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     from unittest.mock import patch
     with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
@@ -1421,7 +1422,7 @@ def test_location_override_clear_response_includes_message(client):
 
 def test_post_job_status_html_path_still_redirects(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/status", data={"key": "k1", "status": "applied"}, follow_redirects=False)
 
@@ -1431,7 +1432,7 @@ def test_post_job_status_html_path_still_redirects(client):
 
 def test_post_job_remove_html_path_still_redirects(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/remove", data={"key": "k1"}, follow_redirects=False)
 
@@ -1441,7 +1442,7 @@ def test_post_job_remove_html_path_still_redirects(client):
 
 def test_post_job_duplicate_html_path_still_redirects(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.post("/jobs/duplicate", data={"key": "k1", "action": "mark"}, follow_redirects=False)
 
@@ -1453,7 +1454,7 @@ def test_post_job_duplicate_html_path_still_redirects(client):
 
 def test_list_jobs_includes_base_location_field(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1", location="Chicago, IL")], db.start_run(conn), user_id=owner_id_for(conn))
 
     rows = db.list_jobs(conn)
 
@@ -1462,7 +1463,7 @@ def test_list_jobs_includes_base_location_field(client):
 
 def test_jobs_page_location_cell_has_data_base_location_attribute(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -1471,7 +1472,7 @@ def test_jobs_page_location_cell_has_data_base_location_attribute(client):
 
 def test_status_select_has_no_inline_onchange(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
 
     resp = client.get("/jobs")
 
@@ -1488,7 +1489,7 @@ def test_jobs_page_has_state_dropdown(client):
 
 def test_jobs_page_state_option_marked_selected_when_active(client):
     conn = client.app.state.conn
-    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn))
+    db.save_jobs(conn, [make_job(key="a", location="Chicago, IL")], db.start_run(conn), user_id=owner_id_for(conn))
     conn.execute(
         "UPDATE geocoded_locations SET status = 'resolved', region = 'Illinois' "
         "WHERE location = 'Chicago, IL'"

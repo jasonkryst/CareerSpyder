@@ -104,23 +104,24 @@ def jobs(
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
             user_id=filter_user_id,
         )
-        history = db.get_job_status_history(conn, [row["key"] for row in rows])
+        history = db.get_job_status_history(conn, [(row["user_id"], row["key"]) for row in rows])
         for row in rows:
             row["age_days"] = _age_days(row["first_seen_at"], row["removed_at"])
             row["safe_url"] = safe_url_scheme(row["url"])
             row["is_secondary"] = row["source_id"] in secondary_ids
             row["history"] = [
                 {"status_label": STATUSES.get(entry["status"], "No status"), "changed_at": entry["changed_at"]}
-                for entry in history.get(row["key"], [])
+                for entry in history.get((row["user_id"], row["key"]), [])
             ]
         source_names = db.list_job_source_names(conn, user_id=filter_user_id)
-        locations = db.list_job_locations(conn)
-        states = db.list_job_states(conn)
+        locations = db.list_job_locations(conn, filter_user_id)
+        states = db.list_job_states(conn, filter_user_id)
         users = db.list_users(conn) if is_admin else []
     return templates.TemplateResponse(request, "jobs.html", {
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "locations": locations, "states": states,
         "statuses": STATUSES, "is_admin": is_admin, "users": users,
+        "current_user_id": current_user["id"],
         "filters": {
             "company": company, "source": source, "removed": removed, "emailed": emailed,
             "status": status, "location": location, "duplicates": duplicates,
@@ -144,8 +145,8 @@ def jobs_map(
     filter_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
         source_names = db.list_job_source_names(conn, user_id=filter_user_id)
-        locations = db.list_job_locations(conn)
-        states = db.list_job_states(conn)
+        locations = db.list_job_locations(conn, filter_user_id)
+        states = db.list_job_states(conn, filter_user_id)
     return templates.TemplateResponse(request, "jobs_map.html", {
         "source_names": source_names, "locations": locations, "states": states,
         "filters": {
@@ -214,7 +215,7 @@ async def update_job_status(
         raise HTTPException(status_code=400, detail="Invalid status")
     try:
         with request.app.state.pool.connection() as conn:
-            db.set_job_status(conn, key, status)
+            db.set_job_status(conn, current_user["id"], key, status)
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
     message = f"Marked as {STATUSES[status]}." if status else "Status cleared."
@@ -234,11 +235,14 @@ async def remove_job(
         raise HTTPException(status_code=400, detail="Missing job key")
     with request.app.state.pool.connection() as conn:
         try:
-            db.mark_job_removed(conn, key)
+            db.mark_job_removed(conn, current_user["id"], key)
         except KeyError:
             raise HTTPException(status_code=404, detail="Job not found")
         if _wants_json(request):
-            row = conn.execute("SELECT removed_at FROM jobs WHERE key = %s", (key,)).fetchone()
+            row = conn.execute(
+                "SELECT removed_at FROM jobs WHERE user_id = %s AND key = %s",
+                (current_user["id"], key),
+            ).fetchone()
             return JSONResponse({"ok": True, "message": "Job marked as removed.", "removed_at": row[0] if row else None})
     return flash_redirect("/jobs", "Job marked as removed.")
 
@@ -259,10 +263,10 @@ async def update_job_duplicate(
     with request.app.state.pool.connection() as conn:
         try:
             if action == "clear":
-                db.clear_job_duplicate(conn, key)
+                db.clear_job_duplicate(conn, current_user["id"], key)
                 message = "Duplicate flag cleared."
             else:
-                db.set_job_duplicate(conn, key, duplicate_of)
+                db.set_job_duplicate(conn, current_user["id"], key, duplicate_of)
                 message = "Marked as duplicate."
         except KeyError:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -291,7 +295,7 @@ async def update_location_override(
     if not location:
         with request.app.state.pool.connection() as conn:
             try:
-                db.clear_location_override(conn, key)
+                db.clear_location_override(conn, current_user["id"], key)
             except KeyError:
                 raise HTTPException(status_code=404, detail="Job not found")
         return JSONResponse({"ok": True, "message": "Location override cleared."})
@@ -321,7 +325,7 @@ async def update_location_override(
     with request.app.state.pool.connection() as conn:
         try:
             db.set_location_override(
-                conn, key, location,
+                conn, current_user["id"], key, location,
                 display_name=display_name, city=city, region=region, country=country,
                 lat=lat, lng=lng, provider=provider,
             )

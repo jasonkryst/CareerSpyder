@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import UTC, date, datetime
 
 import psycopg
@@ -15,17 +16,19 @@ def init_db(dsn: str) -> ConnectionPool:
     return ConnectionPool(dsn, min_size=1, max_size=10, open=True)
 
 
-def get_new_jobs(conn: psycopg.Connection, jobs: list[Job]) -> list[Job]:
+def get_new_jobs(conn: psycopg.Connection, user_id: str, jobs: list[Job]) -> list[Job]:
     if not jobs:
         return []
     placeholders = ",".join(["%s"] * len(jobs))
     keys = [j.key for j in jobs]
-    rows = conn.execute(f"SELECT key FROM jobs WHERE key IN ({placeholders})", keys).fetchall()
+    rows = conn.execute(
+        f"SELECT key FROM jobs WHERE user_id = %s AND key IN ({placeholders})", [user_id, *keys],
+    ).fetchall()
     known = {r[0] for r in rows}
     return [j for j in jobs if j.key not in known]
 
 
-def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: str | None = None) -> None:
+def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, *, user_id: str) -> None:
     if not jobs:
         return
     now = _now()
@@ -40,7 +43,7 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: s
             "INSERT INTO jobs "
             "(key, title, company, location, url, posted_date, source_name, source_id, summary, "
             "first_seen_run_id, first_seen_at, user_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, key) DO NOTHING",
             [
                 (j.key, j.title, j.company, j.location, j.url, j.posted_date, j.source_name,
                  j.source_id, j.summary, run_id, now, user_id)
@@ -50,7 +53,7 @@ def save_jobs(conn: psycopg.Connection, jobs: list[Job], run_id: int, user_id: s
     conn.commit()
 
 
-def refresh_job_urls(conn: psycopg.Connection, jobs: list[Job]) -> int:
+def refresh_job_urls(conn: psycopg.Connection, user_id: str, jobs: list[Job]) -> int:
     """Overwrite the stored URL of already-known jobs whose freshly scraped URL
     differs. Job keys never include the URL, so without this an adapter URL fix
     (e.g. issue #175) would leave existing rows pointing at the old, broken link.
@@ -59,16 +62,17 @@ def refresh_job_urls(conn: psycopg.Connection, jobs: list[Job]) -> int:
         return 0
     with conn.cursor() as cur:
         cur.executemany(
-            "UPDATE jobs SET url = %s WHERE key = %s AND url IS DISTINCT FROM %s",
-            [(j.url, j.key, j.url) for j in jobs],
+            "UPDATE jobs SET url = %s WHERE user_id = %s AND key = %s AND url IS DISTINCT FROM %s",
+            [(j.url, user_id, j.key, j.url) for j in jobs],
         )
         updated = cur.rowcount
     conn.commit()
     return max(updated, 0)
 
 
-def clear_jobs(conn: psycopg.Connection) -> None:
-    conn.execute("DELETE FROM jobs")
+def clear_jobs(conn: psycopg.Connection, user_id: str) -> None:
+    conn.execute("DELETE FROM jobs WHERE user_id = %s", (user_id,))
+    conn.execute("DELETE FROM job_status_history WHERE user_id = %s", (user_id,))
     conn.commit()
 
 
@@ -348,7 +352,7 @@ def list_jobs(
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
-        "jobs.is_duplicate, jobs.duplicate_of, users.username "
+        "jobs.is_duplicate, jobs.duplicate_of, users.username, jobs.user_id::text "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
@@ -367,6 +371,7 @@ def list_jobs(
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
             "is_duplicate": bool(r[16]), "duplicate_of": r[17], "username": r[18],
+            "user_id": r[19],
         }
         for r in rows
     ]
@@ -409,22 +414,28 @@ def list_job_source_names(conn: psycopg.Connection, user_id: str | None = None) 
     return [r[0] for r in rows]
 
 
-def list_job_locations(conn: psycopg.Connection) -> list[str]:
+def list_job_locations(conn: psycopg.Connection, user_id: str | None = None) -> list[str]:
+    owner_sql, params = ("AND jobs.user_id = %s", [user_id]) if user_id is not None else ("", [])
     rows = conn.execute(
         "SELECT display_name FROM ("
-        "SELECT DISTINCT display_name FROM geocoded_locations "
-        "WHERE status = 'resolved' AND display_name IS NOT NULL"
-        ") t ORDER BY LOWER(display_name)"
+        "SELECT DISTINCT gl.display_name FROM jobs "
+        "JOIN geocoded_locations gl ON gl.location = jobs.location "
+        f"WHERE gl.status = 'resolved' AND gl.display_name IS NOT NULL {owner_sql}"
+        ") t ORDER BY LOWER(display_name)",
+        params,
     ).fetchall()
     return [r[0] for r in rows]
 
 
-def list_job_states(conn: psycopg.Connection) -> list[str]:
+def list_job_states(conn: psycopg.Connection, user_id: str | None = None) -> list[str]:
+    owner_sql, params = ("AND jobs.user_id = %s", [user_id]) if user_id is not None else ("", [])
     rows = conn.execute(
         "SELECT region FROM ("
-        "SELECT DISTINCT region FROM geocoded_locations "
-        "WHERE status IN ('resolved', 'manual') AND region IS NOT NULL"
-        ") t ORDER BY LOWER(region)"
+        "SELECT DISTINCT gl.region FROM jobs "
+        "JOIN geocoded_locations gl ON gl.location = jobs.location "
+        f"WHERE gl.status IN ('resolved', 'manual') AND gl.region IS NOT NULL {owner_sql}"
+        ") t ORDER BY LOWER(region)",
+        params,
     ).fetchall()
     return [r[0] for r in rows]
 
@@ -465,12 +476,15 @@ def list_mappable_jobs(
     ]
 
 
-def mark_emailed(conn: psycopg.Connection, keys: list[str]) -> None:
+def mark_emailed(conn: psycopg.Connection, user_id: str, keys: list[str]) -> None:
     if not keys:
         return
     now = _now()
     placeholders = ",".join(["%s"] * len(keys))
-    conn.execute(f"UPDATE jobs SET emailed_at = %s WHERE key IN ({placeholders})", [now, *keys])
+    conn.execute(
+        f"UPDATE jobs SET emailed_at = %s WHERE user_id = %s AND key IN ({placeholders})",
+        [now, user_id, *keys],
+    )
     conn.commit()
 
 
@@ -500,13 +514,15 @@ def get_unemailed_jobs(conn: psycopg.Connection, user_id: str | None = None) -> 
     ]
 
 
-def reconcile_jobs(conn: psycopg.Connection, configured_source_ids: set[str],
+def reconcile_jobs(conn: psycopg.Connection, user_id: str, configured_source_ids: set[str],
                     succeeded_source_ids: set[str], found_jobs: list[Job]) -> None:
     found_keys = {j.key for j in found_jobs}
     now = _now()
 
     active_rows = conn.execute(
-        "SELECT key, source_id FROM jobs WHERE removed_at IS NULL AND source_id IS NOT NULL"
+        "SELECT key, source_id FROM jobs "
+        "WHERE user_id = %s AND removed_at IS NULL AND source_id IS NOT NULL",
+        (user_id,),
     ).fetchall()
     deleted_source_ids = {sid for _, sid in active_rows if sid not in configured_source_ids}
 
@@ -517,39 +533,49 @@ def reconcile_jobs(conn: psycopg.Connection, configured_source_ids: set[str],
     if remove_keys:
         placeholders = ",".join(["%s"] * len(remove_keys))
         conn.execute(
-            f"UPDATE jobs SET removed_at = %s WHERE key IN ({placeholders})",
-            [now, *remove_keys],
+            f"UPDATE jobs SET removed_at = %s WHERE user_id = %s AND key IN ({placeholders})",
+            [now, user_id, *remove_keys],
         )
 
-    removed_rows = conn.execute("SELECT key FROM jobs WHERE removed_at IS NOT NULL").fetchall()
+    removed_rows = conn.execute(
+        "SELECT key FROM jobs WHERE user_id = %s AND removed_at IS NOT NULL", (user_id,),
+    ).fetchall()
     reactivate_keys = [key for (key,) in removed_rows if key in found_keys]
     if reactivate_keys:
         placeholders = ",".join(["%s"] * len(reactivate_keys))
         # Reset emailed_at so reactivated jobs are picked up by the next digest run.
         conn.execute(
-            f"UPDATE jobs SET removed_at = NULL, emailed_at = NULL WHERE key IN ({placeholders})",
-            reactivate_keys,
+            f"UPDATE jobs SET removed_at = NULL, emailed_at = NULL "
+            f"WHERE user_id = %s AND key IN ({placeholders})",
+            [user_id, *reactivate_keys],
         )
 
     conn.commit()
 
 
-def mark_job_removed(conn: psycopg.Connection, key: str) -> None:
-    exists = conn.execute("SELECT 1 FROM jobs WHERE key = %s", (key,)).fetchone()
+def mark_job_removed(conn: psycopg.Connection, user_id: str, key: str) -> None:
+    exists = conn.execute(
+        "SELECT 1 FROM jobs WHERE user_id = %s AND key = %s", (user_id, key),
+    ).fetchone()
     if exists is None:
         raise KeyError(key)
-    conn.execute("UPDATE jobs SET removed_at = %s WHERE key = %s AND removed_at IS NULL", (_now(), key))
+    conn.execute(
+        "UPDATE jobs SET removed_at = %s WHERE user_id = %s AND key = %s AND removed_at IS NULL",
+        (_now(), user_id, key),
+    )
     conn.commit()
 
 
-def set_job_status(conn: psycopg.Connection, key: str, status: str | None) -> None:
+def set_job_status(conn: psycopg.Connection, user_id: str, key: str, status: str | None) -> None:
     now = _now()
-    cur = conn.execute("UPDATE jobs SET status = %s WHERE key = %s", (status, key))
+    cur = conn.execute(
+        "UPDATE jobs SET status = %s WHERE user_id = %s AND key = %s", (status, user_id, key),
+    )
     if cur.rowcount == 0:
         raise KeyError(key)
     conn.execute(
-        "INSERT INTO job_status_history (job_key, status, changed_at) VALUES (%s, %s, %s)",
-        (key, status, now),
+        "INSERT INTO job_status_history (user_id, job_key, status, changed_at) VALUES (%s, %s, %s, %s)",
+        (user_id, key, status, now),
     )
     conn.commit()
 
@@ -569,12 +595,14 @@ def get_geocoded_location(conn: psycopg.Connection, location: str) -> dict | Non
 
 
 def set_location_override(
-    conn: psycopg.Connection, key: str, location: str,
+    conn: psycopg.Connection, user_id: str, key: str, location: str,
     display_name: str, city: str | None, region: str | None, country: str | None,
     lat: float, lng: float, provider: str,
 ) -> None:
     now = _now()
-    cur = conn.execute("SELECT key FROM jobs WHERE key = %s", (key,)).fetchone()
+    cur = conn.execute(
+        "SELECT key FROM jobs WHERE user_id = %s AND key = %s", (user_id, key),
+    ).fetchone()
     if cur is None:
         raise KeyError(key)
     conn.execute(
@@ -587,68 +615,83 @@ def set_location_override(
         "status='manual', provider=excluded.provider, resolved_at=excluded.resolved_at",
         (location, display_name, city, region, country, lat, lng, provider, now),
     )
-    conn.execute("UPDATE jobs SET location_override = %s WHERE key = %s", (location, key))
+    conn.execute(
+        "UPDATE jobs SET location_override = %s WHERE user_id = %s AND key = %s",
+        (location, user_id, key),
+    )
     conn.commit()
 
 
-def clear_location_override(conn: psycopg.Connection, key: str) -> None:
-    cur = conn.execute("UPDATE jobs SET location_override = NULL WHERE key = %s", (key,))
+def clear_location_override(conn: psycopg.Connection, user_id: str, key: str) -> None:
+    cur = conn.execute(
+        "UPDATE jobs SET location_override = NULL WHERE user_id = %s AND key = %s", (user_id, key),
+    )
     if cur.rowcount == 0:
         raise KeyError(key)
     conn.commit()
 
 
-def get_job_statuses(conn: psycopg.Connection, keys: list[str]) -> dict[str, str | None]:
+def get_job_statuses(conn: psycopg.Connection, user_id: str, keys: list[str]) -> dict[str, str | None]:
     if not keys:
         return {}
     placeholders = ",".join(["%s"] * len(keys))
     rows = conn.execute(
-        f"SELECT key, status FROM jobs WHERE key IN ({placeholders})", keys,
+        f"SELECT key, status FROM jobs WHERE user_id = %s AND key IN ({placeholders})",
+        [user_id, *keys],
     ).fetchall()
     return {key: status for key, status in rows}
 
 
-def get_emailed_keys(conn: psycopg.Connection, keys: list[str]) -> set[str]:
+def get_emailed_keys(conn: psycopg.Connection, user_id: str, keys: list[str]) -> set[str]:
     """Return the subset of `keys` that have been included in a prior digest email."""
     if not keys:
         return set()
     placeholders = ",".join(["%s"] * len(keys))
     rows = conn.execute(
-        f"SELECT key FROM jobs WHERE key IN ({placeholders}) AND emailed_at IS NOT NULL", keys,
+        f"SELECT key FROM jobs WHERE user_id = %s AND key IN ({placeholders}) "
+        f"AND emailed_at IS NOT NULL",
+        [user_id, *keys],
     ).fetchall()
-    return {row[0] for row in rows}
+    return {r[0] for r in rows}
 
 
-def set_job_duplicate(conn: psycopg.Connection, key: str, duplicate_of: str | None = None) -> None:
+def set_job_duplicate(conn: psycopg.Connection, user_id: str, key: str,
+                      duplicate_of: str | None = None) -> None:
     cur = conn.execute(
-        "UPDATE jobs SET is_duplicate = TRUE, duplicate_of = %s WHERE key = %s", (duplicate_of, key)
+        "UPDATE jobs SET is_duplicate = TRUE, duplicate_of = %s WHERE user_id = %s AND key = %s",
+        (duplicate_of, user_id, key),
     )
     if cur.rowcount == 0:
         raise KeyError(key)
     conn.commit()
 
 
-def clear_job_duplicate(conn: psycopg.Connection, key: str) -> None:
+def clear_job_duplicate(conn: psycopg.Connection, user_id: str, key: str) -> None:
     cur = conn.execute(
-        "UPDATE jobs SET is_duplicate = FALSE, duplicate_of = NULL WHERE key = %s", (key,)
+        "UPDATE jobs SET is_duplicate = FALSE, duplicate_of = NULL WHERE user_id = %s AND key = %s",
+        (user_id, key),
     )
     if cur.rowcount == 0:
         raise KeyError(key)
     conn.commit()
 
 
-def get_job_status_history(conn: psycopg.Connection, keys: list[str]) -> dict[str, list[dict]]:
-    if not keys:
+def get_job_status_history(
+    conn: psycopg.Connection, owned_keys: list[tuple[str, str]],
+) -> dict[tuple[str, str], list[dict]]:
+    """History for (user_id, key) pairs -- the same key can belong to several users."""
+    if not owned_keys:
         return {}
-    placeholders = ",".join(["%s"] * len(keys))
+    placeholders = ",".join(["(%s::uuid, %s)"] * len(owned_keys))
+    params = [value for pair in owned_keys for value in pair]
     rows = conn.execute(
-        f"SELECT job_key, status, changed_at FROM job_status_history "
-        f"WHERE job_key IN ({placeholders}) ORDER BY changed_at DESC, id DESC",
-        keys,
+        f"SELECT user_id::text, job_key, status, changed_at FROM job_status_history "
+        f"WHERE (user_id, job_key) IN ({placeholders}) ORDER BY changed_at DESC, id DESC",
+        params,
     ).fetchall()
-    history: dict[str, list[dict]] = {}
-    for job_key, status, changed_at in rows:
-        history.setdefault(job_key, []).append({"status": status, "changed_at": changed_at})
+    history: dict[tuple[str, str], list[dict]] = {}
+    for user_id, job_key, status, changed_at in rows:
+        history.setdefault((user_id, job_key), []).append({"status": status, "changed_at": changed_at})
     return history
 
 
@@ -819,6 +862,20 @@ def list_all_sources_by_user(conn: psycopg.Connection) -> dict[str, list]:
     return result
 
 
+def list_users_with_active_jobs(conn: psycopg.Connection) -> set[str]:
+    """Returns the ids of every user who owns at least one active (not-removed) job.
+
+    Used by the scheduler to still reconcile a user's jobs when they have no
+    configured sources left (e.g. their last source was deleted) -- such a
+    user has no entry in list_all_sources_by_user's result, but their
+    already-scraped jobs still need to be marked removed.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT user_id::text FROM jobs WHERE removed_at IS NULL"
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def get_source(conn: psycopg.Connection, user_id: str, source_id: str):
     row = conn.execute(
         "SELECT config FROM sources WHERE id = %s AND user_id = %s",
@@ -864,20 +921,28 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
 
 
 def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int:
-    """Upsert a list of SourceConfig objects; returns count of upserted rows."""
+    """Upsert the importer's sources; returns count of upserted rows.
+
+    A source id already owned by a different user gets a fresh id instead --
+    ids travel in shared export files, and an import must never rewrite
+    someone else's source (audit M4)."""
     count = 0
     for source in sources:
+        owner = conn.execute("SELECT user_id::text FROM sources WHERE id = %s", (source.id,)).fetchone()
+        if owner is not None and owner[0] != str(user_id):
+            source = source.model_copy(update={"id": uuid.uuid4().hex[:12]})
         data = source.model_dump()
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO sources (id, user_id, type, name, secondary, config) "
             "VALUES (%s, %s, %s, %s, %s, %s) "
             "ON CONFLICT(id) DO UPDATE SET "
             "type=excluded.type, name=excluded.name, secondary=excluded.secondary, "
-            "config=excluded.config, updated_at=NOW()",
+            "config=excluded.config, updated_at=NOW() "
+            "WHERE sources.user_id = excluded.user_id",
             (source.id, user_id, source.type, source.name, source.secondary,
              json.dumps(data)),
         )
-        count += 1
+        count += cur.rowcount
     conn.commit()
     return count
 
@@ -885,6 +950,40 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
 # ---------------------------------------------------------------------------
 # Admin bootstrap
 # ---------------------------------------------------------------------------
+
+def claim_unowned_rows(conn: psycopg.Connection, admin_id: str) -> int:
+    """Move rows held in jobs_unowned / job_status_history_unowned onto admin_id.
+
+    Migration 0003 parks any job/job_status_history rows that were still
+    ownerless at upgrade time (a single-user install upgrading before an
+    admin account existed) in these holding tables instead of deleting them,
+    since NULL user_id is no longer allowed on the live tables. Once an admin
+    exists, those rows belong to them. Returns the number of job rows
+    claimed.
+    """
+    cur = conn.execute(
+        "INSERT INTO jobs "
+        "(key, title, company, location, location_override, url, posted_date, "
+        "source_name, source_id, summary, first_seen_run_id, first_seen_at, "
+        "removed_at, emailed_at, status, is_duplicate, duplicate_of, user_id) "
+        "SELECT key, title, company, location, location_override, url, posted_date, "
+        "source_name, source_id, summary, first_seen_run_id, first_seen_at, "
+        "removed_at, emailed_at, status, is_duplicate, duplicate_of, %s "
+        "FROM jobs_unowned "
+        "ON CONFLICT (user_id, key) DO NOTHING",
+        (admin_id,),
+    )
+    claimed = cur.rowcount
+    conn.execute(
+        "INSERT INTO job_status_history (user_id, job_key, status, changed_at) "
+        "SELECT %s, job_key, status, changed_at FROM job_status_history_unowned",
+        (admin_id,),
+    )
+    conn.execute("DELETE FROM jobs_unowned")
+    conn.execute("DELETE FROM job_status_history_unowned")
+    conn.commit()
+    return claimed
+
 
 def seed_admin_if_empty(
     conn: psycopg.Connection,
@@ -897,6 +996,7 @@ def seed_admin_if_empty(
     """
     existing = get_user_by_username(conn, username)
     if existing:
+        claim_unowned_rows(conn, existing["id"])
         return existing
 
     admin = create_user(conn, username, email, password_hash, role="admin")
@@ -911,4 +1011,6 @@ def seed_admin_if_empty(
         "UPDATE job_status_history SET user_id = %s WHERE user_id IS NULL", (admin_id,)
     )
     conn.commit()
+
+    claim_unowned_rows(conn, admin_id)
     return admin

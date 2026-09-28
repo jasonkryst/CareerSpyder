@@ -114,6 +114,16 @@ def member_user_id(member_client):
 
 
 @pytest.fixture
+def member_user_id_for_admin(client):
+    """A member user's id, created without changing who `client` is logged in as."""
+    from app import db
+    from app.web.auth import hash_password
+    with client.app.state.pool.connection() as conn:
+        user = db.create_user(conn, "member2", "member2@test.local", hash_password("member123"))
+    return user["id"]
+
+
+@pytest.fixture
 def seed_source(client, admin_user_id):
     """Factory fixture: seed_source(source) → inserts source into DB for admin."""
     from app import db

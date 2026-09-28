@@ -4,13 +4,14 @@ import psycopg
 
 from app import db
 from app.models import Job
+from tests.conftest import owner_id_for
 
 
 def test_marking_a_job_applied_shows_toast_and_history(live_server, page):
     conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-status-job", title="E2E Status Job", url="https://example.com/job/e2e-status-job")
     run_id = db.start_run(conn)
-    db.save_jobs(conn, [job], run_id)
+    db.save_jobs(conn, [job], run_id, user_id=owner_id_for(conn))
     db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
 
     page.goto(live_server + "/jobs")

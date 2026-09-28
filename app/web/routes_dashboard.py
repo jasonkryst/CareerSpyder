@@ -5,13 +5,21 @@ from psycopg_pool import ConnectionPool
 from app import checker, db
 from app.orchestrator import _run_lock
 from app.scheduler import run_and_notify
+from app.web import ratelimit
 from app.web.auth import require_user
+from app.web.flash import flash_redirect
 from app.web.pagination import paginate
 from app.web.templating import templates
 
 router = APIRouter()
 
 PAGE_SIZE = 25
+
+# Each run launches Chromium for JS-rendered sources and holds _run_lock, so a
+# member mashing the button must not be able to starve the scheduler (M3).
+_RUN_LIMIT = 3
+_RUN_WINDOW_S = 600
+_RUN_LIMITED = "Too many runs started recently. Try again in a few minutes."
 
 
 def _dashboard_context(conn, request: Request, page: str, sort: str, direction: str, failures: str, current_user: dict) -> dict:
@@ -56,8 +64,12 @@ def run_now(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_user),
 ):
+    if not ratelimit.check(f"run-now:{current_user['id']}", _RUN_LIMIT, _RUN_WINDOW_S):
+        return flash_redirect("/", _RUN_LIMITED)
+    only_user_id = None if current_user["role"] == "admin" else current_user["id"]
     background_tasks.add_task(
-        run_and_notify, request.app.state.pool, request.app.state.tz, force=True,
+        run_and_notify, request.app.state.pool, request.app.state.tz,
+        force=True, only_user_id=only_user_id,
     )
     return RedirectResponse(url="/", status_code=303)
 
@@ -78,6 +90,8 @@ def check_urls(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_user),
 ):
+    if not ratelimit.check(f"check-urls:{current_user['id']}", _RUN_LIMIT, _RUN_WINDOW_S):
+        return flash_redirect("/", _RUN_LIMITED)
     is_admin = current_user["role"] == "admin"
     check_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
