@@ -821,12 +821,14 @@ def get_invite(conn: psycopg.Connection, token: str) -> dict | None:
             "expires_at": str(row[3]), "used_at": str(row[4]) if row[4] else None}
 
 
-def use_invite(conn: psycopg.Connection, token: str) -> None:
-    conn.execute(
-        "UPDATE invite_tokens SET used_at = NOW() WHERE token = %s AND used_at IS NULL",
-        (token,),
+def claim_invite(conn: psycopg.Connection, token: str) -> bool:
+    """Atomically mark an invite used. Returns True only for the one request
+    that flipped used_at, so concurrent registrations can't share an invite."""
+    cur = conn.execute(
+        "UPDATE invite_tokens SET used_at = NOW() WHERE token = %s AND used_at IS NULL", (token,),
     )
     conn.commit()
+    return cur.rowcount == 1
 
 
 def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:

@@ -646,3 +646,13 @@ def test_register_rejects_passwords_over_72_bytes(unauthed_client):
     })
     assert resp.status_code == 400
     assert "72 bytes" in resp.text
+
+
+@pytest.mark.parametrize("username", ["x" * 33, "has space", "semi;colon", "<b>"])
+def test_register_rejects_bad_usernames(unauthed_client, username):
+    resp = unauthed_client.post("/register", data={
+        "token": _invite_token(unauthed_client, "u@test.local"), "username": username,
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    })
+    assert resp.status_code == 400
+    assert "Username" in resp.text

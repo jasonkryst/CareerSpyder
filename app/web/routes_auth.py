@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from html import escape as _esc
 from urllib.parse import urlparse
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _TOO_LONG = "Password must be at most 72 bytes."
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 # Verified against for unknown usernames so a miss costs the same bcrypt time
 # as a hit -- response timing must not reveal which usernames exist.
 _DUMMY_HASH = hash_password("not-a-real-password")
@@ -264,10 +266,8 @@ async def register(request: Request):
     if err:
         return _error(err)
 
-    if not username:
-        return _error("Username is required.")
-    if len(username) < 3:
-        return _error("Username must be at least 3 characters.")
+    if not _USERNAME_RE.match(username):
+        return _error("Username must be 3–32 characters: letters, digits, '.', '_' or '-'.")
     if not password:
         return _error("Password is required.")
     if len(password) < 8:
@@ -285,8 +285,10 @@ async def register(request: Request):
         if db.get_user_by_email(conn, invite["email"]):  # type: ignore[index]
             return _error("An account with that email already exists.")
 
+        if not db.claim_invite(conn, token):
+            return _error("This invite link has already been used.")
+
         user = db.create_user(conn, username, invite["email"], pw_hash)  # type: ignore[index]
-        db.use_invite(conn, token)
         db._seed_settings(conn, user["id"], "", 587, "", "", "")
         user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
         if user_with_hash is not None:
