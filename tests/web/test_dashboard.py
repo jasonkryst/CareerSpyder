@@ -29,7 +29,7 @@ def test_run_now_forces_a_run_regardless_of_configured_days(client, monkeypatch)
 
     client.post("/run-now", follow_redirects=False)
 
-    assert calls == [{"force": True}]
+    assert calls == [{"force": True, "only_user_id": None}]
 
 
 def test_dashboard_lists_past_runs(client):
@@ -577,3 +577,39 @@ def test_member_count_includes_only_own_runs(client, member_client, admin_user_i
     resp = member_client.get("/")
 
     assert "Page 1 of 1" in resp.text
+
+
+# --- Run now / check-urls are scoped and rate-limited (M3) ---
+
+def test_member_run_now_runs_only_their_own_sources(member_client, member_user_id, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.web.routes_dashboard.run_and_notify", lambda *a, **k: calls.append(k))
+    resp = member_client.post("/run-now", follow_redirects=False)
+    assert resp.status_code == 303
+    assert calls == [{"force": True, "only_user_id": member_user_id}]
+
+
+def test_admin_run_now_runs_everyone(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.web.routes_dashboard.run_and_notify", lambda *a, **k: calls.append(k))
+    client.post("/run-now", follow_redirects=False)
+    assert calls == [{"force": True, "only_user_id": None}]
+
+
+def test_run_now_is_rate_limited_per_user(member_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.web.routes_dashboard.run_and_notify", lambda *a, **k: calls.append(k))
+    for _ in range(3):
+        member_client.post("/run-now", follow_redirects=False)
+    resp = member_client.post("/run-now", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "Too+many+runs" in resp.headers["location"]
+    assert len(calls) == 3
+
+
+def test_check_urls_is_rate_limited_per_user(member_client, monkeypatch):
+    monkeypatch.setattr("app.web.routes_dashboard._run_url_check", lambda *a, **k: None)
+    for _ in range(3):
+        member_client.post("/check-urls", follow_redirects=False)
+    resp = member_client.post("/check-urls", follow_redirects=False)
+    assert "Too+many+runs" in resp.headers["location"]

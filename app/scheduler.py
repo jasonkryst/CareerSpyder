@@ -130,9 +130,31 @@ def _reconcile_users_with_no_sources(conn, sources_by_user: dict) -> None:
             logger.exception("Failed reconcile for user %s", user_id)
 
 
-def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -> None:
+def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False,
+                    only_user_id: str | None = None) -> None:
+    """Run every user's sources (the scheduled cron job), or -- when
+    `only_user_id` is given -- just that one user's (a member's "Run now").
+
+    The `only_user_id` path never runs or reconciles any other user: a
+    member mashing "Run now" must not be able to trigger scans for other
+    tenants or touch their reconcile state (M3).
+    """
     with pool.connection() as conn:
         sources_by_user = db.list_all_sources_by_user(conn)
+        if only_user_id is not None:
+            sources = sources_by_user.get(only_user_id)
+            if not sources:
+                _record_empty_run(conn, only_user_id)
+                try:
+                    db.reconcile_jobs(conn, only_user_id, set(), set(), [])
+                except Exception:
+                    logger.exception("Failed reconcile for user %s", only_user_id)
+                return
+            try:
+                _run_user(conn, only_user_id, sources, tz, force)
+            except Exception:
+                logger.exception("Failed run for user %s", only_user_id)
+            return
         if not sources_by_user:
             _record_empty_run(conn)
             _reconcile_users_with_no_sources(conn, sources_by_user)

@@ -1,4 +1,7 @@
+from contextlib import contextmanager
 from unittest.mock import patch
+
+import pytest
 
 from app import db, orchestrator, scheduler
 from app.digest import Digest
@@ -792,3 +795,34 @@ def test_catch_up_defaults_now_to_the_configured_timezone(monkeypatch):
     from datetime import UTC, datetime
     hour = datetime.now(UTC).hour
     assert _catch_up(monkeypatch, last_run=None, now=None, run_cron=f"0 {hour} * * *") is True
+
+
+# --- only_user_id scoping (M3): a member's "Run now" must run just their sources ---
+
+class _FakePool:
+    @contextmanager
+    def connection(self):
+        yield "conn"
+
+
+def test_run_and_notify_only_user_id_runs_just_that_user(monkeypatch):
+    ran = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"], "b": ["sb"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda conn, uid, sources, tz, force: ran.append((uid, sources)))
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert ran == [("b", ["sb"])]
+
+
+def test_run_and_notify_only_user_id_without_sources_records_an_empty_run(monkeypatch):
+    recorded = []
+    reconciled = []
+    monkeypatch.setattr(scheduler.db, "list_all_sources_by_user", lambda conn: {"a": ["sa"]})
+    monkeypatch.setattr(scheduler, "_run_user", lambda *args: pytest.fail("no sources, nothing to run"))
+    monkeypatch.setattr(scheduler, "_record_empty_run", lambda conn, user_id=None: recorded.append(user_id))
+    monkeypatch.setattr(
+        scheduler.db, "reconcile_jobs",
+        lambda conn, user_id, active_keys, secondary_ids, secondary_keys: reconciled.append(user_id),
+    )
+    scheduler.run_and_notify(_FakePool(), only_user_id="b")
+    assert recorded == ["b"]
+    assert reconciled == ["b"]
