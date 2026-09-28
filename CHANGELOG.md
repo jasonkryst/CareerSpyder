@@ -5,6 +5,55 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-09-28
+
+### ⚠️ Upgrade notes (action required)
+
+- **`SECRET_KEY` is now required and validated.** The app refuses to start if
+  it is unset, is a published placeholder (including the old `.env.example`
+  value), or is shorter than 32 characters. Generate one with
+  `python -c "import secrets; print(secrets.token_hex(32))"`.
+- **Password-reset emails require `PUBLIC_BASE_URL`.** Without it, account
+  recovery still shows "check your email" but no email is sent (an error is
+  logged). Set it to the site's canonical URL, e.g. `https://jobs.example.com`.
+- **Everyone is signed out once** when this version starts, because sessions
+  now carry a password fingerprint that older cookies lack.
+
+### Security
+
+(Authentication and sessions — phase 2 of the 2026-09-27 security audit,
+docs/audits/2026-09-27-security-audit.md.)
+
+- **H5 — password-reset links could point at an attacker's site.** Links were
+  built from the request's `Host` header when `PUBLIC_BASE_URL` was unset.
+  Reset (and invite) links are now built from `PUBLIC_BASE_URL`; reset emails
+  aren't sent without it.
+
+- **M6 — `SECRET_KEY` fell back to a public default.** Startup now fails on a
+  missing, placeholder, or short key.
+
+- **M5 — sessions couldn't be revoked and the cookie wasn't `Secure`.** Changing
+  or resetting a password now signs out every other session. The session cookie
+  is marked `Secure` when `PUBLIC_BASE_URL` is `https://`, and `SameSite=Lax`
+  explicitly.
+
+- **M7 — sign-in pages could stall the whole app.** Password hashing and
+  verification run off the event loop and account-recovery email is sent in the
+  background, so one slow request no longer blocks others. Unknown usernames
+  take the same time as wrong passwords, and recovery responds the same for
+  known and unknown emails. `/reset-password`, `/register`, and the
+  change-password form are now rate-limited.
+
+- **L1 — passwords over 72 bytes caused a server error.** They're now rejected
+  with a clear message (bcrypt's limit).
+
+- **L4 — one invite link could create several accounts.** Invites are claimed
+  atomically; usernames must be 3–32 letters, digits, `.`, `_` or `-`.
+
+### Fixed
+
+- **A malformed invite token no longer causes a server error** on `/register`.
+
 ## [1.5.0] — 2026-09-27
 
 ### Security
