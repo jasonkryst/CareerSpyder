@@ -627,6 +627,76 @@ def test_run_and_notify_non_admin_user_uses_admin_smtp(pg_dsn, monkeypatch):
         pool.close()
 
 
+def test_run_and_notify_reconciles_jobs_for_a_user_with_no_sources_left(pg_dsn, monkeypatch):
+    """Regression: a user whose last source was deleted has no entry in
+    list_all_sources_by_user, but their previously-scraped jobs still need to
+    be marked removed the same way orchestrator.run_once's reconcile_jobs
+    call would have done before the run_once -> _record_empty_run swap."""
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_a = _seed_user(conn, "usera")
+            _configure(conn, user_a)
+
+            user_b = _seed_user(conn, "userb")
+            _configure(conn, user_b)
+            run_id = db.start_run(conn, user_id=user_b)
+            gone_job = Job(key="gone-1", title="Old", url="https://x.test/gone",
+                            source_name="s", source_id="gone")
+            db.save_jobs(conn, [gone_job], run_id, user_id=user_b)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+        fake_summary = type("S", (), {
+            "new_jobs": [], "found_jobs": [], "failed_sources": [], "run_id": 1,
+        })()
+
+        # Only user_a has sources -- user_b has none, matching list_all_sources_by_user's
+        # "returns only users with >=1 source" contract.
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={user_a: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=None):
+            scheduler.run_and_notify(pool)
+
+        with pool.connection() as conn:
+            removed_at = conn.execute(
+                "SELECT removed_at FROM jobs WHERE user_id = %s AND key = 'gone-1'", (user_b,),
+            ).fetchone()[0]
+        assert removed_at is not None
+    finally:
+        pool.close()
+
+
+def test_run_and_notify_reconciles_jobs_when_no_user_has_sources(pg_dsn, monkeypatch):
+    """Same regression as above, but for the all-empty branch (no user has
+    any sources at all) -- _record_empty_run must not be the only thing that
+    happens; existing users' active jobs still need reconciling."""
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_b = _seed_user(conn, "userb")
+            _configure(conn, user_b)
+            run_id = db.start_run(conn, user_id=user_b)
+            gone_job = Job(key="gone-2", title="Old", url="https://x.test/gone2",
+                            source_name="s", source_id="gone")
+            db.save_jobs(conn, [gone_job], run_id, user_id=user_b)
+            db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={}):
+            scheduler.run_and_notify(pool)
+
+        with pool.connection() as conn:
+            removed_at = conn.execute(
+                "SELECT removed_at FROM jobs WHERE user_id = %s AND key = 'gone-2'", (user_b,),
+            ).fetchone()[0]
+        assert removed_at is not None
+    finally:
+        pool.close()
+
+
 def test_create_scheduler_registers_daily_cron_job(pg_dsn):
     from psycopg_pool import ConnectionPool
     pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)

@@ -854,6 +854,20 @@ def list_all_sources_by_user(conn: psycopg.Connection) -> dict[str, list]:
     return result
 
 
+def list_users_with_active_jobs(conn: psycopg.Connection) -> set[str]:
+    """Returns the ids of every user who owns at least one active (not-removed) job.
+
+    Used by the scheduler to still reconcile a user's jobs when they have no
+    configured sources left (e.g. their last source was deleted) -- such a
+    user has no entry in list_all_sources_by_user's result, but their
+    already-scraped jobs still need to be marked removed.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT user_id::text FROM jobs WHERE removed_at IS NULL"
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def get_source(conn: psycopg.Connection, user_id: str, source_id: str):
     row = conn.execute(
         "SELECT config FROM sources WHERE id = %s AND user_id = %s",

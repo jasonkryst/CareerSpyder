@@ -113,17 +113,36 @@ def _record_empty_run(conn, user_id: str | None = None) -> None:
     db.finish_run(conn, run_id, 0, [])
 
 
+def _reconcile_users_with_no_sources(conn, sources_by_user: dict) -> None:
+    """A user whose last source was deleted has no entry in sources_by_user,
+    so the per-user loop below never reconciles their jobs -- without this,
+    their already-scraped jobs would stay "active" forever once they have
+    zero sources. Mirrors the reconcile_jobs(user_id, set(), set(), []) call
+    orchestrator.run_once used to make for every user (including one with no
+    sources) before the run_once -> _record_empty_run swap for the
+    no-sources-at-all case."""
+    for user_id in db.list_users_with_active_jobs(conn):
+        if user_id in sources_by_user:
+            continue
+        try:
+            db.reconcile_jobs(conn, user_id, set(), set(), [])
+        except Exception:
+            logger.exception("Failed reconcile for user %s", user_id)
+
+
 def run_and_notify(pool: ConnectionPool, tz: str = "UTC", force: bool = False) -> None:
     with pool.connection() as conn:
         sources_by_user = db.list_all_sources_by_user(conn)
         if not sources_by_user:
             _record_empty_run(conn)
+            _reconcile_users_with_no_sources(conn, sources_by_user)
             return
         for user_id, sources in sources_by_user.items():
             try:
                 _run_user(conn, user_id, sources, tz, force)
             except Exception:
                 logger.exception("Failed run for user %s", user_id)
+        _reconcile_users_with_no_sources(conn, sources_by_user)
 
 
 def create_scheduler(pool: ConnectionPool, run_cron: str, tz: str) -> BackgroundScheduler:
