@@ -14,6 +14,7 @@ from app.web.auth import (
     verify_password,
     verify_reset_token,
 )
+from app.web.config_checks import public_base_url
 from app.web.flash import flash_redirect
 from app.web.ratelimit import rate_limit
 from app.web.templating import templates
@@ -109,14 +110,19 @@ async def account_recovery(request: Request):
             user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
             smtp = db.get_admin_smtp_settings(conn)
 
-    if user_with_hash and smtp and smtp.get("smtp_host"):
+    base_url = public_base_url()
+    if base_url is None:
+        logger.error(
+            "Account recovery requested but PUBLIC_BASE_URL is not set; refusing to "
+            "build a reset link from the request's Host header."
+        )
+    elif user_with_hash and smtp and smtp.get("smtp_host"):
         token = generate_reset_token(
             request.app.state.secret_key,
             user_with_hash["id"],
             user_with_hash["email"],
             user_with_hash["password_hash"],
         )
-        base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
         reset_url = base_url + f"/reset-password?token={token}"
         try:
             emailer.send_email(

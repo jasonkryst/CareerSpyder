@@ -455,7 +455,7 @@ def test_account_recovery_with_empty_email_returns_400(unauthed_client):
 def test_reset_password_form_with_valid_token_renders(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.get(f"/reset-password?token={token}")
     assert resp.status_code == 200
     assert 'name="password"' in resp.text
@@ -465,7 +465,7 @@ def test_reset_password_form_with_valid_token_renders(unauthed_client):
 def test_reset_password_form_shows_username(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.get(f"/reset-password?token={token}")
     assert "admin" in resp.text
 
@@ -498,7 +498,7 @@ def test_reset_password_form_with_expired_token_returns_400(unauthed_client):
 def test_post_reset_password_with_valid_token_redirects_to_login(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -511,7 +511,7 @@ def test_post_reset_password_with_valid_token_redirects_to_login(unauthed_client
 def test_post_reset_password_old_password_no_longer_works(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -524,7 +524,7 @@ def test_post_reset_password_old_password_no_longer_works(unauthed_client):
 def test_post_reset_password_with_mismatched_passwords_returns_400(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -537,7 +537,7 @@ def test_post_reset_password_with_mismatched_passwords_returns_400(unauthed_clie
 def test_post_reset_password_with_short_password_returns_400(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "short",
@@ -550,7 +550,7 @@ def test_post_reset_password_with_short_password_returns_400(unauthed_client):
 def test_post_reset_password_token_is_invalidated_after_use(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
 
     # First use — succeeds
     resp = unauthed_client.post("/reset-password", data={
@@ -585,3 +585,27 @@ def test_login_page_displays_flash_message_from_query_param(unauthed_client):
 def test_login_page_displays_error_flash_with_error_class(unauthed_client):
     resp = unauthed_client.get("/login?flash=Something+went+wrong&flash_category=error")
     assert "auth-error" in resp.text
+
+
+# ── Recovery links use PUBLIC_BASE_URL, never the Host header ──────────────────
+
+def test_recovery_link_uses_public_base_url_not_the_host_header(unauthed_client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://jobs.example.com")
+    sent = []
+    monkeypatch.setattr("app.web.routes_auth.emailer.send_email", lambda **kw: sent.append(kw))
+    resp = unauthed_client.post(
+        "/account-recovery", data={"email": "admin@test.local"}, headers={"Host": "evil.example"},
+    )
+    assert resp.status_code == 200
+    assert len(sent) == 1
+    assert "https://jobs.example.com/reset-password?token=" in sent[0]["html_body"]
+    assert "evil.example" not in sent[0]["html_body"]
+
+
+def test_recovery_email_is_not_sent_without_public_base_url(unauthed_client, monkeypatch):
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    sent = []
+    monkeypatch.setattr("app.web.routes_auth.emailer.send_email", lambda **kw: sent.append(kw))
+    resp = unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
+    assert resp.status_code == 200  # same "check your email" page -- no enumeration signal
+    assert sent == []
