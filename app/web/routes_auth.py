@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from html import escape as _esc
 from urllib.parse import urlparse
 
+import psycopg
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -288,7 +289,15 @@ async def register(request: Request):
         if not db.claim_invite(conn, token):
             return _error("This invite link has already been used.")
 
-        user = db.create_user(conn, username, invite["email"], pw_hash)  # type: ignore[index]
+        try:
+            user = db.create_user(conn, username, invite["email"], pw_hash)  # type: ignore[index]
+        except psycopg.errors.UniqueViolation:
+            # The uniqueness SELECTs above are plain reads, not locks -- a
+            # concurrent registration can slip a matching username/email in
+            # between them and this INSERT. Free the invite so the loser can
+            # retry rather than burning it on a failed registration.
+            db.release_invite(conn, token)
+            return _error("That username or email is already taken.")
         db._seed_settings(conn, user["id"], "", 587, "", "", "")
         user_with_hash = db.get_user_by_id_with_hash(conn, user["id"])
         if user_with_hash is not None:

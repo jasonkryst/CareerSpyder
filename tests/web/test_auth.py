@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import psycopg
 import pytest
 from pydantic import TypeAdapter
 
@@ -656,3 +657,37 @@ def test_register_rejects_bad_usernames(unauthed_client, username):
     })
     assert resp.status_code == 400
     assert "Username" in resp.text
+
+
+def test_register_releases_invite_when_create_user_loses_unique_race(unauthed_client, monkeypatch):
+    """The username/email uniqueness checks are plain SELECTs, not locks: a
+    concurrent registration can slip a matching row in between them and
+    create_user's INSERT. Simulate that race by making create_user raise
+    UniqueViolation regardless of what the SELECTs saw, and confirm the
+    invite is released (not permanently burned) so the loser can retry."""
+    token = _invite_token(unauthed_client, "racer@test.local")
+
+    def _raise_unique_violation(*args, **kwargs):
+        raise psycopg.errors.UniqueViolation("duplicate key value violates unique constraint")
+
+    monkeypatch.setattr("app.web.routes_auth.db.create_user", _raise_unique_violation)
+
+    resp = unauthed_client.post("/register", data={
+        "token": token, "username": "racer",
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    })
+    assert resp.status_code == 400
+    assert "already taken" in resp.text
+
+    with unauthed_client.app.state.pool.connection() as conn:
+        invite = db.get_invite(conn, token)
+    assert invite is not None
+    assert invite["used_at"] is None
+
+    monkeypatch.undo()
+
+    resp2 = unauthed_client.post("/register", data={
+        "token": token, "username": "racer2",
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    }, follow_redirects=False)
+    assert resp2.status_code == 303

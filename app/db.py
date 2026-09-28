@@ -831,6 +831,18 @@ def claim_invite(conn: psycopg.Connection, token: str) -> bool:
     return cur.rowcount == 1
 
 
+def release_invite(conn: psycopg.Connection, token: str) -> None:
+    """Undo claim_invite after a downstream failure (e.g. create_user losing
+    a uniqueness race), so the invite can be retried. A failed statement
+    earlier in the transaction leaves the connection aborted -- roll back
+    first so this UPDATE can run and the connection ends in a clean state."""
+    conn.rollback()
+    conn.execute(
+        "UPDATE invite_tokens SET used_at = NULL WHERE token = %s", (token,),
+    )
+    conn.commit()
+
+
 def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
     rows = conn.execute(
         "SELECT token, email, expires_at, used_at FROM invite_tokens "
