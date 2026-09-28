@@ -1,7 +1,10 @@
+import json
+
 import psycopg
 import pytest
 
 from app import db
+from app.config import GreenhouseSource
 from app.models import Job
 
 KEY = "greenhouse:111"
@@ -93,3 +96,46 @@ def test_admin_view_keeps_each_owners_history_separate(client, pg_dsn, admin_use
     # against the per-row history markup rendered by jobs.html instead.
     assert body.count("<li>Applied &mdash;") == 1
     assert body.count("<li>Rejected &mdash;") == 1
+
+
+def _admin_source(pg_dsn, source_id: str):
+    with psycopg.connect(pg_dsn) as conn:
+        admin = db.get_user_by_username(conn, "admin")
+        return db.get_source(conn, admin["id"], source_id)
+
+
+def _seed_admin_source(pg_dsn) -> str:
+    with psycopg.connect(pg_dsn) as conn:
+        admin = db.get_user_by_username(conn, "admin")
+        db.add_source(conn, admin["id"], GreenhouseSource(
+            id="victim000001", type="greenhouse", name="Victim", board_token="victim"))
+    return "victim000001"
+
+
+def test_import_with_another_users_source_id_does_not_touch_it(member_client, member_user_id, pg_dsn):
+    victim_id = _seed_admin_source(pg_dsn)
+    payload = json.dumps({"sources": [
+        {"id": victim_id, "type": "greenhouse", "name": "Hijack", "board_token": "evil"},
+    ]})
+    resp = member_client.post(
+        "/settings/data/import", files={"file": ("s.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert _admin_source(pg_dsn, victim_id).board_token == "victim"
+    with psycopg.connect(pg_dsn) as conn:
+        mine = db.list_sources(conn, member_user_id)
+    assert [s.name for s in mine] == ["Hijack"]
+    assert mine[0].id != victim_id
+
+
+def test_new_source_ignores_a_submitted_id(member_client, member_user_id, pg_dsn):
+    victim_id = _seed_admin_source(pg_dsn)
+    resp = member_client.post("/sources/new", data={
+        "id": victim_id, "type": "greenhouse", "name": "Mine", "board_token": "mine",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    with psycopg.connect(pg_dsn) as conn:
+        mine = db.list_sources(conn, member_user_id)
+    assert len(mine) == 1 and mine[0].id != victim_id

@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import UTC, date, datetime
 
 import psycopg
@@ -919,16 +920,24 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
 
 
 def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int:
-    """Upsert a list of SourceConfig objects; returns count of upserted rows."""
+    """Upsert the importer's sources; returns count of upserted rows.
+
+    A source id already owned by a different user gets a fresh id instead --
+    ids travel in shared export files, and an import must never rewrite
+    someone else's source (audit M4)."""
     count = 0
     for source in sources:
+        owner = conn.execute("SELECT user_id::text FROM sources WHERE id = %s", (source.id,)).fetchone()
+        if owner is not None and owner[0] != str(user_id):
+            source = source.model_copy(update={"id": uuid.uuid4().hex[:12]})
         data = source.model_dump()
         conn.execute(
             "INSERT INTO sources (id, user_id, type, name, secondary, config) "
             "VALUES (%s, %s, %s, %s, %s, %s) "
             "ON CONFLICT(id) DO UPDATE SET "
             "type=excluded.type, name=excluded.name, secondary=excluded.secondary, "
-            "config=excluded.config, updated_at=NOW()",
+            "config=excluded.config, updated_at=NOW() "
+            "WHERE sources.user_id = excluded.user_id",
             (source.id, user_id, source.type, source.name, source.secondary,
              json.dumps(data)),
         )

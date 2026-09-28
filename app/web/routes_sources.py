@@ -86,6 +86,9 @@ async def create_source(
     current_user: dict = Depends(require_user),
 ):
     form = dict((await request.form()).items())
+    # A new source always gets a server-minted id; a submitted one could
+    # collide with (and 500 on) another user's source id.
+    form.pop("id", None)
     try:
         source = source_from_form(form)
     except ValidationError as exc:
