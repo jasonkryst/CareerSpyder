@@ -412,22 +412,28 @@ def list_job_source_names(conn: psycopg.Connection, user_id: str | None = None) 
     return [r[0] for r in rows]
 
 
-def list_job_locations(conn: psycopg.Connection) -> list[str]:
+def list_job_locations(conn: psycopg.Connection, user_id: str | None = None) -> list[str]:
+    owner_sql, params = ("AND jobs.user_id = %s", [user_id]) if user_id is not None else ("", [])
     rows = conn.execute(
         "SELECT display_name FROM ("
-        "SELECT DISTINCT display_name FROM geocoded_locations "
-        "WHERE status = 'resolved' AND display_name IS NOT NULL"
-        ") t ORDER BY LOWER(display_name)"
+        "SELECT DISTINCT gl.display_name FROM jobs "
+        "JOIN geocoded_locations gl ON gl.location = jobs.location "
+        f"WHERE gl.status = 'resolved' AND gl.display_name IS NOT NULL {owner_sql}"
+        ") t ORDER BY LOWER(display_name)",
+        params,
     ).fetchall()
     return [r[0] for r in rows]
 
 
-def list_job_states(conn: psycopg.Connection) -> list[str]:
+def list_job_states(conn: psycopg.Connection, user_id: str | None = None) -> list[str]:
+    owner_sql, params = ("AND jobs.user_id = %s", [user_id]) if user_id is not None else ("", [])
     rows = conn.execute(
         "SELECT region FROM ("
-        "SELECT DISTINCT region FROM geocoded_locations "
-        "WHERE status IN ('resolved', 'manual') AND region IS NOT NULL"
-        ") t ORDER BY LOWER(region)"
+        "SELECT DISTINCT gl.region FROM jobs "
+        "JOIN geocoded_locations gl ON gl.location = jobs.location "
+        f"WHERE gl.status IN ('resolved', 'manual') AND gl.region IS NOT NULL {owner_sql}"
+        ") t ORDER BY LOWER(region)",
+        params,
     ).fetchall()
     return [r[0] for r in rows]
 

@@ -876,11 +876,18 @@ def test_list_jobs_returns_status_field_defaulting_to_none(pg_conn):
 
 def test_list_job_locations_returns_distinct_resolved_display_names(pg_conn):
     conn = pg_conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [
+        Job(key="loc-a", title="A", url="https://x.test/a", source_name="S", location="Chicago, IL"),
+        Job(key="loc-b", title="B", url="https://x.test/b", source_name="S", location="Chicago, Illinois"),
+        Job(key="loc-c", title="C", url="https://x.test/c", source_name="S", location="Nowhere"),
+    ], run_id, user_id=owner_id_for(conn))
     conn.execute(
-        "INSERT INTO geocoded_locations (location, display_name, status) VALUES "
-        "('Chicago, IL', 'Chicago, IL', 'resolved'), "
-        "('Chicago, Illinois', 'Chicago, IL', 'resolved'), "
-        "('Nowhere', NULL, 'failed')"
+        "UPDATE geocoded_locations SET display_name = 'Chicago, IL', status = 'resolved' "
+        "WHERE location IN ('Chicago, IL', 'Chicago, Illinois')"
+    )
+    conn.execute(
+        "UPDATE geocoded_locations SET display_name = NULL, status = 'failed' WHERE location = 'Nowhere'"
     )
     conn.commit()
 

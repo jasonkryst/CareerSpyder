@@ -116,36 +116,43 @@
     <td data-label="Title">
       {{ external_link(job.safe_url, job.title) }}
       {% if job.is_duplicate %}<span class="badge badge-duplicate" title="Marked as duplicate{% if job.duplicate_of %} of {{ job.duplicate_of }}{% endif %}">Duplicate</span>{% endif %}
+      {% if job.user_id == current_user_id %}
       <button type="button" class="duplicate-btn icon-btn"
               data-key="{{ job.key }}"
               data-title="{{ job.title | e }}"
               data-duplicate="{{ 'true' if job.is_duplicate else 'false' }}"
               data-duplicate-of="{{ job.duplicate_of or '' }}"
               aria-label="Mark duplicate for {{ job.title | e }}">&#128258;</button>
+      {% endif %}
     </td>
     <td data-label="Location" data-base-location="{{ job.base_location or '' }}">
       {% if job.is_overridden %}<span class="location-overridden-badge" title="Location manually overridden">&#9998;</span>{% endif %}
       {{ job.location or "—" }}
+      {% if job.user_id == current_user_id %}
       <button type="button" class="location-override-btn icon-btn"
               data-key="{{ job.key }}"
               data-title="{{ job.title | e }}"
               data-current="{{ job.location_override or '' }}"
               data-overridden="{{ 'true' if job.is_overridden else 'false' }}"
               aria-label="Override location for {{ job.title | e }}">&#128205;</button>
+      {% endif %}
     </td>
     <td data-label="Date found"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at }}</time></td>
     <td data-label="Removed">
       {% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>
-      {% else %}
+      {% elif job.user_id == current_user_id %}
       <form method="post" action="/jobs/remove" class="inline-remove-form">
         <input type="hidden" name="key" value="{{ job.key }}">
         <button type="submit" class="icon-btn" aria-label="Mark removed for {{ job.title | e }}" title="Mark as removed">&#128465;</button>
       </form>
+      {% else %}
+      <span class="muted">&mdash;</span>
       {% endif %}
     </td>
     <td data-label="Age (days)">{{ job.age_days }}</td>
     <td data-label="Emailed">{% if job.emailed_at %}<time datetime="{{ job.emailed_at }}">{{ job.emailed_at }}</time>{% else %}Not sent{% endif %}</td>
     <td data-label="Status">
+      {% if job.user_id == current_user_id %}
       <form method="post" action="/jobs/status" class="inline-status-form">
         <input type="hidden" name="key" value="{{ job.key }}">
         <select name="status" aria-label="Status for {{ job.title }}">
@@ -155,6 +162,9 @@
           {% endfor %}
         </select>
       </form>
+      {% elif not job.history %}
+      <span class="muted">&mdash;</span>
+      {% endif %}
       {% if job.history %}
       <details>
         <summary>History</summary>

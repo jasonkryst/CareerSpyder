@@ -114,13 +114,14 @@ def jobs(
                 for entry in history.get((row["user_id"], row["key"]), [])
             ]
         source_names = db.list_job_source_names(conn, user_id=filter_user_id)
-        locations = db.list_job_locations(conn)
-        states = db.list_job_states(conn)
+        locations = db.list_job_locations(conn, filter_user_id)
+        states = db.list_job_states(conn, filter_user_id)
         users = db.list_users(conn) if is_admin else []
     return templates.TemplateResponse(request, "jobs.html", {
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "locations": locations, "states": states,
         "statuses": STATUSES, "is_admin": is_admin, "users": users,
+        "current_user_id": current_user["id"],
         "filters": {
             "company": company, "source": source, "removed": removed, "emailed": emailed,
             "status": status, "location": location, "duplicates": duplicates,
@@ -144,8 +145,8 @@ def jobs_map(
     filter_user_id = None if is_admin else current_user["id"]
     with request.app.state.pool.connection() as conn:
         source_names = db.list_job_source_names(conn, user_id=filter_user_id)
-        locations = db.list_job_locations(conn)
-        states = db.list_job_states(conn)
+        locations = db.list_job_locations(conn, filter_user_id)
+        states = db.list_job_states(conn, filter_user_id)
     return templates.TemplateResponse(request, "jobs_map.html", {
         "source_names": source_names, "locations": locations, "states": states,
         "filters": {
