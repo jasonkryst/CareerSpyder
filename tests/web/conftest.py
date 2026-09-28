@@ -34,7 +34,8 @@ def _make_client(pg_dsn, monkeypatch, *, authenticated: bool = True):
     monkeypatch.setenv("EMAIL_FROM", "from@x.test")
     monkeypatch.setenv("EMAIL_TO", "to@x.test")
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-0123456789abcdef-0123456789abcdef")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://testserver")
 
     # The startup catch-up would otherwise fire a real run whenever the suite
     # runs after RUN_CRON's hour, leaving a stray scrape row in the DB.

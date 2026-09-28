@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db
 from app.web.auth import require_admin
+from app.web.config_checks import public_base_url
 from app.web.templating import templates
 
 router = APIRouter()
@@ -48,7 +49,7 @@ async def invite_user(
         invite = db.create_invite(conn, email, current_user["id"])
         users = db.list_users(conn)
 
-    base = str(request.base_url).rstrip("/")
+    base = public_base_url() or str(request.base_url).rstrip("/")
     invite_url = f"{base}/register?token={invite['token']}"
     return templates.TemplateResponse(
         request, "users.html",

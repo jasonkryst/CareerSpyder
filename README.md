@@ -133,12 +133,12 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 | `ADMIN_USERNAME` | Yes (first boot) | Username for the initial admin account. Ignored once an admin exists in the database. |
 | `ADMIN_PASSWORD` | Yes (first boot) | Password for the initial admin account (plain text; hashed with bcrypt before storage). Ignored once an admin exists. Alternatively, set `ADMIN_PASSWORD_HASH` with a pre-hashed bcrypt string. |
 | `ADMIN_EMAIL` | No | Email address for the initial admin account (defaults to `{ADMIN_USERNAME}@localhost` if unset). |
-| `SECRET_KEY` | Yes | A long random string used to sign session cookies. Generate with e.g. `python -c "import secrets; print(secrets.token_hex(32))"`. Changing this value invalidates all active sessions. Without it, a dev-only insecure default is used with a startup warning. |
+| `SECRET_KEY` | Yes | A long random string used to sign session cookies. Generate with e.g. `python -c "import secrets; print(secrets.token_hex(32))"`. Changing this value invalidates all active sessions. **Required:** the app refuses to start if it is unset, a published placeholder, or shorter than 32 characters. |
 | `SMTP_PASSWORD` | Yes, to send email | The SMTP account password. **Container env var only** — never written to disk, never shown or editable in the UI. See [Secrets](#secrets). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `EMAIL_FROM`, `EMAIL_TO` | No | First-boot defaults only. They seed the `settings` table the very first time the database is empty; after that, `/settings` is the source of truth and these env vars are ignored. |
 | `RUN_CRON` | No (default `0 7 * * *`) | Cron expression (5 fields: `min hour dom month dow`) controlling when the daily scrape runs. `0 7 * * *` means 07:00 every day in `TZ`. See [crontab.guru](https://crontab.guru) for reference. |
 | `TZ` | No (default `UTC`) | Timezone the scheduler and `RUN_CRON` are interpreted in. |
-| `PUBLIC_BASE_URL` | No | The site's own public URL (e.g. `https://jobs.example.com`), used to build the "View all jobs" link in digest emails. Without it, the link is omitted. |
+| `PUBLIC_BASE_URL` | Yes, for password-reset emails | The site's canonical public URL (e.g. `https://jobs.example.com`). Password-reset links are built from it — without it, account-recovery emails are not sent. Also used for invite links and the digest's "View all jobs" link. If it starts with `https://`, the session cookie is marked `Secure`, so sign in through that URL rather than plain `http://host:port`. |
 | `GA_MEASUREMENT_ID` | No | A GA4 Measurement ID (format `G-XXXXXXXXXX`) to enable Google Analytics page-view tracking. Without it, no `gtag.js` script is loaded and the CSP stays locked down to just this site. |
 
 ### Sources
@@ -227,7 +227,8 @@ Run the app locally without Docker (requires a running PostgreSQL instance):
 export DATABASE_URL=postgresql://careerspyder:dev@localhost:5432/careerspyder
 export ADMIN_USERNAME=admin
 export ADMIN_PASSWORD=changeme
-export SECRET_KEY=dev-local-secret
+export SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+export PUBLIC_BASE_URL=http://localhost:8080
 export SMTP_PASSWORD=dummy   # only needed if a run finds something to email
 uvicorn app.web.main:app --reload --port 8080
 ```

@@ -12,6 +12,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app import db
 from app.scheduler import catch_up_missed_run, create_scheduler
 from app.web.auth import UserContextMiddleware, hash_password
+from app.web.config_checks import (
+    public_base_url,
+    session_cookie_secure,
+    validate_secret_key,
+)
 from app.web.csrf_protection import OriginCheckMiddleware
 from app.web.routes_auth import router as auth_router
 from app.web.routes_dashboard import router as dashboard_router
@@ -28,14 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_secret_key() -> str:
-    key = os.environ.get("SECRET_KEY", "")
-    if not key:
-        key = "dev-insecure-secret-change-me"
-        logger.warning(
-            "SECRET_KEY is not set — using an insecure dev default. "
-            "Set SECRET_KEY in production."
-        )
-    return key
+    # Import-time value for SessionMiddleware; lifespan() refuses to serve
+    # unless the real env value passes validate_secret_key.
+    return os.environ.get("SECRET_KEY", "") or "dev-insecure-secret-change-me"
 
 
 def _resolve_admin_password_hash() -> str | None:
@@ -51,6 +51,8 @@ def _resolve_admin_password_hash() -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_secret_key(os.environ.get("SECRET_KEY", ""))
+
     dsn = os.environ.get("DATABASE_URL", "postgresql://careerspyder:dev@localhost:5432/careerspyder")
     run_cron = os.environ.get("RUN_CRON", "0 7 * * *")
     tz = os.environ.get("TZ", "UTC")
@@ -87,10 +89,9 @@ async def lifespan(app: FastAPI):
 
     catch_up_missed_run(pool, run_cron, tz)
 
-    if not os.environ.get("PUBLIC_BASE_URL"):
+    if public_base_url() is None:
         logger.warning(
-            "PUBLIC_BASE_URL is not set — password-reset links will use the "
-            "Host header from the incoming request, which may be spoofable. "
+            "PUBLIC_BASE_URL is not set — password-reset emails are disabled. "
             "Set PUBLIC_BASE_URL to the canonical public URL of this instance."
         )
 
@@ -108,8 +109,10 @@ app = FastAPI(title="CareerSpyder", lifespan=lifespan)
 # Desired dispatch order: SecurityHeaders → OriginCheck → Session → UserContext → route.
 # Register SecurityHeaders last (outermost), UserContext first (innermost, runs after Session).
 app.add_middleware(UserContextMiddleware)
-app.add_middleware(SessionMiddleware, secret_key=_resolve_secret_key(),
-                   max_age=7 * 24 * 3600)
+app.add_middleware(
+    SessionMiddleware, secret_key=_resolve_secret_key(), max_age=7 * 24 * 3600,
+    same_site="lax", https_only=session_cookie_secure(public_base_url()),
+)
 app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 

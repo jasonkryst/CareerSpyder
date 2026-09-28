@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import psycopg
 import pytest
 from pydantic import TypeAdapter
 
@@ -455,7 +456,7 @@ def test_account_recovery_with_empty_email_returns_400(unauthed_client):
 def test_reset_password_form_with_valid_token_renders(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.get(f"/reset-password?token={token}")
     assert resp.status_code == 200
     assert 'name="password"' in resp.text
@@ -465,7 +466,7 @@ def test_reset_password_form_with_valid_token_renders(unauthed_client):
 def test_reset_password_form_shows_username(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.get(f"/reset-password?token={token}")
     assert "admin" in resp.text
 
@@ -498,7 +499,7 @@ def test_reset_password_form_with_expired_token_returns_400(unauthed_client):
 def test_post_reset_password_with_valid_token_redirects_to_login(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -511,7 +512,7 @@ def test_post_reset_password_with_valid_token_redirects_to_login(unauthed_client
 def test_post_reset_password_old_password_no_longer_works(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -524,7 +525,7 @@ def test_post_reset_password_old_password_no_longer_works(unauthed_client):
 def test_post_reset_password_with_mismatched_passwords_returns_400(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "freshpassword1",
@@ -537,7 +538,7 @@ def test_post_reset_password_with_mismatched_passwords_returns_400(unauthed_clie
 def test_post_reset_password_with_short_password_returns_400(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
     resp = unauthed_client.post("/reset-password", data={
         "token": token,
         "password": "short",
@@ -550,7 +551,7 @@ def test_post_reset_password_with_short_password_returns_400(unauthed_client):
 def test_post_reset_password_token_is_invalidated_after_use(unauthed_client):
     conn = unauthed_client.app.state.conn
     user = db.get_user_by_username(conn, "admin")
-    token = generate_reset_token("test-secret-key", user["id"], user["email"], user["password_hash"])
+    token = generate_reset_token(unauthed_client.app.state.secret_key, user["id"], user["email"], user["password_hash"])
 
     # First use — succeeds
     resp = unauthed_client.post("/reset-password", data={
@@ -585,3 +586,108 @@ def test_login_page_displays_flash_message_from_query_param(unauthed_client):
 def test_login_page_displays_error_flash_with_error_class(unauthed_client):
     resp = unauthed_client.get("/login?flash=Something+went+wrong&flash_category=error")
     assert "auth-error" in resp.text
+
+
+# ── Recovery links use PUBLIC_BASE_URL, never the Host header ──────────────────
+
+def test_recovery_link_uses_public_base_url_not_the_host_header(unauthed_client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://jobs.example.com")
+    sent = []
+    monkeypatch.setattr("app.web.routes_auth.emailer.send_email", lambda **kw: sent.append(kw))
+    resp = unauthed_client.post(
+        "/account-recovery", data={"email": "admin@test.local"}, headers={"Host": "evil.example"},
+    )
+    assert resp.status_code == 200
+    assert len(sent) == 1
+    assert "https://jobs.example.com/reset-password?token=" in sent[0]["html_body"]
+    assert "evil.example" not in sent[0]["html_body"]
+
+
+def test_recovery_email_is_not_sent_without_public_base_url(unauthed_client, monkeypatch):
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    sent = []
+    monkeypatch.setattr("app.web.routes_auth.emailer.send_email", lambda **kw: sent.append(kw))
+    resp = unauthed_client.post("/account-recovery", data={"email": "admin@test.local"})
+    assert resp.status_code == 200  # same "check your email" page -- no enumeration signal
+    assert sent == []
+
+
+# ── Event loop / rate limit / bcrypt length (M7, L1) ───────────────────────────
+
+def test_login_with_an_overlong_password_is_a_plain_401(unauthed_client):
+    resp = unauthed_client.post("/login", data={"username": "admin", "password": "x" * 100})
+    assert resp.status_code == 401
+
+
+def test_reset_password_post_is_rate_limited(unauthed_client):
+    for _ in range(10):
+        unauthed_client.post("/reset-password", data={"token": "bogus", "password": "a", "password_confirm": "a"})
+    resp = unauthed_client.post("/reset-password", data={"token": "bogus", "password": "a", "password_confirm": "a"})
+    assert resp.status_code == 429
+
+
+def test_register_post_is_rate_limited(unauthed_client):
+    for _ in range(10):
+        unauthed_client.post("/register", data={"token": "bogus"})
+    assert unauthed_client.post("/register", data={"token": "bogus"}).status_code == 429
+
+
+def _invite_token(tc, email: str) -> str:
+    """Create an invite from the seeded admin. Uses the one client's pool --
+    requesting both `client` and `unauthed_client` would run the lifespan twice."""
+    with tc.app.state.pool.connection() as conn:
+        admin = db.get_user_by_username(conn, "admin")
+        return str(db.create_invite(conn, email, admin["id"])["token"])
+
+
+def test_register_rejects_passwords_over_72_bytes(unauthed_client):
+    resp = unauthed_client.post("/register", data={
+        "token": _invite_token(unauthed_client, "new@test.local"), "username": "newbie",
+        "password": "é" * 40, "password_confirm": "é" * 40,   # 80 UTF-8 bytes
+    })
+    assert resp.status_code == 400
+    assert "72 bytes" in resp.text
+
+
+@pytest.mark.parametrize("username", ["x" * 33, "has space", "semi;colon", "<b>"])
+def test_register_rejects_bad_usernames(unauthed_client, username):
+    resp = unauthed_client.post("/register", data={
+        "token": _invite_token(unauthed_client, "u@test.local"), "username": username,
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    })
+    assert resp.status_code == 400
+    assert "Username" in resp.text
+
+
+def test_register_releases_invite_when_create_user_loses_unique_race(unauthed_client, monkeypatch):
+    """The username/email uniqueness checks are plain SELECTs, not locks: a
+    concurrent registration can slip a matching row in between them and
+    create_user's INSERT. Simulate that race by making create_user raise
+    UniqueViolation regardless of what the SELECTs saw, and confirm the
+    invite is released (not permanently burned) so the loser can retry."""
+    token = _invite_token(unauthed_client, "racer@test.local")
+
+    def _raise_unique_violation(*args, **kwargs):
+        raise psycopg.errors.UniqueViolation("duplicate key value violates unique constraint")
+
+    monkeypatch.setattr("app.web.routes_auth.db.create_user", _raise_unique_violation)
+
+    resp = unauthed_client.post("/register", data={
+        "token": token, "username": "racer",
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    })
+    assert resp.status_code == 400
+    assert "already taken" in resp.text
+
+    with unauthed_client.app.state.pool.connection() as conn:
+        invite = db.get_invite(conn, token)
+    assert invite is not None
+    assert invite["used_at"] is None
+
+    monkeypatch.undo()
+
+    resp2 = unauthed_client.post("/register", data={
+        "token": token, "username": "racer2",
+        "password": "goodpass1", "password_confirm": "goodpass1",
+    }, follow_redirects=False)
+    assert resp2.status_code == 303

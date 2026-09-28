@@ -42,7 +42,7 @@ def live_server(postgresql_proc):
         "ADMIN_USERNAME": "admin",
         "ADMIN_PASSWORD": "password123",
         "ADMIN_EMAIL": "admin@test.local",
-        "SECRET_KEY": "test-secret-key-e2e",
+        "SECRET_KEY": "test-secret-key-e2e-0123456789abcdef-0123456789abcdef",
         "RUN_CRON": "0 8 * * *",
         "TZ": "UTC",
         "SMTP_HOST": "smtp.example.com",

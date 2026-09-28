@@ -5,7 +5,7 @@ import pytest
 from app import db
 from app.models import FailedSource, Job
 from app.web.auth import hash_password as _hash_password
-from tests.conftest import owner_id_for
+from tests.conftest import owner_id_for, seed_admin
 
 
 def _make_user(conn, username="u1"):
@@ -1806,3 +1806,11 @@ def test_import_sources_counts_only_rows_actually_written_by_the_upsert():
     count = db.import_sources(conn, "user-1", [source_a, source_b])
 
     assert count == 1
+
+
+def test_claim_invite_succeeds_exactly_once(pg_conn):
+    admin = seed_admin(pg_conn)
+    invite = db.create_invite(pg_conn, "x@test.local", admin["id"])
+    token = str(invite["token"])
+    assert db.claim_invite(pg_conn, token) is True
+    assert db.claim_invite(pg_conn, token) is False

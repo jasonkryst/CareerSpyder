@@ -804,6 +804,13 @@ def create_invite(
 
 
 def get_invite(conn: psycopg.Connection, token: str) -> dict | None:
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        # Not a well-formed UUID -- treat as "not found" rather than letting an
+        # untrusted, arbitrary token string reach the database as a query param
+        # (Postgres would otherwise raise InvalidTextRepresentation).
+        return None
     row = conn.execute(
         "SELECT token, email, created_by, expires_at, used_at FROM invite_tokens WHERE token = %s",
         (token,),
@@ -814,10 +821,24 @@ def get_invite(conn: psycopg.Connection, token: str) -> dict | None:
             "expires_at": str(row[3]), "used_at": str(row[4]) if row[4] else None}
 
 
-def use_invite(conn: psycopg.Connection, token: str) -> None:
+def claim_invite(conn: psycopg.Connection, token: str) -> bool:
+    """Atomically mark an invite used. Returns True only for the one request
+    that flipped used_at, so concurrent registrations can't share an invite."""
+    cur = conn.execute(
+        "UPDATE invite_tokens SET used_at = NOW() WHERE token = %s AND used_at IS NULL", (token,),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def release_invite(conn: psycopg.Connection, token: str) -> None:
+    """Undo claim_invite after a downstream failure (e.g. create_user losing
+    a uniqueness race), so the invite can be retried. A failed statement
+    earlier in the transaction leaves the connection aborted -- roll back
+    first so this UPDATE can run and the connection ends in a clean state."""
+    conn.rollback()
     conn.execute(
-        "UPDATE invite_tokens SET used_at = NOW() WHERE token = %s AND used_at IS NULL",
-        (token,),
+        "UPDATE invite_tokens SET used_at = NULL WHERE token = %s", (token,),
     )
     conn.commit()
 
