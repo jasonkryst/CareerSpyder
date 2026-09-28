@@ -18,6 +18,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   logged). Set it to the site's canonical URL, e.g. `https://jobs.example.com`.
 - **Everyone is signed out once** when this version starts, because sessions
   now carry a password fingerprint that older cookies lack.
+- **If `PUBLIC_BASE_URL` is `https://…`, sign in through that URL.** The
+  session cookie is now marked `Secure` in that case, so opening the app over
+  plain `http://<host>:32600` can no longer keep you signed in (login appears
+  to do nothing).
 
 ### Security
 
@@ -26,8 +30,10 @@ docs/audits/2026-09-27-security-audit.md.)
 
 - **H5 — password-reset links could point at an attacker's site.** Links were
   built from the request's `Host` header when `PUBLIC_BASE_URL` was unset.
-  Reset (and invite) links are now built from `PUBLIC_BASE_URL`; reset emails
-  aren't sent without it.
+  Reset links are now built only from `PUBLIC_BASE_URL`, and reset emails
+  aren't sent without it; invite links prefer `PUBLIC_BASE_URL` too, falling
+  back to the request URL when it's unset (admin-created invites, not
+  attacker-influenced).
 
 - **M6 — `SECRET_KEY` fell back to a public default.** Startup now fails on a
   missing, placeholder, or short key.

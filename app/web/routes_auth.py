@@ -37,7 +37,7 @@ _DUMMY_HASH = hash_password("not-a-real-password")
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
-    if request.session.get("user_id"):
+    if getattr(request.state, "user", None):
         return RedirectResponse(url="/", status_code=303)
     next_url = request.query_params.get("next", "/")
     return templates.TemplateResponse(request, "login.html", {"next": next_url})
@@ -92,7 +92,7 @@ async def logout(request: Request):
 
 @router.get("/account-recovery", response_class=HTMLResponse)
 async def account_recovery_form(request: Request):
-    if request.session.get("user_id"):
+    if getattr(request.state, "user", None):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse(request, "account_recovery.html", {})
 
@@ -205,7 +205,10 @@ async def reset_password(request: Request):
             return _form_error(_TOO_LONG)
         if password != password_confirm:
             return _form_error("Passwords do not match.")
-        new_hash = await run_in_threadpool(hash_password, password)
+
+    new_hash = await run_in_threadpool(hash_password, password)
+
+    with request.app.state.pool.connection() as conn:
         db.update_password(conn, user["id"], new_hash)
 
     request.session.clear()
