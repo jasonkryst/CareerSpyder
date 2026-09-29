@@ -1,6 +1,6 @@
 import ssl
 from typing import ClassVar
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from app import emailer
 from app.emailer import send_email
@@ -45,7 +45,6 @@ def test_send_email_with_multiple_recipients_joins_header_and_sends_to_all():
 
 
 def test_send_email_port_465_uses_smtp_ssl_not_starttls():
-    from unittest.mock import ANY
     with patch("app.emailer.smtplib.SMTP_SSL") as mock_ssl_cls, \
          patch("app.emailer.smtplib.SMTP") as mock_plain_cls:
         mock_server = MagicMock()
@@ -65,7 +64,6 @@ def test_send_email_port_465_uses_smtp_ssl_not_starttls():
 
 
 def test_send_email_port_587_uses_plain_smtp_with_starttls():
-    from unittest.mock import ANY
     with patch("app.emailer.smtplib.SMTP_SSL") as mock_ssl_cls, \
          patch("app.emailer.smtplib.SMTP") as mock_plain_cls:
         mock_server = MagicMock()
@@ -83,7 +81,6 @@ def test_send_email_port_587_uses_plain_smtp_with_starttls():
 
 
 def test_send_email_port_25_uses_plain_smtp_with_starttls():
-    from unittest.mock import ANY
     with patch("app.emailer.smtplib.SMTP_SSL") as mock_ssl_cls, \
          patch("app.emailer.smtplib.SMTP") as mock_plain_cls:
         mock_server = MagicMock()
