@@ -5,6 +5,28 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-09-29
+
+### ⚠️ Upgrade notes (action required)
+
+- **SMTP servers must present a valid, trusted certificate.** Digest and
+  account-recovery email now verify the mail server's TLS certificate and
+  hostname (both STARTTLS and port 465). A relay with a self-signed or
+  otherwise untrusted certificate will fail with a logged
+  `certificate verify failed` error; the scrape run itself still completes.
+  Use a relay with a publicly trusted certificate.
+
+### Security
+
+(Outbound requests — phase 3 of the 2026-09-27 security audit,
+docs/audits/2026-09-27-security-audit.md.)
+
+- **H4 — the headless browser could be redirected into the local network.** Playwright only checks the first URL of a redirect chain, so a public career-site URL that redirected to an internal address was rendered. The browser guard now follows each redirect hop itself and checks it before requesting it, checks every request (not just the page itself), aborts cleanly if a hop can't be fetched, and blocks service workers.
+- **M2 — the URL guard could be bypassed by DNS rebinding or CGNAT/Tailscale addresses.** Outbound requests now connect only to the exact address that was validated (no second DNS lookup), and every non-public range is blocked — including `100.64.0.0/10` (Tailscale), benchmarking/IETF ranges, IPv4-mapped IPv6 and NAT64.
+- **M9 — "Check job URLs" didn't use the URL guard.** Job-link checks now go through the same guard; links that point at internal addresses are skipped, not marked removed.
+- **M1 — SMTP didn't verify the server's certificate.** An on-path attacker could have captured `SMTP_PASSWORD`. Certificates and hostnames are now verified (see upgrade note).
+- **L3 — source previews revealed internal network details.** A blocked URL now shows a generic "private or internal network address" message instead of the resolved IP.
+
 ## [1.6.0] — 2026-09-28
 
 ### ⚠️ Upgrade notes (action required)
