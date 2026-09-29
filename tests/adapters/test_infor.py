@@ -393,7 +393,7 @@ class _FakeBrowser:
         self.opened: list[_FakePage] = []
         self.closed = False
 
-    def new_page(self):
+    def new_page(self, **kwargs):
         page = self._pages.pop(0)
         self.opened.append(page)
         return page

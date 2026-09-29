@@ -2,6 +2,7 @@ import ipaddress
 import logging
 import socket
 import sys
+from collections.abc import Callable
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -174,23 +175,45 @@ def safe_head(url: str, **kwargs) -> requests.Response:
     return safe_request("HEAD", url, **kwargs)
 
 
-def install_ssrf_guard(page) -> None:
-    """Attaches a Playwright route handler that SSRF-validates every
-    top-level document navigation (including redirect hops, which arrive as
-    separate routed requests) before letting the browser follow it.
-    Subresources (images/scripts/css) are left unchecked so normal page
-    rendering isn't affected."""
+def make_route_handler(check: Callable[[str], None] = assert_safe_url):
+    """Playwright route handler enforcing `check` on every request.
 
-    def _handle_route(route) -> None:
+    page.route only sees the first URL of a redirect chain -- Chromium follows
+    3xx hops unrouted (audit H4, verified against Playwright 1.62). So for
+    documents the handler fetches hop-by-hop itself, vets every Location, and
+    fulfils the final response. Subresources are vetted on their first URL.
+    """
+
+    def _handle(route) -> None:
         request = route.request
+        try:
+            check(request.url)
+        except UnsafeUrlError:
+            route.abort("blockedbyclient")
+            return
         if request.resource_type != "document":
             route.continue_()
             return
-        try:
-            assert_safe_url(request.url)
-        except UnsafeUrlError:
-            route.abort()
-            return
-        route.continue_()
+        url = request.url
+        for _ in range(_DEFAULT_MAX_REDIRECTS + 1):
+            response = route.fetch(url=url, max_redirects=0)
+            location = response.headers.get("location")
+            if not (300 <= response.status < 400 and location):
+                route.fulfill(response=response)
+                return
+            url = urljoin(url, location)
+            try:
+                check(url)
+            except UnsafeUrlError:
+                route.abort("blockedbyclient")
+                return
+        route.abort("blockedbyclient")
 
-    page.route("**/*", _handle_route)
+    return _handle
+
+
+def install_ssrf_guard(page, check: Callable[[str], None] = assert_safe_url) -> None:
+    """Attaches a Playwright route handler (see `make_route_handler`) that
+    SSRF-validates every request the page makes, walking redirect chains
+    hop-by-hop itself since Chromium follows 3xx redirects unrouted."""
+    page.route("**/*", make_route_handler(check))

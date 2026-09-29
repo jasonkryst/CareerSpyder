@@ -194,56 +194,30 @@ def test_unsafe_url_errors_do_not_reveal_resolved_addresses(monkeypatch):
     assert "10.0.0.5" not in str(exc.value)
 
 
-def test_install_ssrf_guard_routes_document_requests_through_the_page():
+def test_install_ssrf_guard_routes_every_request_through_the_page():
+    # The redirect-walking / subresource handler logic itself is covered by
+    # tests/security/test_browser_guard.py (fake Route) and
+    # tests/web/e2e/test_ssrf_browser_guard.py (real Chromium). This just
+    # checks install_ssrf_guard wires a handler up for every request.
     fake_page = Mock()
     install_ssrf_guard(fake_page)
     assert fake_page.route.call_count == 1
     args, _ = fake_page.route.call_args
     assert args[0] == "**/*"
+    assert callable(args[1])
 
 
-def test_install_ssrf_guard_aborts_a_disallowed_document_navigation():
+def test_install_ssrf_guard_uses_the_given_check_instead_of_the_default():
     fake_page = Mock()
-    install_ssrf_guard(fake_page)
-    handler = fake_page.route.call_args[0][1]
-
-    fake_route = Mock()
-    fake_route.request.resource_type = "document"
-    fake_route.request.url = "http://169.254.169.254/"
-
-    with patch("app.security.ssrf_guard.socket.getaddrinfo", return_value=_addrinfo("169.254.169.254")):
-        handler(fake_route)
-
-    fake_route.abort.assert_called_once()
-    fake_route.continue_.assert_not_called()
-
-
-def test_install_ssrf_guard_allows_a_safe_document_navigation():
-    fake_page = Mock()
-    install_ssrf_guard(fake_page)
-    handler = fake_page.route.call_args[0][1]
-
-    fake_route = Mock()
-    fake_route.request.resource_type = "document"
-    fake_route.request.url = "https://example.test/"
-
-    with patch("app.security.ssrf_guard.socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
-        handler(fake_route)
-
-    fake_route.continue_.assert_called_once()
-    fake_route.abort.assert_not_called()
-
-
-def test_install_ssrf_guard_lets_non_document_resources_through_unchecked():
-    fake_page = Mock()
-    install_ssrf_guard(fake_page)
+    custom_check = Mock(side_effect=UnsafeUrlError("blocked"))
+    install_ssrf_guard(fake_page, check=custom_check)
     handler = fake_page.route.call_args[0][1]
 
     fake_route = Mock()
     fake_route.request.resource_type = "image"
-    fake_route.request.url = "http://169.254.169.254/logo.png"
+    fake_route.request.url = "https://example.test/logo.png"
 
     handler(fake_route)
 
-    fake_route.continue_.assert_called_once()
-    fake_route.abort.assert_not_called()
+    custom_check.assert_called_once_with("https://example.test/logo.png")
+    fake_route.abort.assert_called_once_with("blockedbyclient")
