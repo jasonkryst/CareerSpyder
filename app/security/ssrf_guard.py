@@ -186,6 +186,9 @@ def make_route_handler(check: Callable[[str], None] = assert_safe_url):
 
     def _handle(route) -> None:
         request = route.request
+        # data:/blob:/about: URLs resolve in the renderer without a network
+        # request, so Playwright never routes them through here -- check()
+        # (http(s)-only) never sees, and so never blocks, those schemes.
         try:
             check(request.url)
         except UnsafeUrlError:
@@ -196,7 +199,16 @@ def make_route_handler(check: Callable[[str], None] = assert_safe_url):
             return
         url = request.url
         for _ in range(_DEFAULT_MAX_REDIRECTS + 1):
-            response = route.fetch(url=url, max_redirects=0)
+            try:
+                response = route.fetch(url=url, max_redirects=0)
+            except Exception:  # noqa: BLE001 -- route.fetch raises heterogeneous
+                # Playwright/network errors (DNS failure, connection refused,
+                # timeout); any of them must abort the route rather than
+                # escape, or the route is never resolved and page.goto()
+                # stalls until its own 30s timeout.
+                logger.info("Browser guard: fetch failed for %s", url)
+                route.abort("failed")
+                return
             location = response.headers.get("location")
             if not (300 <= response.status < 400 and location):
                 route.fulfill(response=response)

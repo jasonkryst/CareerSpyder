@@ -19,7 +19,10 @@ class _Route:
     def fetch(self, url=None, max_redirects=None):
         assert max_redirects == 0
         self.fetched.append(url)
-        return self._responses[url]
+        response = self._responses[url]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
     def fulfill(self, response):
         self.outcome = ("fulfill", response)
@@ -74,3 +77,20 @@ def test_allowed_subresource_is_continued():
     route = _Route("https://cdn.test/app.js", "script")
     make_route_handler(_block_internal)(route)
     assert route.outcome == ("continue",)
+
+
+def test_fetch_failure_is_aborted_without_propagating():
+    route = _Route("https://pub.test/a", "document", {
+        "https://pub.test/a": RuntimeError("boom"),
+    })
+    make_route_handler(_block_internal)(route)
+    assert route.outcome == ("abort", "failed")
+
+
+def test_fetch_failure_mid_chain_is_aborted_without_propagating():
+    route = _Route("https://pub.test/a", "document", {
+        "https://pub.test/a": _Resp(302, "https://pub.test/b"),
+        "https://pub.test/b": RuntimeError("boom"),
+    })
+    make_route_handler(_block_internal)(route)
+    assert route.outcome == ("abort", "failed")

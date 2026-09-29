@@ -36,6 +36,7 @@ def test_render_html_replaces_headlesschrome_in_the_user_agent():
     _, kwargs = chromium_browser.new_page.call_args_list[1]
     assert "HeadlessChrome" not in kwargs["user_agent"]
     assert "Chrome/120.0.0.0" in kwargs["user_agent"]
+    assert kwargs["service_workers"] == "block"
 
 
 def test_render_html_navigates_with_networkidle_and_a_30s_timeout():
