@@ -1,6 +1,10 @@
+import inspect
+
 from app import checker, db
 from app.models import Job
-from tests.conftest import owner_id_for
+from app.security import ssrf_guard
+from app.security.ssrf_guard import UnsafeUrlError
+from tests.conftest import _original_check_job_urls, owner_id_for
 
 
 def make_job(key="k1", url="https://example.com/jobs/1", source_id="s1"):
@@ -14,13 +18,13 @@ class FakeHead:
 
 
 def _head_returning(status_code: int):
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         return FakeHead(status_code)
     return _head
 
 
 def _head_raising(exc):
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         raise exc
     return _head
 
@@ -106,7 +110,7 @@ def test_check_job_urls_skips_already_removed_jobs(pg_conn):
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
     calls = []
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         calls.append(url)
         return FakeHead(200)
 
@@ -138,7 +142,7 @@ def test_check_job_urls_only_removes_jobs_that_return_404_or_410(pg_conn):
         "https://example.com/3": 200,
     }
 
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         return FakeHead(status_by_url[url])
 
     count = checker.check_job_urls(conn, http_head=_head)
@@ -161,7 +165,7 @@ def test_check_job_urls_checks_urls_concurrently(pg_conn):
     # a sequential checker would time out here instead of passing through.
     barrier = threading.Barrier(3, timeout=5)
 
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         barrier.wait()
         return FakeHead(404)
 
@@ -179,7 +183,7 @@ def test_check_job_urls_stops_waiting_at_the_overall_deadline(pg_conn):
                  db.start_run(conn), user_id=owner_id_for(conn))
     release = threading.Event()
 
-    def _head(url, *, timeout, allow_redirects):
+    def _head(url, **kwargs):
         if url.endswith("/slow"):
             release.wait(5)
         return FakeHead(404)
@@ -195,3 +199,20 @@ def test_check_job_urls_stops_waiting_at_the_overall_deadline(pg_conn):
     assert elapsed < 3
     assert count == 1
     assert removed == {"fast"}
+
+
+def test_checker_defaults_to_the_ssrf_guarded_head():
+    default = inspect.signature(_original_check_job_urls).parameters["http_head"].default
+    assert default is ssrf_guard.safe_head
+
+
+def test_blocked_job_urls_are_skipped_not_removed(pg_conn):
+    owner = owner_id_for(pg_conn)
+    job = Job(key="html:x", title="T", url="http://169.254.169.254/latest", source_name="S", source_id="s")
+    db.save_jobs(pg_conn, [job], db.start_run(pg_conn, user_id=owner), user_id=owner)
+
+    def blocked(url, **kwargs):
+        raise UnsafeUrlError(ssrf_guard.UNSAFE_URL_MESSAGE)
+
+    assert checker.check_job_urls(pg_conn, http_head=blocked) == 0
+    assert pg_conn.execute("SELECT removed_at FROM jobs WHERE key = 'html:x'").fetchone()[0] is None

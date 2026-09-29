@@ -25,8 +25,12 @@ else:
     postgresql_proc = factories.postgresql_proc(port=None)
 
 
-def _offline_head(url, *, timeout, allow_redirects):
+def _offline_head(url, **kwargs):
     raise requests.ConnectionError(f"live network disabled in tests: {url}")
+
+
+# Store the original check_job_urls before any wrapping for tests that need to check it
+_original_check_job_urls = checker.check_job_urls
 
 
 @pytest.fixture(autouse=True)
@@ -34,10 +38,9 @@ def _no_live_url_checks(monkeypatch):
     """run_once and /check-urls call checker.check_job_urls with the real
     requests.head; route those through an offline fake so no test makes a
     live HEAD request. Tests that inject their own http_head are unaffected."""
-    real = checker.check_job_urls
 
     def _check(conn, http_head=None, **kwargs):
-        return real(conn, http_head=http_head or _offline_head, **kwargs)
+        return _original_check_job_urls(conn, http_head=http_head or _offline_head, **kwargs)
 
     monkeypatch.setattr(checker, "check_job_urls", _check)
 

@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 import psycopg
 import requests
 
+from app.security.ssrf_guard import UnsafeUrlError, safe_head
+
 logger = logging.getLogger(__name__)
 
 _REMOVED_STATUSES = frozenset({404, 410})
@@ -17,7 +19,7 @@ _DEADLINE_S = 60.0
 
 def check_job_urls(
     conn: psycopg.Connection,
-    http_head: Callable = requests.head,
+    http_head: Callable = safe_head,
     user_id: str | None = None,
     max_workers: int = _MAX_WORKERS,
     deadline_s: float = _DEADLINE_S,
@@ -43,6 +45,9 @@ def check_job_urls(
     def _is_removed(key: str, url: str) -> bool:
         try:
             resp = http_head(url, timeout=10, allow_redirects=True)
+        except UnsafeUrlError:
+            logger.info("URL check skipped for job %s: URL is not a public address", key)
+            return False
         except requests.exceptions.RequestException:
             logger.debug("URL check skipped for job %s (%s): request failed", key, url)
             return False
