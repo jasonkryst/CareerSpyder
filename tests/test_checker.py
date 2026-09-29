@@ -18,13 +18,13 @@ class FakeHead:
 
 
 def _head_returning(status_code: int):
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         return FakeHead(status_code)
     return _head
 
 
 def _head_raising(exc):
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         raise exc
     return _head
 
@@ -110,7 +110,7 @@ def test_check_job_urls_skips_already_removed_jobs(pg_conn):
     assert db.list_jobs(conn)[0]["removed_at"] is not None
 
     calls = []
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         calls.append(url)
         return FakeHead(200)
 
@@ -142,7 +142,7 @@ def test_check_job_urls_only_removes_jobs_that_return_404_or_410(pg_conn):
         "https://example.com/3": 200,
     }
 
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         return FakeHead(status_by_url[url])
 
     count = checker.check_job_urls(conn, http_head=_head)
@@ -165,7 +165,7 @@ def test_check_job_urls_checks_urls_concurrently(pg_conn):
     # a sequential checker would time out here instead of passing through.
     barrier = threading.Barrier(3, timeout=5)
 
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         barrier.wait()
         return FakeHead(404)
 
@@ -183,7 +183,7 @@ def test_check_job_urls_stops_waiting_at_the_overall_deadline(pg_conn):
                  db.start_run(conn), user_id=owner_id_for(conn))
     release = threading.Event()
 
-    def _head(url, **kwargs):
+    def _head(url, *, timeout, allow_redirects):
         if url.endswith("/slow"):
             release.wait(5)
         return FakeHead(404)
