@@ -883,6 +883,9 @@ def test_run_completes_when_smtp_certificate_is_rejected(monkeypatch, caplog):
     # scheduler.logger may not propagate to the root handler caplog installs;
     # monkeypatch restores whatever it was after the test.
     monkeypatch.setattr(scheduler.logger, "propagate", True)
+    # Alembic's fileConfig() (run by the pg_dsn fixture in earlier tests)
+    # disables pre-existing loggers; re-enable for this test only.
+    monkeypatch.setattr(scheduler.logger, "disabled", False)
     # Ensure root logger level allows ERROR messages through
     root_logger = logging.getLogger()
     original_level = root_logger.level
