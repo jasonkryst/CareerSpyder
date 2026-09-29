@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app import db
 from app.adapters import ADAPTERS
+from app.security.ssrf_guard import UNSAFE_URL_MESSAGE, UnsafeUrlError
 from app.textutils import safe_url_scheme
 from app.web.auth import require_user
 from app.web.flash import flash_redirect
@@ -163,6 +164,8 @@ async def test_source_preview(
         # them back to the UI as a preview error, not to crash.
         async with _preview_semaphore:
             jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
+    except UnsafeUrlError:
+        return {"error": UNSAFE_URL_MESSAGE}
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {"jobs": [{"title": j.title, "url": safe_url_scheme(j.url)} for j in jobs]}

@@ -59,3 +59,19 @@ def test_preview_semaphore_limits_concurrent_playwright_launches():
 
     assert isinstance(_preview_semaphore, asyncio.Semaphore)
     assert _preview_semaphore._value <= 3
+
+
+def test_preview_reports_blocked_urls_without_internal_details(client):
+    from app.security.ssrf_guard import UnsafeUrlError
+
+    def blocked(source):
+        raise UnsafeUrlError("URL resolves to a disallowed address: 10.0.0.5")
+
+    with patch("app.web.routes_sources.ADAPTERS", {"greenhouse": blocked}):
+        resp = client.post("/sources/test-preview", data={
+            "type": "greenhouse", "name": "Acme", "board_token": "acme",
+            "include_keywords": "", "exclude_keywords": "",
+        })
+    error = resp.json()["error"]
+    assert "10.0.0.5" not in error
+    assert "private or internal" in error
