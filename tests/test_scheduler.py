@@ -886,10 +886,6 @@ def test_run_completes_when_smtp_certificate_is_rejected(monkeypatch, caplog):
     # Alembic's fileConfig() (run by the pg_dsn fixture in earlier tests)
     # disables pre-existing loggers; re-enable for this test only.
     monkeypatch.setattr(scheduler.logger, "disabled", False)
-    # Ensure root logger level allows ERROR messages through
-    root_logger = logging.getLogger()
-    original_level = root_logger.level
-    root_logger.setLevel(logging.DEBUG)
 
     with caplog.at_level(logging.ERROR, logger="app.scheduler"):
         monkeypatch.setattr(scheduler.db, "get_settings", lambda conn, uid: {
@@ -910,9 +906,6 @@ def test_run_completes_when_smtp_certificate_is_rejected(monkeypatch, caplog):
 
         monkeypatch.setattr(scheduler.emailer, "send_email", reject)
         scheduler._run_user("conn", "u1", [], "UTC", force=True)   # must not raise
-
-    # Restore root logger level
-    root_logger.setLevel(original_level)
 
     failures = [r for r in caplog.records if "Failed to send digest email" in r.getMessage()]
     assert len(failures) == 1
