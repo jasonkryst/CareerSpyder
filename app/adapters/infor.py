@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from app.adapters.browser import chromium_launch_kwargs
 from app.config import InforSource
 from app.models import Job
 from app.security.ssrf_guard import assert_safe_url, install_ssrf_guard
@@ -222,7 +223,7 @@ def default_page_iterator(url: str, max_pages: int) -> Iterator[str]:
     """
     assert_safe_url(url)
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(**chromium_launch_kwargs())
         try:
             page, kind = _open_board(browser, url)
             iter_pages = _iter_v1_pages if kind == "v1" else _iter_v2_pages
