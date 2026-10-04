@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
     restart: unless-stopped
     environment:
       POSTGRES_DB: careerspyder
@@ -39,3 +39,5 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
+      CHROMIUM_SANDBOX: ${CHROMIUM_SANDBOX:-}

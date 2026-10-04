@@ -139,6 +139,8 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 | `RUN_CRON` | No (default `0 7 * * *`) | Cron expression (5 fields: `min hour dom month dow`) controlling when the daily scrape runs. `0 7 * * *` means 07:00 every day in `TZ`. See [crontab.guru](https://crontab.guru) for reference. |
 | `TZ` | No (default `UTC`) | Timezone the scheduler and `RUN_CRON` are interpreted in. |
 | `PUBLIC_BASE_URL` | Yes, for password-reset emails | The site's canonical public URL (e.g. `https://jobs.example.com`). Password-reset links are built from it — without it, account-recovery emails are not sent. Also used for invite links and the digest's "View all jobs" link. If it starts with `https://`, the session cookie is marked `Secure`, so sign in through that URL rather than plain `http://host:port`. |
+| `ALLOWED_HOSTS` | No | Comma-separated hostnames the app will serve (e.g. `jobs.example.com,localhost`). Requests with a non-matching `Host` header get a 400. Include `localhost` so Docker's internal healthcheck keeps working. When unset, all hosts are accepted. |
+| `CHROMIUM_SANDBOX` | No | Set to `1` to enable Chromium's OS-level sandbox inside the container. Requires unprivileged user namespaces on the host (see [SECURITY.md](SECURITY.md)). Leave unset (the default) when unsure. |
 | `GA_MEASUREMENT_ID` | No | A GA4 Measurement ID (format `G-XXXXXXXXXX`) to enable Google Analytics page-view tracking. Without it, no `gtag.js` script is loaded and the CSP stays locked down to just this site. |
 
 ### Sources

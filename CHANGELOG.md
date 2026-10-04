@@ -5,6 +5,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-10-04
+
+### Security
+
+- **M8 — Chromium sandbox opt-in.** New `CHROMIUM_SANDBOX=1` env var enables Chromium's OS-level sandbox inside the container when the host supports unprivileged user namespaces. Defaults to off (no-go on stock Docker without `--privileged`). Residual risk documented in `SECURITY.md`.
+- **L5 — digest recipients capped at 5.** The preferences form now rejects more than 5 recipient addresses (400 + error message). JSON import silently truncates to 5.
+- **L7 — updated `SECURITY.md`.** Replaced the "no-auth trusted-network" posture with the current multi-user model: authentication, session management, per-user isolation, CSRF protection, SSRF guard, SMTP TLS, and documented residual risks.
+- **L8 — CI least-privilege token.** Added top-level `permissions: contents: read` to `ci.yml`. Pinned the Postgres image to a SHA256 digest in both compose files (Dependabot's docker ecosystem keeps it current). Passed `ALLOWED_HOSTS` and `CHROMIUM_SANDBOX` through to the container.
+
+### Changed
+
+- Updated docstrings in `csrf_protection.py` and `security_headers.py` to reflect the current auth model.
+- `.env.example`: added `ALLOWED_HOSTS` and `CHROMIUM_SANDBOX` with documentation.
+- `README.md`: added `ALLOWED_HOSTS` and `CHROMIUM_SANDBOX` to the config table.
+- `ROADMAP.md`: replaced stale "minor hygiene" items with L6 (flash-via-query-string), the one accepted residual from the audit.
+
 ## [1.7.0] — 2026-09-29
 
 ### ⚠️ Upgrade notes (action required)
@@ -26,7 +42,6 @@ docs/audits/2026-09-27-security-audit.md.)
 - **M9 — "Check job URLs" didn't use the URL guard.** Job-link checks now go through the same guard; links that point at internal addresses are skipped, not marked removed.
 - **M1 — SMTP didn't verify the server's certificate.** An on-path attacker could have captured `SMTP_PASSWORD`. Certificates and hostnames are now verified (see upgrade note).
 - **L3 — source previews revealed internal network details.** A blocked URL now shows a generic "private or internal network address" message instead of the resolved IP.
-
 ## [1.6.0] — 2026-09-28
 
 ### ⚠️ Upgrade notes (action required)

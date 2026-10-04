@@ -8,11 +8,11 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 class OriginCheckMiddleware(BaseHTTPMiddleware):
     """Blocks cross-origin state-changing requests using the Origin/
     Sec-Fetch-Site headers modern browsers attach even to plain <form>
-    POSTs. CareerSpyder has no auth or cookies (trusted-network-only, per
-    ROADMAP.md), so a per-user CSRF token isn't a natural fit -- this closes
-    the gap without adding any session/cookie infrastructure. A request
-    carrying neither header (older browsers, direct API/script use on the
-    trusted network) is allowed through, matching that threat model.
+    POSTs.  This complements the SameSite=Lax session cookie: a cross-origin
+    POST from a malicious page is blocked even though the browser would send
+    the cookie.  A request carrying neither header (non-browser API clients,
+    older browsers) is allowed through because it carries no session cookie
+    and therefore has no session to abuse.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
