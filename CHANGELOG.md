@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-04
+
+### Added
+
+- **Platform detector (issue #200 — "What the HR?").** The Add Source form now has a "Detect platform" widget. Paste any careers page URL and CareerSpyder identifies the HR platform (Greenhouse, Lever, Workday, LinkedIn, Indeed, and 6 more) and pre-fills the form fields. Detection runs URL-pattern matching first (no network) and falls back to fetching the page for platforms only identifiable by page content (TalentBrew, Infor, PhenomPeople, Findly). SSRF protection via the existing `safe_get` guard.
+- **Report unsupported platforms.** When a URL is not recognized, a "Report as unsupported" button appears. With `GITHUB_TOKEN` set, it files a GitHub issue automatically. Without the token, it opens a pre-filled new-issue URL in the browser.
+- New `GITHUB_TOKEN` env var (optional). Documented in `.env.example`.
+- New `app/platform_detector.py` with `detect()` and `report_unsupported()` — both injectable for testing.
+- `POST /sources/detect-platform` and `POST /sources/report-unsupported` JSON endpoints (auth-gated).
+
 ## [1.7.1] — 2026-10-04
 
 ### Security
