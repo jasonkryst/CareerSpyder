@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import re
 import socket
 import sys
 from collections.abc import Callable
@@ -219,13 +220,51 @@ def make_route_handler(check: Callable[[str], None] = assert_safe_url):
             except UnsafeUrlError:
                 route.abort("blockedbyclient")
                 return
+        # Redirect limit hit. Nothing failed check(), but Playwright has no
+        # closer abort reason, so this reuses "blockedbyclient".
         route.abort("blockedbyclient")
 
     return _handle
 
 
+_WS_TO_HTTP_SCHEME = {"ws": "http", "wss": "https"}
+
+
+def make_websocket_route_handler(check: Callable[[str], None] = assert_safe_url):
+    """Playwright WebSocket route handler enforcing `check` on the handshake URL.
+
+    page.route never sees WebSocket connections -- Playwright routes them only
+    through the separate page.route_web_socket API -- so without this a
+    rendered page's `new WebSocket("ws://<internal host>")` dials out unvetted.
+    ws/wss are checked as their http/https equivalents (same host, port and
+    handshake), since `check` only accepts http(s).
+    """
+
+    def _handle(ws) -> None:
+        parsed = urlparse(ws.url)
+        http_url = parsed._replace(scheme=_WS_TO_HTTP_SCHEME.get(parsed.scheme, parsed.scheme)).geturl()
+        try:
+            check(http_url)
+        except UnsafeUrlError:
+            # Returning without connect_to_server leaves the socket mocked:
+            # Playwright never dials the server, and page messages are dropped
+            # (no on_message handler, not connected). Don't call ws.close()
+            # here -- it awaits "closePage", which Playwright can't process
+            # until the page side is opened after this handler returns, so it
+            # deadlocks the sync API.
+            logger.info("Browser guard: blocked WebSocket to %s", ws.url)
+            return
+        # Like route.fetch for documents, connect_to_server re-resolves the
+        # host, so a DNS-rebinding window between check and connect remains.
+        ws.connect_to_server()
+
+    return _handle
+
+
 def install_ssrf_guard(page, check: Callable[[str], None] = assert_safe_url) -> None:
-    """Attaches a Playwright route handler (see `make_route_handler`) that
-    SSRF-validates every request the page makes, walking redirect chains
-    hop-by-hop itself since Chromium follows 3xx redirects unrouted."""
+    """Attaches Playwright route handlers (see `make_route_handler` and
+    `make_websocket_route_handler`) that SSRF-validate every request and
+    WebSocket the page opens, walking redirect chains hop-by-hop itself since
+    Chromium follows 3xx redirects unrouted."""
     page.route("**/*", make_route_handler(check))
+    page.route_web_socket(re.compile(".*"), make_websocket_route_handler(check))

@@ -1,6 +1,10 @@
 from types import SimpleNamespace
 
-from app.security.ssrf_guard import UnsafeUrlError, make_route_handler
+from app.security.ssrf_guard import (
+    UnsafeUrlError,
+    make_route_handler,
+    make_websocket_route_handler,
+)
 
 
 class _Resp:
@@ -94,3 +98,36 @@ def test_fetch_failure_mid_chain_is_aborted_without_propagating():
     })
     make_route_handler(_block_internal)(route)
     assert route.outcome == ("abort", "failed")
+
+
+class _WebSocketRoute:
+    def __init__(self, url: str):
+        self.url = url
+        self.outcome: tuple = ()
+
+    def connect_to_server(self):
+        self.outcome = ("connect",)
+
+    def close(self, code=None, reason=None):
+        self.outcome = ("close", code)
+
+
+def test_websocket_to_a_blocked_host_is_never_connected():
+    ws = _WebSocketRoute("ws://internal.test/socket")
+    make_websocket_route_handler(_block_internal)(ws)
+    # No connect_to_server and no close(): close() inside the handler
+    # deadlocks Playwright's sync API (see make_websocket_route_handler).
+    assert ws.outcome == ()
+
+
+def test_allowed_websocket_is_connected_to_the_server():
+    ws = _WebSocketRoute("wss://example.test/socket")
+    make_websocket_route_handler(_block_internal)(ws)
+    assert ws.outcome == ("connect",)
+
+
+def test_websocket_url_is_checked_as_its_http_equivalent():
+    seen: list[str] = []
+    for url in ("ws://example.test/a", "wss://example.test/b"):
+        make_websocket_route_handler(seen.append)(_WebSocketRoute(url))
+    assert seen == ["http://example.test/a", "https://example.test/b"]

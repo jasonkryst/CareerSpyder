@@ -207,6 +207,16 @@ def test_install_ssrf_guard_routes_every_request_through_the_page():
     assert callable(args[1])
 
 
+def test_install_ssrf_guard_routes_every_websocket_through_the_page():
+    # page.route never sees WebSockets; they need route_web_socket too.
+    fake_page = Mock()
+    install_ssrf_guard(fake_page)
+    assert fake_page.route_web_socket.call_count == 1
+    pattern, handler = fake_page.route_web_socket.call_args[0]
+    assert pattern.match("ws://anything.test/socket")
+    assert callable(handler)
+
+
 def test_install_ssrf_guard_uses_the_given_check_instead_of_the_default():
     fake_page = Mock()
     custom_check = Mock(side_effect=UnsafeUrlError("blocked"))
@@ -221,3 +231,14 @@ def test_install_ssrf_guard_uses_the_given_check_instead_of_the_default():
 
     custom_check.assert_called_once_with("https://example.test/logo.png")
     fake_route.abort.assert_called_once_with("blockedbyclient")
+
+
+def test_urllib3_still_exposes_the_connection_attributes_the_pinned_dial_reads():
+    # _PinnedConnectionMixin._new_conn reads these urllib3 HTTPConnection
+    # internals. If a urllib3 upgrade renames them, every guarded request
+    # would fail with AttributeError at runtime -- fail here instead.
+    from urllib3.connection import HTTPConnection
+
+    conn = HTTPConnection("example.test", 80)
+    for attr in ("_dns_host", "port", "timeout", "source_address", "socket_options"):
+        assert hasattr(conn, attr), f"urllib3 HTTPConnection no longer has {attr!r}"
