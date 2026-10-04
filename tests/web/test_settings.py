@@ -742,3 +742,42 @@ def test_post_import_accepts_file_at_exactly_the_size_limit(client):
     )
 
     assert resp.status_code == 303
+
+
+def test_preferences_reject_more_than_five_recipients(client):
+    resp = client.post("/settings/preferences", data={
+        "email_to": [f"r{i}@x.test" for i in range(6)],
+        "email_days": ["mon"],
+    })
+    assert resp.status_code == 400
+    assert "at most 5" in resp.text
+
+
+def test_preferences_accept_exactly_five_recipients(client, admin_user_id):
+    emails = [f"r{i}@x.test" for i in range(5)]
+    client.post("/settings/preferences", data={
+        "email_to": emails, "email_days": ["mon"],
+    })
+    from app import db
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
+    assert settings["email_to"] == ",".join(emails)
+
+
+def test_import_keeps_only_the_first_five_recipients(client, admin_user_id):
+    import json
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {"email_to": [f"r{i}@x.test" for i in range(8)]},
+    }).encode()
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        settings = db.get_settings(conn, admin_user_id)
+    assert settings["email_to"].count(",") == 4  # 5 addresses, 4 commas
