@@ -4,8 +4,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# CareerSpyder has no auth (by design, trusted-network-only per ROADMAP.md) —
-# these are defense-in-depth headers, not a substitute for that gate.
+# Defense-in-depth response headers — clickjacking, MIME-sniffing, referrer
+# leakage.  See SECURITY.md for the full security model.
 _HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

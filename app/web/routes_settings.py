@@ -36,6 +36,7 @@ def _str_field(form: dict, key: str) -> str:
 
 
 DAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+MAX_DIGEST_RECIPIENTS = 5
 
 
 def _str_list_field(form, key: str) -> list[str]:
@@ -141,6 +142,21 @@ async def save_preferences(
     raw_exclude = set(_str_list_field(form, "digest_exclude_statuses")) & set(JOB_STATUSES)
     digest_exclude_statuses = ",".join(s for s in JOB_STATUSES if s in raw_exclude)
 
+    if len(submitted_emails) > MAX_DIGEST_RECIPIENTS:
+        with request.app.state.pool.connection() as conn:
+            settings = db.get_settings(conn, current_user["id"])
+        return templates.TemplateResponse(
+            request, "settings_preferences.html",
+            {
+                "settings": settings,
+                "email_days_selected": selected_days,
+                "email_to_list": submitted_emails or [""],
+                "digest_exclude_statuses_set": raw_exclude,
+                "error": f"Digests can go to at most {MAX_DIGEST_RECIPIENTS} addresses.",
+            },
+            status_code=400,
+        )
+
     invalid = [addr for addr in submitted_emails if not _is_valid_email(addr)]
     if invalid:
         with request.app.state.pool.connection() as conn:
@@ -222,10 +238,11 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, st
 
     raw_emails = preferences.get("email_to")
     emails = raw_emails if isinstance(raw_emails, list) else []
-    email_to = ",".join(
+    valid = [
         addr.strip() for addr in emails
         if isinstance(addr, str) and addr.strip() and _is_valid_email(addr.strip())
-    )
+    ]
+    email_to = ",".join(valid[:MAX_DIGEST_RECIPIENTS])
 
     hide_not_interested_on_map = preferences.get("hide_not_interested_on_map")
     if not isinstance(hide_not_interested_on_map, bool):

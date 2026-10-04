@@ -19,12 +19,11 @@ later rather than fixed immediately.
   `/sources/test-preview`'s Playwright-driven fetches have no concurrency
   limit (unlike the daily run, which is serialized). See the audit's
   findings M2 and M3.
-- **Minor security hygiene items (from audit).** `board_token` is
-  interpolated unescaped into the Greenhouse/Lever API URL (finding L1);
-  a non-numeric `max_pages` form value raises an unhandled 500 instead of
-  a graceful validation error (finding L2); runtime dependencies are
-  pinned with `>=` only, no upper bounds (finding L3). None are urgent —
-  see the audit for details.
+- **Flash messages travel as query-string parameters (from audit, L6).**
+  After a redirect (e.g. "Source saved"), the success/error message is
+  passed in the URL's query string rather than in the session. Moving it
+  into the session would be cleaner but is not exploitable (the message is
+  HTML-escaped in the template). See SECURITY.md's residual-risks section.
 
 ## Reliability & operations
 
