@@ -1,3 +1,5 @@
+import logging
+import ssl
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -875,3 +877,38 @@ def test_run_and_notify_only_user_id_no_sources_rechecks_under_lock_before_recon
     scheduler.run_and_notify(_FakePool(), only_user_id="b")
     assert recorded == ["b"]
     assert reconciled == []
+
+
+def test_run_completes_when_smtp_certificate_is_rejected(monkeypatch, caplog):
+    # scheduler.logger may not propagate to the root handler caplog installs;
+    # monkeypatch restores whatever it was after the test.
+    monkeypatch.setattr(scheduler.logger, "propagate", True)
+    # Alembic's fileConfig() (run by the pg_dsn fixture in earlier tests)
+    # disables pre-existing loggers; re-enable for this test only.
+    monkeypatch.setattr(scheduler.logger, "disabled", False)
+
+    with caplog.at_level(logging.ERROR, logger="app.scheduler"):
+        monkeypatch.setattr(scheduler.db, "get_settings", lambda conn, uid: {
+            "email_days": None, "resend_jobs": False, "email_to": "t@x.test",
+            "digest_exclude_statuses": "", "digest_max_per_company": 0,
+        })
+        monkeypatch.setattr(scheduler.orchestrator, "run_once", lambda conn, sources, **kw: type(
+            "S", (), {"run_id": 1, "new_jobs": [], "found_jobs": [], "failed_sources": []})())
+        for name in ("get_unemailed_jobs", "list_jobs"):
+            monkeypatch.setattr(scheduler.db, name, lambda *a, **k: [])
+        monkeypatch.setattr(scheduler.db, "get_job_statuses", lambda *a, **k: {})
+        monkeypatch.setattr(scheduler.digest, "build_digest", lambda *a, **k: Digest("s", "<p>b</p>"))
+        monkeypatch.setattr(scheduler.db, "get_admin_smtp_settings", lambda conn: {
+            "smtp_host": "smtp.test", "smtp_port": 587, "smtp_user": "u", "email_from": "f@x.test"})
+
+        def reject(*a, **k):
+            raise ssl.SSLCertVerificationError("certificate verify failed: self-signed certificate")
+
+        monkeypatch.setattr(scheduler.emailer, "send_email", reject)
+        scheduler._run_user("conn", "u1", [], "UTC", force=True)   # must not raise
+
+    failures = [r for r in caplog.records if "Failed to send digest email" in r.getMessage()]
+    assert len(failures) == 1
+    assert failures[0].exc_info is not None
+    assert isinstance(failures[0].exc_info[1], ssl.SSLCertVerificationError)
+    assert "certificate verify failed" in caplog.text

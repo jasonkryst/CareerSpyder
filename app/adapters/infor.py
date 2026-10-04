@@ -165,7 +165,7 @@ def _open_board(browser, url: str):
     """Loads the board and waits for cards, retrying the load once: the
     iframe's first XHR is occasionally very slow (issue #153)."""
     for attempt in range(1, _LOAD_ATTEMPTS + 1):
-        page = browser.new_page()
+        page = browser.new_page(service_workers="block")
         install_ssrf_guard(page)
         try:
             page.goto(url, wait_until="networkidle", timeout=30000)

@@ -15,7 +15,7 @@ def render_html(url: str) -> str:
             user_agent = probe.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome")
             probe.close()
 
-            page = browser.new_page(user_agent=user_agent)
+            page = browser.new_page(user_agent=user_agent, service_workers="block")
             install_ssrf_guard(page)
             page.goto(url, wait_until="networkidle", timeout=30000)
             return page.content()

@@ -391,11 +391,13 @@ class _FakeBrowser:
     def __init__(self, pages):
         self._pages = list(pages)
         self.opened: list[_FakePage] = []
+        self.new_page_kwargs: list[dict] = []
         self.closed = False
 
-    def new_page(self):
+    def new_page(self, **kwargs):
         page = self._pages.pop(0)
         self.opened.append(page)
+        self.new_page_kwargs.append(kwargs)
         return page
 
     def close(self):
@@ -475,6 +477,7 @@ def test_page_iterator_walks_all_v1_pages_in_one_browser_session():
     assert len(browser.opened) == 1          # one page load, not one per results page
     assert next_button.clicks == 2           # page 2, then the click that runs out of cards
     assert browser.closed
+    assert browser.new_page_kwargs[0]["service_workers"] == "block"
 
 
 def test_page_iterator_respects_max_pages():

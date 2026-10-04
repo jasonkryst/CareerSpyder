@@ -1,4 +1,5 @@
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 
 # Port 465 uses implicit TLS (SMTP_SSL) — the connection is encrypted from
@@ -18,12 +19,15 @@ def send_email(smtp_host: str, smtp_port: int, smtp_user: str, smtp_password: st
     msg["From"] = email_from
     msg["To"] = ", ".join(email_to)
 
+    # smtplib's default context skips certificate and hostname checks, which
+    # would hand SMTP_PASSWORD to anyone on-path (audit M1).
+    context = ssl.create_default_context()
     if smtp_port == _IMPLICIT_TLS_PORT:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=context) as server:
             server.login(smtp_user, smtp_password)
             server.sendmail(email_from, email_to, msg.as_string())
     else:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-            server.starttls()
+            server.starttls(context=context)
             server.login(smtp_user, smtp_password)
             server.sendmail(email_from, email_to, msg.as_string())
