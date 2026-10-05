@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ "Edit source" if source and source.id else "Add source" }}</h1>
+{% if not (source and source.id) %}
+<section class="detect-platform" aria-label="Platform detector">
+  <h2>Detect platform</h2>
+  <p>Paste a careers page URL and CareerSpyder will identify the job board platform and pre-fill the form.</p>
+  <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
+    <label style="flex:1;min-width:16rem">
+      Careers URL
+      <input type="url" id="detect-url" placeholder="https://boards.greenhouse.io/acme" autocomplete="off" style="width:100%">
+    </label>
+    <button type="button" id="detect-btn">Detect platform</button>
+  </div>
+  <div id="detect-status" role="status" aria-live="polite" style="margin-top:0.5rem"></div>
+</section>
+{% endif %}
 {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 <form method="post" action="{{ action }}">
   {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
@@ -171,5 +185,101 @@ document.getElementById("test-results-next").addEventListener("click", () => {
   testResultsPage += 1;
   renderTestResultsPage();
 });
+
+// ── Platform detector ──────────────────────────────────────────────────────
+(function () {
+  const detectBtn = document.getElementById("detect-btn");
+  if (!detectBtn) return; // edit form — widget not present
+
+  const urlInput = document.getElementById("detect-url");
+  const statusEl = document.getElementById("detect-status");
+
+  detectBtn.addEventListener("click", async () => {
+    const url = urlInput.value.trim();
+    if (!url) { statusEl.textContent = "Paste a URL first."; return; }
+
+    detectBtn.disabled = true;
+    detectBtn.textContent = "Detecting…";
+    statusEl.textContent = "";
+
+    try {
+      const resp = await fetch("/sources/detect-platform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!resp.ok) { statusEl.textContent = "Detection request failed."; return; }
+      const data = await resp.json();
+
+      if (data.platform_type) {
+        // Switch type dropdown and show the right field group
+        const typeSelect = document.querySelector('select[name="type"]');
+        typeSelect.value = data.platform_type;
+        showFieldsFor(data.platform_type);
+
+        // Pre-fill detected fields by form-field name
+        for (const [name, value] of Object.entries(data.fields || {})) {
+          const el = document.querySelector(`[name="${CSS.escape(name)}"]`);
+          if (el) el.value = value;
+        }
+
+        const badge = data.confidence === "url" ? "URL match" : "page match";
+        statusEl.textContent = `✓ ${data.message} (${badge})`;
+      } else {
+        // Unknown platform — offer to file an issue
+        statusEl.replaceChildren(
+          document.createTextNode("Platform not recognized. "),
+          (() => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = "Report as unsupported";
+            btn.dataset.reportUrl = url;
+            btn.addEventListener("click", handleReport);
+            return btn;
+          })(),
+        );
+      }
+    } catch {
+      statusEl.textContent = "Detection failed — check your network connection.";
+    } finally {
+      detectBtn.disabled = false;
+      detectBtn.textContent = "Detect platform";
+    }
+  });
+
+  async function handleReport(e) {
+    const btn = e.currentTarget;
+    const url = btn.dataset.reportUrl;
+    btn.disabled = true;
+    btn.textContent = "Reporting…";
+    try {
+      const resp = await fetch("/sources/report-unsupported", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await resp.json();
+      if (data.issue_url) {
+        const link = document.createElement("a");
+        link.href = data.issue_url;
+        link.textContent = "Issue filed";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        statusEl.replaceChildren(document.createTextNode("✓ "), link);
+      } else if (data.new_issue_url) {
+        const link = document.createElement("a");
+        link.href = data.new_issue_url;
+        link.textContent = "Open GitHub issue to request this platform";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        statusEl.replaceChildren(link);
+      }
+    } catch {
+      btn.disabled = false;
+      btn.textContent = "Report as unsupported";
+      statusEl.textContent = "Report request failed.";
+    }
+  }
+}());
 </script>
 {% endblock %}

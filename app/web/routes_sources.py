@@ -1,5 +1,6 @@
 import asyncio
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 
 from app import db
 from app.adapters import ADAPTERS
+from app.platform_detector import detect, report_unsupported
 from app.security.ssrf_guard import UNSAFE_URL_MESSAGE, UnsafeUrlError
 from app.textutils import safe_url_scheme
 from app.web.auth import require_user
@@ -169,3 +171,42 @@ async def test_source_preview(
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {"jobs": [{"title": j.title, "url": safe_url_scheme(j.url)} for j in jobs]}
+
+
+@router.post("/sources/detect-platform")
+async def detect_platform(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Request body must be JSON")
+    url = (body.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+    result = await run_in_threadpool(detect, url)
+    return {
+        "platform_type": result.platform_type,
+        "confidence": result.confidence,
+        "fields": result.fields,
+        "message": result.message,
+    }
+
+
+@router.post("/sources/report-unsupported")
+async def report_platform_unsupported(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Request body must be JSON")
+    url = (body.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+    try:
+        return await run_in_threadpool(report_unsupported, url)
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Could not create GitHub issue") from exc
