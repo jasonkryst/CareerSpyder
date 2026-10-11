@@ -941,6 +941,30 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
     conn.commit()
 
 
+def source_last_run_status(
+    conn: psycopg.Connection, source_names: list[str], user_id: str,
+) -> dict[str, str]:
+    """Return a dict mapping each name in source_names to 'ok', 'failed', or 'never'.
+
+    Looks at the single most recent non-url_check run for user_id.  If no such
+    run exists every name maps to 'never'.  Otherwise a name is 'failed' if it
+    appears in that run's failed_sources JSON, else 'ok'.
+    """
+    if not source_names:
+        return {}
+    row = conn.execute(
+        "SELECT failed_sources FROM runs "
+        "WHERE user_id = %s AND kind != %s "
+        "ORDER BY started_at DESC, id DESC "
+        "LIMIT 1",
+        (user_id, "url_check"),
+    ).fetchone()
+    if row is None:
+        return {name: "never" for name in source_names}
+    failed_set = {entry["name"] for entry in _deserialize_failed_sources(row[0])}
+    return {name: ("failed" if name in failed_set else "ok") for name in source_names}
+
+
 def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int:
     """Upsert the importer's sources; returns count of upserted rows.
 
