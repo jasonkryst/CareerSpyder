@@ -48,6 +48,7 @@ def list_sources(
 ):
     with request.app.state.pool.connection() as conn:
         all_sources = db.list_sources(conn, current_user["id"])
+        health = db.source_last_run_status(conn, [s.name for s in all_sources], current_user["id"])
     available_types = sorted({s.type for s in all_sources})
     if source_type:
         all_sources = [s for s in all_sources if s.type == source_type]
@@ -60,6 +61,7 @@ def list_sources(
         request, "sources_list.html", {
             "sources": sources, "pagination": pagination,
             "available_types": available_types, "filters": {"type": source_type},
+            "health": health,
         },
     )
 
