@@ -223,8 +223,11 @@ document.getElementById("test-results-next").addEventListener("click", () => {
           if (el) el.value = value;
         }
 
+        // Focus Name so the user can complete the form without clicking
+        document.querySelector('[name="name"]')?.focus();
+
         const badge = data.confidence === "url" ? "URL match" : "page match";
-        statusEl.textContent = `✓ ${data.message} (${badge})`;
+        statusEl.textContent = `✓ ${data.message} (${badge}) — form pre-filled`;
       } else {
         // Unknown platform — offer to file an issue
         statusEl.replaceChildren(
