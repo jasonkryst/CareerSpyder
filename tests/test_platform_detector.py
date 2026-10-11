@@ -252,17 +252,19 @@ class TestNegative:
 
 class TestReportUnsupported:
     def test_without_token_returns_new_issue_url(self, monkeypatch):
+        from urllib.parse import urlparse
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         result = report_unsupported("https://unknown.example.com/careers")
         assert result["issue_url"] is None
         assert "new_issue_url" in result
-        assert "github.com" in result["new_issue_url"]
+        assert urlparse(result["new_issue_url"]).netloc == "github.com"
         assert "Platform" in result["new_issue_url"]
 
     def test_new_issue_url_includes_domain_in_title(self, monkeypatch):
+        from urllib.parse import urlparse
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         result = report_unsupported("https://secret-company.com/jobs/123")
-        assert "secret-company.com" in result["new_issue_url"]
+        assert "secret-company.com" in urlparse(result["new_issue_url"]).query
 
     def test_with_token_calls_github_api(self, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "fake-token")

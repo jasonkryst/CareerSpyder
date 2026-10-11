@@ -81,7 +81,7 @@ async def login(request: Request):
     # Reject anything with a scheme or host (catches //evil.com, http://…, etc.)
     parsed = urlparse(next_url)
     safe_next = next_url if (parsed.scheme == "" and parsed.netloc == "" and next_url.startswith("/")) else "/"
-    return RedirectResponse(url=safe_next, status_code=303)
+    return RedirectResponse(url=safe_next, status_code=303)  # lgtm[py/url-redirection]
 
 
 @router.post("/logout")

@@ -88,10 +88,11 @@ class TestReportUnsupported:
             "/sources/report-unsupported",
             json={"url": "https://unknown.example.com/careers"},
         )
+        from urllib.parse import urlparse
         assert resp.status_code == 200
         body = resp.json()
         assert "new_issue_url" in body
-        assert "github.com" in (body.get("new_issue_url") or "")
+        assert urlparse(body.get("new_issue_url") or "").netloc == "github.com"
 
     def test_returns_issue_url_with_token(self, client, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "fake-token")

@@ -1,7 +1,10 @@
 import asyncio
+import logging
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+log = logging.getLogger(__name__)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
@@ -168,8 +171,9 @@ async def test_source_preview(
             jobs: list = await run_in_threadpool(ADAPTERS[source.type], source)
     except UnsafeUrlError:
         return {"error": UNSAFE_URL_MESSAGE}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": str(exc)}
+    except Exception as exc:
+        log.exception("Source preview error: %s", type(exc).__name__)
+        return {"error": "Could not fetch this source — check the URL and settings, then try again."}
     return {"jobs": [{"title": j.title, "url": safe_url_scheme(j.url)} for j in jobs]}
 
 
