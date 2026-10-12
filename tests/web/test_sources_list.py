@@ -203,8 +203,8 @@ def test_sources_list_clear_filters_link_hidden_when_no_filter_active(client):
 
 def test_source_health_never_when_no_runs(client, admin_user_id, seed_source):
     """No runs at all -> badge-never shown for each source."""
-    from app.config import GreenhouseConfig
-    source = GreenhouseConfig(id="h1", name="Acme Health", board_token="acme")
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h1", name="Acme Health", board_token="acme")
     seed_source(source)
 
     resp = client.get("/sources")
@@ -216,8 +216,8 @@ def test_source_health_never_when_no_runs(client, admin_user_id, seed_source):
 def test_source_health_ok_after_clean_run(client, admin_user_id, seed_source):
     """A scrape run with no failures -> badge-ok."""
     from app import db as _db
-    from app.config import GreenhouseConfig
-    source = GreenhouseConfig(id="h2", name="Acme OK", board_token="acme")
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h2", name="Acme OK", board_token="acme")
     seed_source(source)
 
     with client.app.state.pool.connection() as conn:
@@ -233,9 +233,9 @@ def test_source_health_ok_after_clean_run(client, admin_user_id, seed_source):
 def test_source_health_failed_when_source_in_failed_list(client, admin_user_id, seed_source):
     """A scrape run that lists the source as failed -> badge-failed."""
     from app import db as _db
-    from app.config import GreenhouseConfig
+    from app.config import GreenhouseSource
     from app.models import FailedSource
-    source = GreenhouseConfig(id="h3", name="Acme Failed", board_token="acme")
+    source = GreenhouseSource(id="h3", name="Acme Failed", board_token="acme")
     seed_source(source)
 
     with client.app.state.pool.connection() as conn:
@@ -252,8 +252,8 @@ def test_source_health_failed_when_source_in_failed_list(client, admin_user_id, 
 def test_source_health_never_when_only_url_check_run_exists(client, admin_user_id, seed_source):
     """url_check runs are excluded from health -> badge-never even if one ran."""
     from app import db as _db
-    from app.config import GreenhouseConfig
-    source = GreenhouseConfig(id="h4", name="Acme URL", board_token="acme")
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h4", name="Acme URL", board_token="acme")
     seed_source(source)
 
     with client.app.state.pool.connection() as conn:

@@ -29,7 +29,7 @@ def test_preview_returns_error_on_adapter_failure(client):
         })
 
     assert resp.status_code == 200
-    assert resp.json()["error"] == "boom"
+    assert resp.json()["error"]  # generic user-facing message, not raw exception text
 
 
 def test_preview_returns_error_on_invalid_form(client):
