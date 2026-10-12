@@ -250,7 +250,9 @@ def test_dashboard_wraps_started_at_in_a_time_element(client):
 
     resp = client.get("/")
 
-    assert f'<time datetime="{started_at}">{started_at}</time>' in resp.text
+    # |timeago wraps the time element in <abbr title="<iso>"> — check both
+    assert f'datetime="{started_at}"' in resp.text
+    assert f'title="{started_at}"' in resp.text
 
 
 def test_dashboard_wraps_finished_at_in_a_time_element(client):
@@ -261,7 +263,8 @@ def test_dashboard_wraps_finished_at_in_a_time_element(client):
 
     resp = client.get("/")
 
-    assert f'<time datetime="{finished_at}">{finished_at}</time>' in resp.text
+    assert f'datetime="{finished_at}"' in resp.text
+    assert f'title="{finished_at}"' in resp.text
 
 
 def test_dashboard_does_not_wrap_in_progress_placeholder_in_a_time_element(client):
