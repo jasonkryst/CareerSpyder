@@ -276,12 +276,17 @@ def _job_filters_sql(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
     if company:
         clauses.append("jobs.company ILIKE %s")
         params.append(f"%{company}%")
+    if search:
+        clauses.append("(jobs.title ILIKE %s OR jobs.company ILIKE %s)")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
     if source_name:
         ph = ",".join(["%s"] * len(source_name))
         clauses.append(f"jobs.source_name IN ({ph})")
@@ -339,13 +344,14 @@ def list_jobs(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
@@ -385,11 +391,12 @@ def count_jobs(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> int:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     row = conn.execute(
         "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "
