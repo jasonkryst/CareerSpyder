@@ -13,8 +13,10 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from app.web.query_params import query_url, sort_url
+from app.web.timeago import timeago as _timeago_fn
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.filters["timeago"] = _timeago_fn
 templates.env.globals["app_name"] = "CareerSpyder"
 templates.env.globals["app_version"] = version("careerspyder")
 templates.env.globals["query_url"] = query_url
