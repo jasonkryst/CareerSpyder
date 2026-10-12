@@ -265,7 +265,7 @@ class TestReportUnsupported:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         result = report_unsupported("https://secret-company.com/jobs/123")
         title = parse_qs(urlparse(result["new_issue_url"]).query).get("title", [""])[0]
-        assert "secret-company.com" in title
+        assert title == "Platform request: secret-company.com"
 
     def test_with_token_calls_github_api(self, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
