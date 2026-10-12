@@ -78,9 +78,11 @@ async def login(request: Request):
 
     start_session(request, user)
 
-    # Reject anything with a scheme or host (catches //evil.com, http://…, etc.)
-    parsed = urlparse(next_url)
-    safe_next = next_url if (parsed.scheme == "" and parsed.netloc == "" and next_url.startswith("/")) else "/"
+    # Reject unsafe redirects: extract only the path component via urlparse,
+    # discarding scheme and netloc entirely. Blocks //evil.com, ///evil.com, etc.
+    _parsed = urlparse(next_url)
+    _path = _parsed.path
+    safe_next = _path if (_path.startswith("/") and not _path.startswith("//")) else "/"
     return RedirectResponse(url=safe_next, status_code=303)
 
 
