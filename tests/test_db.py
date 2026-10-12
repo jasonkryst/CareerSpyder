@@ -611,6 +611,53 @@ def test_list_jobs_filters_by_company_substring_case_insensitive(pg_conn):
     assert [r["key"] for r in rows] == ["a"]
 
 
+def test_list_jobs_search_matches_title(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [_job("a", title="Senior Engineer")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", title="Marketing Manager")], run_id, user_id=owner_id_for(conn))
+
+    rows = db.list_jobs(conn, search="engineer")
+
+    assert [r["key"] for r in rows] == ["a"]
+
+
+def test_list_jobs_search_matches_company(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [_job("a", company="Acme Corp")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Zenith LLC")], run_id, user_id=owner_id_for(conn))
+
+    rows = db.list_jobs(conn, search="Zenith")
+
+    assert [r["key"] for r in rows] == ["b"]
+
+
+def test_list_jobs_search_no_match_returns_empty(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [_job("a", title="Engineer", company="Acme")], run_id, user_id=owner_id_for(conn))
+
+    rows = db.list_jobs(conn, search="xyznotfound")
+    count = db.count_jobs(conn, search="xyznotfound")
+
+    assert rows == []
+    assert count == 0
+
+
+def test_list_jobs_search_empty_string_returns_all(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [_job("a")], run_id, user_id=owner_id_for(conn))
+    db.save_jobs(conn, [_job("b", company="Other")], run_id, user_id=owner_id_for(conn))
+
+    rows = db.list_jobs(conn, search="")
+    count = db.count_jobs(conn, search="")
+
+    assert len(rows) == 2
+    assert count == 2
+
+
 def test_list_jobs_filters_by_source_name(pg_conn):
     conn = pg_conn
     run_id = db.start_run(conn)

@@ -176,6 +176,13 @@ def test_jobs_page_filters_by_company(client):
     assert "Zeta" not in resp.text
 
 
+def test_jobs_page_search_param_prefills_input(client):
+    resp = client.get("/jobs?search=engineer")
+
+    assert resp.status_code == 200
+    assert 'value="engineer"' in resp.text
+
+
 def test_jobs_page_filter_dropdown_lists_distinct_source_names(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="a", source_name="Acme Board")], db.start_run(conn), user_id=owner_id_for(conn))

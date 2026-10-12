@@ -56,7 +56,8 @@ def _geocode_zip(zip_code: str) -> tuple[float, float] | None:
 def jobs(
     request: Request, page: str = "1", sort: str = "",
     direction: str = Query("", alias="dir"),
-    company: str = "", source: Annotated[list[str], Query()] = [],  # noqa: B006
+    company: str = "", search: str = "",
+    source: Annotated[list[str], Query()] = [],  # noqa: B006
     removed: str = "active", emailed: str = "",
     status: Annotated[list[str], Query()] = [],  # noqa: B006
     location: str = "", duplicates: str = "",
@@ -93,7 +94,7 @@ def jobs(
             removed=removed or None, emailed=emailed or None, status=status_filter,
             location=location or None, duplicates=duplicates or None, state=state_filter,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-            user_id=filter_user_id,
+            user_id=filter_user_id, search=search or None,
         )
         pagination = paginate(total, page, PAGE_SIZE)
         rows = db.list_jobs(
@@ -102,7 +103,7 @@ def jobs(
             removed=removed or None, emailed=emailed or None, status=status_filter,
             location=location or None, duplicates=duplicates or None, state=state_filter,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-            user_id=filter_user_id,
+            user_id=filter_user_id, search=search or None,
         )
         history = db.get_job_status_history(conn, [(row["user_id"], row["key"]) for row in rows])
         for row in rows:
@@ -123,8 +124,8 @@ def jobs(
         "statuses": STATUSES, "is_admin": is_admin, "users": users,
         "current_user_id": current_user["id"],
         "filters": {
-            "company": company, "source": source, "removed": removed, "emailed": emailed,
-            "status": status, "location": location, "duplicates": duplicates,
+            "company": company, "search": search, "source": source, "removed": removed,
+            "emailed": emailed, "status": status, "location": location, "duplicates": duplicates,
             "state": state, "zip": zip_code, "radius": radius, "zip_error": zip_error,
             "user": user,
         },
@@ -134,7 +135,8 @@ def jobs(
 @router.get("/jobs/map", response_class=HTMLResponse)
 def jobs_map(
     request: Request,
-    company: str = "", source: Annotated[list[str], Query()] = [],  # noqa: B006
+    company: str = "", search: str = "",
+    source: Annotated[list[str], Query()] = [],  # noqa: B006
     location: str = "", removed: str = "active", emailed: str = "",
     status: Annotated[list[str], Query()] = [],  # noqa: B006
     state: Annotated[list[str], Query()] = [],  # noqa: B006
@@ -150,7 +152,7 @@ def jobs_map(
     return templates.TemplateResponse(request, "jobs_map.html", {
         "source_names": source_names, "locations": locations, "states": states,
         "filters": {
-            "company": company, "source": source, "location": location,
+            "company": company, "search": search, "source": source, "location": location,
             "removed": removed, "emailed": emailed, "status": status,
             "state": state, "zip": zip_code, "radius": radius, "zip_error": False,
         },
