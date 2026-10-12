@@ -78,10 +78,17 @@ async def login(request: Request):
 
     start_session(request, user)
 
-    # Reject anything with a scheme or host (catches //evil.com, http://…, etc.)
+    # Reject unsafe redirects: must be a relative path starting with "/" but not "//"
+    # (///evil.com passes urlparse netloc check; browsers normalise it to //evil.com).
     parsed = urlparse(next_url)
-    safe_next = next_url if (parsed.scheme == "" and parsed.netloc == "" and next_url.startswith("/")) else "/"
-    return RedirectResponse(url=safe_next, status_code=303)  # lgtm[py/url-redirection]
+    is_safe = (
+        parsed.scheme == ""
+        and parsed.netloc == ""
+        and next_url.startswith("/")
+        and not next_url.startswith("//")
+    )
+    safe_next = next_url if is_safe else "/"
+    return RedirectResponse(url=safe_next, status_code=303)  # codeql[py/url-redirection]
 
 
 @router.post("/logout")
