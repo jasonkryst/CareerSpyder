@@ -147,6 +147,39 @@ def test_rows_reflects_run_status_change(client):
     assert 'data-label="Finished">in progress' not in finished.text
 
 
+def test_run_history_shows_source_count_fraction(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(
+        conn, run_id, new_job_count=0,
+        failed_sources=[
+            FailedSource("Bad Co", url="https://bad.test/careers"),
+            FailedSource("Bad Co 2", url="https://bad2.test/careers"),
+        ],
+        source_count=10,
+    )
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "2 / 10 failed" in resp.text
+
+
+def test_run_history_failed_source_links_to_edit(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(
+        conn, run_id, new_job_count=0,
+        failed_sources=[FailedSource("My Source", url="https://src.test/jobs", source_id="abc123")],
+        source_count=5,
+    )
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "/sources/abc123/edit" in resp.text
+
+
 def test_dashboard_includes_refresh_button_and_status_region(client):
     resp = client.get("/")
 

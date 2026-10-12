@@ -137,7 +137,7 @@ def test_list_runs_returns_most_recent_first(pg_conn):
     runs = db.list_runs(conn)
 
     assert [r["id"] for r in runs] == [run2, run1]
-    assert runs[1]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.bad.test"}]
+    assert runs[1]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.bad.test", "source_id": None}]
 
 
 def test_list_runs_respects_offset(pg_conn):
@@ -1926,3 +1926,48 @@ def test_dashboard_stats_total_runs_only_scrape(pg_conn):
     db.finish_run(pg_conn, r3, 0, [])
     stats = db.dashboard_stats(pg_conn, user)
     assert stats["total_runs"] == 2
+
+
+def test_finish_run_stores_source_count(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[], source_count=5)
+
+    row = conn.execute("SELECT source_count FROM runs WHERE id = %s", (run_id,)).fetchone()
+    assert row[0] == 5
+
+
+def test_finish_run_default_source_count_zero(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    row = conn.execute("SELECT source_count FROM runs WHERE id = %s", (run_id,)).fetchone()
+    assert row[0] == 0
+
+
+def test_list_runs_includes_source_count(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[], source_count=3)
+
+    runs = db.list_runs(conn)
+
+    assert runs[0]["source_count"] == 3
+
+
+def test_deserialize_failed_sources_handles_missing_source_id(pg_conn):
+    import json as _json
+
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    # Manually insert old-format JSON without source_id
+    old_json = _json.dumps([{"name": "Old Source", "url": "https://old.test/jobs"}])
+    conn.execute("UPDATE runs SET failed_sources = %s WHERE id = %s", (old_json, run_id))
+    conn.commit()
+
+    runs = db.list_runs(conn)
+    fs = runs[0]["failed_sources"][0]
+    assert fs["name"] == "Old Source"
+    assert fs["url"] == "https://old.test/jobs"
+    assert fs.get("source_id") is None

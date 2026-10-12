@@ -90,12 +90,15 @@ def start_run(conn: psycopg.Connection, kind: str = "scrape", user_id: str | Non
 
 def finish_run(
     conn: psycopg.Connection, run_id: int, new_job_count: int,
-    failed_sources: list[FailedSource],
+    failed_sources: list[FailedSource], *, source_count: int = 0,
 ) -> None:
-    serialized = json.dumps([{"name": fs.name, "url": fs.url} for fs in failed_sources])
+    serialized = json.dumps(
+        [{"name": fs.name, "url": fs.url, "source_id": fs.source_id} for fs in failed_sources]
+    )
     conn.execute(
-        "UPDATE runs SET finished_at = %s, new_job_count = %s, failed_sources = %s WHERE id = %s",
-        (_now(), new_job_count, serialized, run_id),
+        "UPDATE runs SET finished_at = %s, new_job_count = %s, failed_sources = %s, "
+        "source_count = %s WHERE id = %s",
+        (_now(), new_job_count, serialized, source_count, run_id),
     )
     conn.commit()
 
@@ -118,9 +121,13 @@ def _deserialize_failed_sources(raw: str) -> list[dict]:
     result = []
     for entry in entries:
         if isinstance(entry, str):
-            result.append({"name": entry, "url": None})
+            result.append({"name": entry, "url": None, "source_id": None})
         else:
-            result.append({"name": entry["name"], "url": entry.get("url")})
+            result.append({
+                "name": entry["name"],
+                "url": entry.get("url"),
+                "source_id": entry.get("source_id"),
+            })
     return result
 
 
@@ -154,7 +161,7 @@ def list_runs(
     where_sql, params = _run_where_sql(failures, user_id)
     query = (
         "SELECT runs.id, runs.started_at, runs.finished_at, runs.new_job_count, "
-        "runs.failed_sources, runs.kind, users.username "
+        "runs.failed_sources, runs.kind, users.username, runs.source_count "
         "FROM runs LEFT JOIN users ON runs.user_id = users.id "
         f"{where_sql} ORDER BY {order_column} {order_dir}, runs.id {order_dir} "
         "LIMIT %s OFFSET %s"
@@ -164,7 +171,7 @@ def list_runs(
         {
             "id": r[0], "started_at": r[1], "finished_at": r[2],
             "new_job_count": r[3], "failed_sources": _deserialize_failed_sources(r[4]),
-            "kind": r[5], "username": r[6],
+            "kind": r[5], "username": r[6], "source_count": r[7],
         }
         for r in rows
     ]

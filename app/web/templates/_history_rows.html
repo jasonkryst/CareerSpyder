@@ -18,12 +18,20 @@
     <td data-label="Finished">{% if run.finished_at %}<abbr title="{{ run.finished_at }}"><time datetime="{{ run.finished_at }}">{{ run.finished_at | timeago }}</time></abbr>{% else %}in progress{% endif %}</td>
     <td data-label="{% if run.kind == 'url_check' %}URLs removed{% else %}New jobs{% endif %}">{{ run.new_job_count }}</td>
     <td data-label="Failed sources">
-      {% if run.failed_sources %}
+      {% set fail_count = run.failed_sources | length %}
+      {% if run.source_count %}
+        <span>{{ fail_count }} / {{ run.source_count }} failed</span>
+      {% elif fail_count %}
+        <span>{{ fail_count }} failed</span>
+      {% endif %}
+      {% if fail_count %}
       {% from "_external_link.html" import external_link %}
       <ul class="failed-sources-list">
         {% for fs in run.failed_sources %}
         <li>
-          {% if fs.url %}{{ external_link(fs.url, fs.name) }}{% else %}{{ fs.name }}{% endif %}
+          {% if fs.source_id %}<a href="/sources/{{ fs.source_id }}/edit">{{ fs.name }}</a>
+          {% elif fs.url %}{{ external_link(fs.url, fs.name) }}
+          {% else %}{{ fs.name }}{% endif %}
         </li>
         {% endfor %}
       </ul>
