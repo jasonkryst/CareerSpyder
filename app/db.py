@@ -1012,29 +1012,28 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
 
 def dashboard_stats(conn: psycopg.Connection, user_id: str | None) -> dict:
     """Return aggregate stats for the dashboard header cards."""
+
+    def _count(sql: str, params: tuple = ()) -> int:
+        row = conn.execute(sql, params).fetchone()
+        return row[0] if row else 0
+
     if user_id is not None:
-        total_jobs = conn.execute(
-            "SELECT COUNT(*) FROM jobs WHERE user_id = %s", (user_id,)
-        ).fetchone()[0]
-        new_this_week = conn.execute(
+        total_jobs = _count("SELECT COUNT(*) FROM jobs WHERE user_id = %s", (user_id,))
+        new_this_week = _count(
             "SELECT COUNT(*) FROM jobs WHERE user_id = %s AND first_seen_at >= NOW() - INTERVAL '7 days'",
             (user_id,),
-        ).fetchone()[0]
-        total_sources = conn.execute(
-            "SELECT COUNT(*) FROM sources WHERE user_id = %s", (user_id,)
-        ).fetchone()[0]
-        total_runs = conn.execute(
+        )
+        total_sources = _count("SELECT COUNT(*) FROM sources WHERE user_id = %s", (user_id,))
+        total_runs = _count(
             "SELECT COUNT(*) FROM runs WHERE kind = 'scrape' AND user_id = %s", (user_id,)
-        ).fetchone()[0]
+        )
     else:
-        total_jobs = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
-        new_this_week = conn.execute(
+        total_jobs = _count("SELECT COUNT(*) FROM jobs")
+        new_this_week = _count(
             "SELECT COUNT(*) FROM jobs WHERE first_seen_at >= NOW() - INTERVAL '7 days'"
-        ).fetchone()[0]
-        total_sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
-        total_runs = conn.execute(
-            "SELECT COUNT(*) FROM runs WHERE kind = 'scrape'"
-        ).fetchone()[0]
+        )
+        total_sources = _count("SELECT COUNT(*) FROM sources")
+        total_runs = _count("SELECT COUNT(*) FROM runs WHERE kind = 'scrape'")
     return {
         "total_jobs": total_jobs,
         "new_this_week": new_this_week,
