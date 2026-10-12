@@ -1861,3 +1861,68 @@ def test_claim_invite_succeeds_exactly_once(pg_conn):
     token = str(invite["token"])
     assert db.claim_invite(pg_conn, token) is True
     assert db.claim_invite(pg_conn, token) is False
+
+
+# ---------------------------------------------------------------------------
+# dashboard_stats
+# ---------------------------------------------------------------------------
+
+def test_dashboard_stats_all_zeros_on_empty_db(pg_conn):
+    stats = db.dashboard_stats(pg_conn, None)
+    assert stats == {"total_jobs": 0, "new_this_week": 0, "total_sources": 0, "total_runs": 0}
+
+
+def test_dashboard_stats_counts_jobs_for_user(pg_conn):
+    user_a = _make_user(pg_conn, "ua")
+    user_b = _make_user(pg_conn, "ub")
+    run_a = db.start_run(pg_conn, user_id=user_a)
+    run_b = db.start_run(pg_conn, user_id=user_b)
+    db.save_jobs(pg_conn, [make_job("k1"), make_job("k2")], run_a, user_id=user_a)
+    db.save_jobs(pg_conn, [make_job("k3")], run_b, user_id=user_b)
+    stats = db.dashboard_stats(pg_conn, user_a)
+    assert stats["total_jobs"] == 2
+
+
+def test_dashboard_stats_none_user_id_aggregates_all(pg_conn):
+    user_a = _make_user(pg_conn, "ua")
+    user_b = _make_user(pg_conn, "ub")
+    run_a = db.start_run(pg_conn, user_id=user_a)
+    run_b = db.start_run(pg_conn, user_id=user_b)
+    db.save_jobs(pg_conn, [make_job("k1"), make_job("k2")], run_a, user_id=user_a)
+    db.save_jobs(pg_conn, [make_job("k3")], run_b, user_id=user_b)
+    stats = db.dashboard_stats(pg_conn, None)
+    assert stats["total_jobs"] == 3
+
+
+def test_dashboard_stats_new_this_week_excludes_old(pg_conn):
+    user = _make_user(pg_conn)
+    run_id = db.start_run(pg_conn, user_id=user)
+    db.save_jobs(pg_conn, [make_job("k1")], run_id, user_id=user)
+    eight_days_ago = (datetime.now(UTC) - timedelta(days=8)).isoformat()
+    pg_conn.execute("UPDATE jobs SET first_seen_at = %s WHERE key = 'k1'", (eight_days_ago,))
+    pg_conn.commit()
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["new_this_week"] == 0
+
+
+def test_dashboard_stats_total_sources(pg_conn):
+    from app.config import GreenhouseSource
+    user = _make_user(pg_conn)
+    s1 = GreenhouseSource(id="src1", name="S1", type="greenhouse", board_token="t1")
+    s2 = GreenhouseSource(id="src2", name="S2", type="greenhouse", board_token="t2")
+    db.add_source(pg_conn, user, s1)
+    db.add_source(pg_conn, user, s2)
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["total_sources"] == 2
+
+
+def test_dashboard_stats_total_runs_only_scrape(pg_conn):
+    user = _make_user(pg_conn)
+    r1 = db.start_run(pg_conn, kind="scrape", user_id=user)
+    db.finish_run(pg_conn, r1, 0, [])
+    r2 = db.start_run(pg_conn, kind="scrape", user_id=user)
+    db.finish_run(pg_conn, r2, 0, [])
+    r3 = db.start_run(pg_conn, kind="url_check", user_id=user)
+    db.finish_run(pg_conn, r3, 0, [])
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["total_runs"] == 2

@@ -78,6 +78,14 @@ def test_dashboard_invalid_page_param_clamps_instead_of_erroring(client):
     assert "Page 1 of 1" in resp.text
 
 
+def test_dashboard_renders_stat_cards(client):
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "stat-cards" in resp.text
+    assert "Total jobs" in resp.text
+
+
 def test_dashboard_negative_page_param_clamps_to_first_page(client):
     resp = client.get("/?page=-3")
 

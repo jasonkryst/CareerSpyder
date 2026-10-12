@@ -1000,6 +1000,43 @@ def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int
 
 
 # ---------------------------------------------------------------------------
+# Dashboard stats
+# ---------------------------------------------------------------------------
+
+def dashboard_stats(conn: psycopg.Connection, user_id: str | None) -> dict:
+    """Return aggregate stats for the dashboard header cards."""
+    if user_id is not None:
+        total_jobs = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE user_id = %s", (user_id,)
+        ).fetchone()[0]
+        new_this_week = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE user_id = %s AND first_seen_at >= NOW() - INTERVAL '7 days'",
+            (user_id,),
+        ).fetchone()[0]
+        total_sources = conn.execute(
+            "SELECT COUNT(*) FROM sources WHERE user_id = %s", (user_id,)
+        ).fetchone()[0]
+        total_runs = conn.execute(
+            "SELECT COUNT(*) FROM runs WHERE kind = 'scrape' AND user_id = %s", (user_id,)
+        ).fetchone()[0]
+    else:
+        total_jobs = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        new_this_week = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE first_seen_at >= NOW() - INTERVAL '7 days'"
+        ).fetchone()[0]
+        total_sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+        total_runs = conn.execute(
+            "SELECT COUNT(*) FROM runs WHERE kind = 'scrape'"
+        ).fetchone()[0]
+    return {
+        "total_jobs": total_jobs,
+        "new_this_week": new_this_week,
+        "total_sources": total_sources,
+        "total_runs": total_runs,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Admin bootstrap
 # ---------------------------------------------------------------------------
 
