@@ -1,4 +1,5 @@
 import json
+import os
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -7,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from app import db
+from app import db, emailer
 from app.config import SourcesFile
 from app.models import JOB_STATUSES
 from app.web import ratelimit
@@ -88,6 +89,39 @@ async def save_settings(
             _str_field(form, "email_from"),
         )
     return flash_redirect("/settings/email", "Email settings saved.")
+
+
+@router.post("/settings/email/test")
+def test_email(
+    request: Request,
+    current_user: dict = Depends(require_admin),
+):
+    if not ratelimit.check(f"test-email:{current_user['id']}", 3, 600):
+        return flash_redirect("/settings/email", "Rate limit reached — wait a few minutes before trying again.")
+    with request.app.state.pool.connection() as conn:
+        settings = db.get_settings(conn, current_user["id"])
+    if not settings or not settings.get("smtp_host"):
+        return flash_redirect("/settings/email", "Configure email settings first.")
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    if not smtp_password:
+        return flash_redirect("/settings/email", "SMTP_PASSWORD environment variable is not set.")
+    recipients = _split_emails(settings["email_to"])
+    if not recipients:
+        recipients = [settings["email_from"]]
+    try:
+        emailer.send_email(
+            smtp_host=settings["smtp_host"],
+            smtp_port=int(settings["smtp_port"]),
+            smtp_user=settings["smtp_user"],
+            smtp_password=smtp_password,
+            email_from=settings["email_from"],
+            email_to=recipients,
+            subject="CareerSpyder — test email",
+            html_body="<p>This is a test email from CareerSpyder. Your email configuration is working.</p>",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return flash_redirect("/settings/email", f"Test email failed: {exc}")
+    return flash_redirect("/settings/email", "Test email sent successfully.")
 
 
 @router.get("/settings/data", response_class=HTMLResponse)
