@@ -549,7 +549,9 @@ def test_jobs_page_wraps_first_seen_at_in_a_time_element(client):
 
     resp = client.get("/jobs")
 
-    assert f'<time datetime="{first_seen_at}">{first_seen_at}</time>' in resp.text
+    # |timeago wraps the time element in <abbr title="<iso>"> — check both attributes
+    assert f'datetime="{first_seen_at}"' in resp.text
+    assert f'title="{first_seen_at}"' in resp.text
 
 
 def test_jobs_page_wraps_removed_at_in_a_time_element(client):

@@ -100,12 +100,12 @@ def test_run_once_collects_new_jobs_and_isolates_failures(pg_conn):
         summary = orchestrator.run_once(conn, [good_source, bad_source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
-    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
+    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad", source_id="s2")]
 
     runs = db.list_runs(conn)
     assert runs[0]["id"] == summary.run_id
     assert runs[0]["new_job_count"] == 1
-    assert runs[0]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.lever.co/bad"}]
+    assert runs[0]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.lever.co/bad", "source_id": "s2"}]
 
 
 def test_run_once_does_not_report_previously_seen_jobs_as_new(pg_conn):
@@ -166,7 +166,7 @@ def test_run_once_handles_unknown_source_type_without_aborting_run(pg_conn):
         summary = orchestrator.run_once(conn, [good_source, bad_source], user_id=owner_id_for(conn))
 
     assert [j.key for j in summary.new_jobs] == ["gh:1"]
-    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad")]
+    assert summary.failed_sources == [FailedSource(name="Bad Co", url="https://jobs.lever.co/bad", source_id="s2")]
     runs = db.list_runs(conn)
     assert runs[0]["finished_at"] is not None
 
@@ -366,7 +366,7 @@ def test_run_once_failed_source_url_is_stored_in_db(pg_conn):
 
     runs = db.list_runs(conn)
     assert runs[0]["failed_sources"] == [
-        {"name": "Bad Co", "url": "https://boards.greenhouse.io/bad-co"}
+        {"name": "Bad Co", "url": "https://boards.greenhouse.io/bad-co", "source_id": "s1"}
     ]
 
 

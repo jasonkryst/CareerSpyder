@@ -1350,7 +1350,7 @@ def test_finish_run_serializes_failed_source_with_url(pg_conn):
                   failed_sources=[FailedSource("Acme Jobs", url="https://acme.test/careers")])
 
     runs = db.list_runs(conn)
-    assert runs[0]["failed_sources"] == [{"name": "Acme Jobs", "url": "https://acme.test/careers"}]
+    assert runs[0]["failed_sources"] == [{"name": "Acme Jobs", "url": "https://acme.test/careers", "source_id": None}]
 
 
 def test_finish_run_serializes_failed_source_without_url(pg_conn):
@@ -1361,7 +1361,7 @@ def test_finish_run_serializes_failed_source_without_url(pg_conn):
                   failed_sources=[FailedSource("Greenhouse Co", url=None)])
 
     runs = db.list_runs(conn)
-    assert runs[0]["failed_sources"] == [{"name": "Greenhouse Co", "url": None}]
+    assert runs[0]["failed_sources"] == [{"name": "Greenhouse Co", "url": None, "source_id": None}]
 
 
 def test_finish_run_serializes_multiple_failed_sources(pg_conn):
@@ -1375,8 +1375,8 @@ def test_finish_run_serializes_multiple_failed_sources(pg_conn):
 
     runs = db.list_runs(conn)
     assert runs[0]["failed_sources"] == [
-        {"name": "Source A", "url": "https://a.test"},
-        {"name": "Source B", "url": None},
+        {"name": "Source A", "url": "https://a.test", "source_id": None},
+        {"name": "Source B", "url": None, "source_id": None},
     ]
 
 
@@ -1393,7 +1393,7 @@ def test_list_runs_deserializes_legacy_string_format(pg_conn):
 
     runs = db.list_runs(conn)
 
-    assert runs[0]["failed_sources"] == [{"name": "Old Source", "url": None}]
+    assert runs[0]["failed_sources"] == [{"name": "Old Source", "url": None, "source_id": None}]
 
 
 def test_list_runs_deserializes_new_dict_format(pg_conn):
@@ -1410,7 +1410,7 @@ def test_list_runs_deserializes_new_dict_format(pg_conn):
 
     runs = db.list_runs(conn)
 
-    assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test"}]
+    assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test", "source_id": None}]
 
 
 # ── haversine function (SQL) ─────────────────────────────────────────────────
