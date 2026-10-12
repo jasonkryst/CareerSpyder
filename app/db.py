@@ -454,12 +454,12 @@ def list_mappable_jobs(
     exclude_status: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
-    user_id: str | None = None,
+    user_id: str | None = None, search: str | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     clauses = ["geocoded_locations.status IN ('resolved', 'manual')"]
     if exclude_status:

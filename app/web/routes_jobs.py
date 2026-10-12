@@ -167,6 +167,7 @@ def jobs_map_data(
     status: Annotated[list[str], Query()] = [],  # noqa: B006
     state: Annotated[list[str], Query()] = [],  # noqa: B006
     zip_code: str = Query("", alias="zip"), radius: str = "25",
+    search: str = "",
     current_user: dict = Depends(require_user),
 ):
     zip_lat: float | None = None
@@ -189,7 +190,7 @@ def jobs_map_data(
             exclude_status=exclude_status,
             state=state or None,
             zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-            user_id=filter_user_id,
+            user_id=filter_user_id, search=search or None,
         )
     grouped: dict[tuple, dict] = {}
     for row in rows:
