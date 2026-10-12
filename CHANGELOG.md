@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-10-12
+
+### Added
+
+- **Keyword filters now match company and location (issue #218).** `apply_keyword_filters` previously checked only job title. Include and exclude keywords now also match against company name and job location, so a filter for "Google" finds postings at Google Inc regardless of title.
+- **Relative timestamps (issue #215).** All dates in the dashboard and jobs list now render as human-readable relative times ("3 hours ago", "2 days ago") with the full ISO timestamp shown on hover via `<abbr title>`.
+- **Jump-to-page pagination (issue #224).** All paginated views (dashboard, jobs, sources) gain a "Go to page" input when there are more than 2 pages, letting users jump directly without clicking Prev/Next repeatedly.
+- **Dashboard stat cards (issue #214).** A row of four stat cards at the top of the dashboard shows total jobs, jobs added this week, sources configured, and total scrape runs. Admins see aggregate counts across all users.
+- **Run history source count and links (issue #219).** The run history table now shows "N / M failed" (failed count / total sources attempted). Failed source names link directly to their edit pages.
+
+## [1.9.0] — 2026-10-12
+
+### Added
+
+- **Source health badges on sources list (issue #209).** A "Last run" column on the sources list shows a color-coded badge (`ok`, `failed`, or `never`) per source based on the most recent scrape run. URL-check runs are excluded.
+- **Platform detector auto-focus (issue #210).** After the "Detect platform" widget pre-fills the Add Source form, the Name field now receives focus automatically so users can complete the form without clicking.
+- **Send test email button (issue #211).** A "Send test email" button on the email settings page sends a test message using the current SMTP configuration. Rate-limited to 3 attempts per 10 minutes per user. Requires `SMTP_PASSWORD` env var.
+- **Full-text keyword search on jobs list (issue #212).** A search box on `/jobs` and `/jobs/map` performs a combined ILIKE match on job title and company name. The map data endpoint is also wired to the same filter.
+
 ## [1.8.0] — 2026-10-04
 
 ### Added
