@@ -78,6 +78,14 @@ def test_dashboard_invalid_page_param_clamps_instead_of_erroring(client):
     assert "Page 1 of 1" in resp.text
 
 
+def test_dashboard_renders_stat_cards(client):
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "stat-cards" in resp.text
+    assert "Total jobs" in resp.text
+
+
 def test_dashboard_negative_page_param_clamps_to_first_page(client):
     resp = client.get("/?page=-3")
 
@@ -137,6 +145,39 @@ def test_rows_reflects_run_status_change(client):
     db.finish_run(conn, run_id, new_job_count=2, failed_sources=[])
     finished = client.get("/rows")
     assert 'data-label="Finished">in progress' not in finished.text
+
+
+def test_run_history_shows_source_count_fraction(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(
+        conn, run_id, new_job_count=0,
+        failed_sources=[
+            FailedSource("Bad Co", url="https://bad.test/careers"),
+            FailedSource("Bad Co 2", url="https://bad2.test/careers"),
+        ],
+        source_count=10,
+    )
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "2 / 10 failed" in resp.text
+
+
+def test_run_history_failed_source_links_to_edit(client):
+    conn = client.app.state.conn
+    run_id = db.start_run(conn)
+    db.finish_run(
+        conn, run_id, new_job_count=0,
+        failed_sources=[FailedSource("My Source", url="https://src.test/jobs", source_id="abc123")],
+        source_count=5,
+    )
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "/sources/abc123/edit" in resp.text
 
 
 def test_dashboard_includes_refresh_button_and_status_region(client):
@@ -250,7 +291,9 @@ def test_dashboard_wraps_started_at_in_a_time_element(client):
 
     resp = client.get("/")
 
-    assert f'<time datetime="{started_at}">{started_at}</time>' in resp.text
+    # |timeago wraps the time element in <abbr title="<iso>"> — check both
+    assert f'datetime="{started_at}"' in resp.text
+    assert f'title="{started_at}"' in resp.text
 
 
 def test_dashboard_wraps_finished_at_in_a_time_element(client):
@@ -261,7 +304,8 @@ def test_dashboard_wraps_finished_at_in_a_time_element(client):
 
     resp = client.get("/")
 
-    assert f'<time datetime="{finished_at}">{finished_at}</time>' in resp.text
+    assert f'datetime="{finished_at}"' in resp.text
+    assert f'title="{finished_at}"' in resp.text
 
 
 def test_dashboard_does_not_wrap_in_progress_placeholder_in_a_time_element(client):
@@ -613,3 +657,30 @@ def test_check_urls_is_rate_limited_per_user(member_client, monkeypatch):
         member_client.post("/check-urls", follow_redirects=False)
     resp = member_client.post("/check-urls", follow_redirects=False)
     assert "Too+many+runs" in resp.headers["location"]
+
+
+# --- Pagination jump-to-page (issue #224) ---
+
+def test_pagination_jump_shown_when_many_pages(client):
+    conn = client.app.state.conn
+    for i in range(60):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=i, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "pagination-jump" in resp.text
+
+
+def test_pagination_jump_hidden_when_two_pages(client):
+    conn = client.app.state.conn
+    for i in range(40):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=i, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 2" in resp.text
+    assert "pagination-jump" not in resp.text

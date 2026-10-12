@@ -13,6 +13,7 @@ JOB_STATUSES = {
 class FailedSource:
     name: str
     url: str | None = None
+    source_id: str | None = None
 
 
 @dataclass

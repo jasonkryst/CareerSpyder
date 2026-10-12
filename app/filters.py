@@ -1,12 +1,18 @@
 from app.models import Job
 
 
+def _fields(j: Job) -> str:
+    """Return a single lowercased string combining title, company, and location."""
+    parts = [j.title, j.company or "", j.location or ""]
+    return " ".join(parts).lower()
+
+
 def apply_keyword_filters(jobs: list[Job], include: list[str], exclude: list[str]) -> list[Job]:
     result = jobs
     if include:
         needles = [k.lower() for k in include]
-        result = [j for j in result if any(n in j.title.lower() for n in needles)]
+        result = [j for j in result if any(n in _fields(j) for n in needles)]
     if exclude:
         needles = [k.lower() for k in exclude]
-        result = [j for j in result if not any(n in j.title.lower() for n in needles)]
+        result = [j for j in result if not any(n in _fields(j) for n in needles)]
     return result

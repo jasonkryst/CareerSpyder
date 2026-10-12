@@ -1,6 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>CareerSpyder</h1>
+<div class="stat-cards">
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.total_jobs }}</span>
+    <span class="stat-label">Total jobs</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.new_this_week }}</span>
+    <span class="stat-label">New this week</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.total_sources }}</span>
+    <span class="stat-label">Sources</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.total_runs }}</span>
+    <span class="stat-label">Scrape runs</span>
+  </div>
+</div>
 <div class="history-toolbar">
   <form method="post" action="/run-now" id="run-now-form">
     <button type="submit" class="btn-primary">Run now</button>
