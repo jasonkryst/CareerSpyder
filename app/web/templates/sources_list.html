@@ -26,6 +26,7 @@
     {{ sort_th(request, '/sources', 'name', 'Name') }}
     {{ sort_th(request, '/sources', 'type', 'Type') }}
     {{ sort_th(request, '/sources', 'company', 'Company') }}
+    <th scope="col">Last run</th>
     <th scope="col">Edit</th>
     <th scope="col">Delete</th>
   </tr>
@@ -36,6 +37,16 @@
     <td data-label="Name">{{ s.name }}</td>
     <td data-label="Type">{{ s.type }}</td>
     <td data-label="Company">{{ s.company or "" }}</td>
+    <td data-label="Last run">
+      {% set status = health.get(s.name, 'never') %}
+      {% if status == 'ok' %}
+      <span class="badge badge-ok">&#10003; OK</span>
+      {% elif status == 'failed' %}
+      <span class="badge badge-failed">&#10007; Failed</span>
+      {% else %}
+      <span class="badge badge-never">&mdash; Never</span>
+      {% endif %}
+    </td>
     <td data-label="Edit"><a href="/sources/{{ s.id }}/edit">Edit</a></td>
     <td data-label="Delete">
       <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline"

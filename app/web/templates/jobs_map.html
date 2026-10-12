@@ -15,6 +15,9 @@
 </div>
 <form method="get" action="/jobs/map" class="filter-bar">
   <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+  <label>Search
+    <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
+  </label>
   <label>Search name
     <select name="source" multiple>
       {% for name in source_names %}
@@ -56,7 +59,7 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.state or filters.zip %}<a href="/jobs/map">Clear filters</a>{% endif %}
+  {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.state or filters.zip %}<a href="/jobs/map">Clear filters</a>{% endif %}
 </form>
 <div id="map" aria-label="Job locations map" data-jobs-url="{{ query_url(request, '/jobs/map/data') }}" style="height: 600px;"></div>
 {% endblock %}

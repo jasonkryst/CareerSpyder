@@ -10,6 +10,9 @@
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
   <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+  <label>Search
+    <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
+  </label>
   <label>Search name
     <select name="source" multiple>
       {% for name in source_names %}
@@ -86,7 +89,7 @@
   </label>
   {% endif %}
   <button type="submit">Filter</button>
-  {% if filters.company or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
+  {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table>

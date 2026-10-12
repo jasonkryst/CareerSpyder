@@ -656,6 +656,22 @@ dialog.modal .modal-actions {
   opacity: 0.8;
 }
 
+.badge-ok {
+  background: #2a7a3b;
+  color: #fff;
+}
+
+.badge-failed {
+  background: #b91c1c;
+  color: #fff;
+}
+
+.badge-never {
+  background: var(--fg-muted);
+  color: #fff;
+  opacity: 0.7;
+}
+
 dialog.modal .modal-subtitle {
   color: var(--fg-muted);
   font-size: 0.875rem;

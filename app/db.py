@@ -276,12 +276,17 @@ def _job_filters_sql(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
     if company:
         clauses.append("jobs.company ILIKE %s")
         params.append(f"%{company}%")
+    if search:
+        clauses.append("(jobs.title ILIKE %s OR jobs.company ILIKE %s)")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
     if source_name:
         ph = ",".join(["%s"] * len(source_name))
         clauses.append(f"jobs.source_name IN ({ph})")
@@ -339,13 +344,14 @@ def list_jobs(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> list[dict]:
     order_column = _JOB_SORT_COLUMNS.get(sort, "jobs.first_seen_at")
     order_dir = "ASC" if direction == "asc" else "DESC"
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     query = (
         "SELECT jobs.key, jobs.title, jobs.company, jobs.location, geocoded_locations.display_name, "
@@ -385,11 +391,12 @@ def count_jobs(
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
     user_id: str | None = None,
+    search: str | None = None,
 ) -> int:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     row = conn.execute(
         "SELECT COUNT(*) FROM jobs LEFT JOIN geocoded_locations "
@@ -447,12 +454,12 @@ def list_mappable_jobs(
     exclude_status: str | None = None, duplicates: str | None = None,
     state: list[str] | None = None,
     zip_lat: float | None = None, zip_lng: float | None = None, radius_miles: float | None = None,
-    user_id: str | None = None,
+    user_id: str | None = None, search: str | None = None,
 ) -> list[dict]:
     where_sql, params = _job_filters_sql(
         company, source_name, removed, emailed, status, location, duplicates,
         state=state, zip_lat=zip_lat, zip_lng=zip_lng, radius_miles=radius_miles,
-        user_id=user_id,
+        user_id=user_id, search=search,
     )
     clauses = ["geocoded_locations.status IN ('resolved', 'manual')"]
     if exclude_status:
@@ -939,6 +946,30 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
     if cur.rowcount == 0:
         raise KeyError(source_id)
     conn.commit()
+
+
+def source_last_run_status(
+    conn: psycopg.Connection, source_names: list[str], user_id: str,
+) -> dict[str, str]:
+    """Return a dict mapping each name in source_names to 'ok', 'failed', or 'never'.
+
+    Looks at the single most recent non-url_check run for user_id.  If no such
+    run exists every name maps to 'never'.  Otherwise a name is 'failed' if it
+    appears in that run's failed_sources JSON, else 'ok'.
+    """
+    if not source_names:
+        return {}
+    row = conn.execute(
+        "SELECT failed_sources FROM runs "
+        "WHERE user_id = %s AND kind != %s "
+        "ORDER BY started_at DESC, id DESC "
+        "LIMIT 1",
+        (user_id, "url_check"),
+    ).fetchone()
+    if row is None:
+        return {name: "never" for name in source_names}
+    failed_set = {entry["name"] for entry in _deserialize_failed_sources(row[0])}
+    return {name: ("failed" if name in failed_set else "ok") for name in source_names}
 
 
 def import_sources(conn: psycopg.Connection, user_id: str, sources: list) -> int:

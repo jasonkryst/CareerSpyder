@@ -195,3 +195,72 @@ def test_sources_list_clear_filters_link_shown_when_filter_active(client):
 def test_sources_list_clear_filters_link_hidden_when_no_filter_active(client):
     resp = client.get("/sources")
     assert "Clear filters" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Source health badge tests (issue #209)
+# ---------------------------------------------------------------------------
+
+def test_source_health_never_when_no_runs(client, admin_user_id, seed_source):
+    """No runs at all -> badge-never shown for each source."""
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h1", name="Acme Health", type="greenhouse", board_token="acme")
+    seed_source(source)
+
+    resp = client.get("/sources")
+
+    assert resp.status_code == 200
+    assert "badge-never" in resp.text
+
+
+def test_source_health_ok_after_clean_run(client, admin_user_id, seed_source):
+    """A scrape run with no failures -> badge-ok."""
+    from app import db as _db
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h2", name="Acme OK", type="greenhouse", board_token="acme")
+    seed_source(source)
+
+    with client.app.state.pool.connection() as conn:
+        run_id = _db.start_run(conn, kind="scrape", user_id=admin_user_id)
+        _db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/sources")
+
+    assert resp.status_code == 200
+    assert "badge-ok" in resp.text
+
+
+def test_source_health_failed_when_source_in_failed_list(client, admin_user_id, seed_source):
+    """A scrape run that lists the source as failed -> badge-failed."""
+    from app import db as _db
+    from app.config import GreenhouseSource
+    from app.models import FailedSource
+    source = GreenhouseSource(id="h3", name="Acme Failed", type="greenhouse", board_token="acme")
+    seed_source(source)
+
+    with client.app.state.pool.connection() as conn:
+        run_id = _db.start_run(conn, kind="scrape", user_id=admin_user_id)
+        _db.finish_run(conn, run_id, new_job_count=0,
+                       failed_sources=[FailedSource(name="Acme Failed", url="https://example.com")])
+
+    resp = client.get("/sources")
+
+    assert resp.status_code == 200
+    assert "badge-failed" in resp.text
+
+
+def test_source_health_never_when_only_url_check_run_exists(client, admin_user_id, seed_source):
+    """url_check runs are excluded from health -> badge-never even if one ran."""
+    from app import db as _db
+    from app.config import GreenhouseSource
+    source = GreenhouseSource(id="h4", name="Acme URL", type="greenhouse", board_token="acme")
+    seed_source(source)
+
+    with client.app.state.pool.connection() as conn:
+        run_id = _db.start_run(conn, kind="url_check", user_id=admin_user_id)
+        _db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    resp = client.get("/sources")
+
+    assert resp.status_code == 200
+    assert "badge-never" in resp.text
