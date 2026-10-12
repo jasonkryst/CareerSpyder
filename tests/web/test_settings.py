@@ -767,39 +767,47 @@ def test_preferences_accept_exactly_five_recipients(client, admin_user_id):
 
 def test_test_email_sends_and_redirects_with_success_flash(client):
     from unittest.mock import patch
+    from urllib.parse import parse_qs, urlparse
 
     with patch("app.web.routes_settings.emailer.send_email") as mock_send:
         resp = client.post("/settings/email/test", follow_redirects=False)
 
     assert resp.status_code in (302, 303)
     mock_send.assert_called_once()
-    page = client.get("/settings/email")
-    assert "Test email sent successfully." in page.text
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/email"
+    assert parse_qs(location.query)["flash"] == ["Test email sent successfully."]
 
 
 def test_test_email_no_smtp_password_returns_env_var_error(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+
     monkeypatch.delenv("SMTP_PASSWORD")
 
     resp = client.post("/settings/email/test", follow_redirects=False)
 
     assert resp.status_code in (302, 303)
-    page = client.get("/settings/email")
-    assert "SMTP_PASSWORD environment variable is not set." in page.text
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/email"
+    assert parse_qs(location.query)["flash"] == ["SMTP_PASSWORD environment variable is not set."]
 
 
 def test_test_email_no_settings_returns_configure_first_error(client):
     from unittest.mock import patch
+    from urllib.parse import parse_qs, urlparse
 
     with patch("app.web.routes_settings.db.get_settings", return_value=None):
         resp = client.post("/settings/email/test", follow_redirects=False)
 
     assert resp.status_code in (302, 303)
-    page = client.get("/settings/email")
-    assert "Configure email settings first." in page.text
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/email"
+    assert parse_qs(location.query)["flash"] == ["Configure email settings first."]
 
 
 def test_test_email_rate_limited_on_fourth_attempt(client):
     from unittest.mock import patch
+    from urllib.parse import parse_qs, urlparse
 
     with patch("app.web.routes_settings.emailer.send_email"):
         for _ in range(3):
@@ -808,8 +816,9 @@ def test_test_email_rate_limited_on_fourth_attempt(client):
     resp = client.post("/settings/email/test", follow_redirects=False)
 
     assert resp.status_code in (302, 303)
-    page = client.get("/settings/email")
-    assert "Rate limit reached" in page.text
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/settings/email"
+    assert "Rate limit reached" in parse_qs(location.query)["flash"][0]
 
 
 def test_import_keeps_only_the_first_five_recipients(client, admin_user_id):
