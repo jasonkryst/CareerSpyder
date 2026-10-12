@@ -613,3 +613,30 @@ def test_check_urls_is_rate_limited_per_user(member_client, monkeypatch):
         member_client.post("/check-urls", follow_redirects=False)
     resp = member_client.post("/check-urls", follow_redirects=False)
     assert "Too+many+runs" in resp.headers["location"]
+
+
+# --- Pagination jump-to-page (issue #224) ---
+
+def test_pagination_jump_shown_when_many_pages(client):
+    conn = client.app.state.conn
+    for i in range(60):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=i, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "pagination-jump" in resp.text
+
+
+def test_pagination_jump_hidden_when_two_pages(client):
+    conn = client.app.state.conn
+    for i in range(40):
+        run_id = db.start_run(conn)
+        db.finish_run(conn, run_id, new_job_count=i, failed_sources=[])
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "Page 1 of 2" in resp.text
+    assert "pagination-jump" not in resp.text

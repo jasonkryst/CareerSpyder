@@ -1772,3 +1772,17 @@ def test_non_admin_user_filter_param_is_ignored(
 
     assert "MemberCo" in resp.text
     assert "AdminCo" not in resp.text
+
+
+
+# --- Pagination jump-to-page (issue #224) ---
+
+def test_pagination_jump_shown_for_jobs_when_many_pages(client):
+    conn = client.app.state.conn
+    jobs = [make_job(key=f"k{i}", title=f"Job {i}", url=f"https://x.test/{i}") for i in range(60)]
+    db.save_jobs(conn, jobs, db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert "pagination-jump" in resp.text
