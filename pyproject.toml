@@ -13,7 +13,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "pydantic>=2.13.5",
     "psycopg[pool]>=3.3.6",
-    "alembic>=1.16",
+    "alembic>=1.20.0",
     "apscheduler>=3.11.3",
     "requests>=2.34.2",
     "beautifulsoup4>=4.15.0",
@@ -27,10 +27,10 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "httpx>=0.28.1",
-    "ruff>=0.16.8",
+    "ruff>=0.16.10",
     "mypy>=2.4.0",
     "pip-audit>=2.10.1",
-    "pytest-postgresql>=7.0",
+    "pytest-postgresql>=9.1.1",
 ]
 
 [tool.setuptools.packages.find]
