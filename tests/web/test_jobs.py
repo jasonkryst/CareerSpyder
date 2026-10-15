@@ -549,7 +549,9 @@ def test_jobs_page_wraps_first_seen_at_in_a_time_element(client):
 
     resp = client.get("/jobs")
 
-    assert f'<time datetime="{first_seen_at}">{first_seen_at}</time>' in resp.text
+    # |timeago wraps the time element in <abbr title="<iso>"> — check both attributes
+    assert f'datetime="{first_seen_at}"' in resp.text
+    assert f'title="{first_seen_at}"' in resp.text
 
 
 def test_jobs_page_wraps_removed_at_in_a_time_element(client):
@@ -1772,3 +1774,17 @@ def test_non_admin_user_filter_param_is_ignored(
 
     assert "MemberCo" in resp.text
     assert "AdminCo" not in resp.text
+
+
+
+# --- Pagination jump-to-page (issue #224) ---
+
+def test_pagination_jump_shown_for_jobs_when_many_pages(client):
+    conn = client.app.state.conn
+    jobs = [make_job(key=f"k{i}", title=f"Job {i}", url=f"https://x.test/{i}") for i in range(60)]
+    db.save_jobs(conn, jobs, db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.get("/jobs")
+
+    assert resp.status_code == 200
+    assert "pagination-jump" in resp.text

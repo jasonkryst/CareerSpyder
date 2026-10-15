@@ -47,7 +47,7 @@ def run_once(
                 found = adapter(source)
             except Exception:
                 logger.exception("Source %r failed", source.name)
-                failed_sources.append(FailedSource(name=source.name, url=get_source_url(source)))
+                failed_sources.append(FailedSource(name=source.name, url=get_source_url(source), source_id=source.id))
                 continue
             succeeded_source_ids.add(source.id)
             all_raw_jobs.extend(found)
@@ -77,7 +77,7 @@ def run_once(
             logger.exception("URL check step failed for run %s", run_id)
             url_removed_count = 0
 
-        db.finish_run(conn, run_id, len(new_jobs), failed_sources)
+        db.finish_run(conn, run_id, len(new_jobs), failed_sources, source_count=len(sources))
         return RunSummary(
             run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs,
             failed_sources=failed_sources, url_removed_count=url_removed_count,

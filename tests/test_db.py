@@ -137,7 +137,7 @@ def test_list_runs_returns_most_recent_first(pg_conn):
     runs = db.list_runs(conn)
 
     assert [r["id"] for r in runs] == [run2, run1]
-    assert runs[1]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.bad.test"}]
+    assert runs[1]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.bad.test", "source_id": None}]
 
 
 def test_list_runs_respects_offset(pg_conn):
@@ -1350,7 +1350,7 @@ def test_finish_run_serializes_failed_source_with_url(pg_conn):
                   failed_sources=[FailedSource("Acme Jobs", url="https://acme.test/careers")])
 
     runs = db.list_runs(conn)
-    assert runs[0]["failed_sources"] == [{"name": "Acme Jobs", "url": "https://acme.test/careers"}]
+    assert runs[0]["failed_sources"] == [{"name": "Acme Jobs", "url": "https://acme.test/careers", "source_id": None}]
 
 
 def test_finish_run_serializes_failed_source_without_url(pg_conn):
@@ -1361,7 +1361,7 @@ def test_finish_run_serializes_failed_source_without_url(pg_conn):
                   failed_sources=[FailedSource("Greenhouse Co", url=None)])
 
     runs = db.list_runs(conn)
-    assert runs[0]["failed_sources"] == [{"name": "Greenhouse Co", "url": None}]
+    assert runs[0]["failed_sources"] == [{"name": "Greenhouse Co", "url": None, "source_id": None}]
 
 
 def test_finish_run_serializes_multiple_failed_sources(pg_conn):
@@ -1375,8 +1375,8 @@ def test_finish_run_serializes_multiple_failed_sources(pg_conn):
 
     runs = db.list_runs(conn)
     assert runs[0]["failed_sources"] == [
-        {"name": "Source A", "url": "https://a.test"},
-        {"name": "Source B", "url": None},
+        {"name": "Source A", "url": "https://a.test", "source_id": None},
+        {"name": "Source B", "url": None, "source_id": None},
     ]
 
 
@@ -1393,7 +1393,7 @@ def test_list_runs_deserializes_legacy_string_format(pg_conn):
 
     runs = db.list_runs(conn)
 
-    assert runs[0]["failed_sources"] == [{"name": "Old Source", "url": None}]
+    assert runs[0]["failed_sources"] == [{"name": "Old Source", "url": None, "source_id": None}]
 
 
 def test_list_runs_deserializes_new_dict_format(pg_conn):
@@ -1410,7 +1410,7 @@ def test_list_runs_deserializes_new_dict_format(pg_conn):
 
     runs = db.list_runs(conn)
 
-    assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test"}]
+    assert runs[0]["failed_sources"] == [{"name": "New Source", "url": "https://new.test", "source_id": None}]
 
 
 # ── haversine function (SQL) ─────────────────────────────────────────────────
@@ -1861,3 +1861,113 @@ def test_claim_invite_succeeds_exactly_once(pg_conn):
     token = str(invite["token"])
     assert db.claim_invite(pg_conn, token) is True
     assert db.claim_invite(pg_conn, token) is False
+
+
+# ---------------------------------------------------------------------------
+# dashboard_stats
+# ---------------------------------------------------------------------------
+
+def test_dashboard_stats_all_zeros_on_empty_db(pg_conn):
+    stats = db.dashboard_stats(pg_conn, None)
+    assert stats == {"total_jobs": 0, "new_this_week": 0, "total_sources": 0, "total_runs": 0}
+
+
+def test_dashboard_stats_counts_jobs_for_user(pg_conn):
+    user_a = _make_user(pg_conn, "ua")
+    user_b = _make_user(pg_conn, "ub")
+    run_a = db.start_run(pg_conn, user_id=user_a)
+    run_b = db.start_run(pg_conn, user_id=user_b)
+    db.save_jobs(pg_conn, [make_job("k1"), make_job("k2")], run_a, user_id=user_a)
+    db.save_jobs(pg_conn, [make_job("k3")], run_b, user_id=user_b)
+    stats = db.dashboard_stats(pg_conn, user_a)
+    assert stats["total_jobs"] == 2
+
+
+def test_dashboard_stats_none_user_id_aggregates_all(pg_conn):
+    user_a = _make_user(pg_conn, "ua")
+    user_b = _make_user(pg_conn, "ub")
+    run_a = db.start_run(pg_conn, user_id=user_a)
+    run_b = db.start_run(pg_conn, user_id=user_b)
+    db.save_jobs(pg_conn, [make_job("k1"), make_job("k2")], run_a, user_id=user_a)
+    db.save_jobs(pg_conn, [make_job("k3")], run_b, user_id=user_b)
+    stats = db.dashboard_stats(pg_conn, None)
+    assert stats["total_jobs"] == 3
+
+
+def test_dashboard_stats_new_this_week_excludes_old(pg_conn):
+    user = _make_user(pg_conn)
+    run_id = db.start_run(pg_conn, user_id=user)
+    db.save_jobs(pg_conn, [make_job("k1")], run_id, user_id=user)
+    eight_days_ago = (datetime.now(UTC) - timedelta(days=8)).isoformat()
+    pg_conn.execute("UPDATE jobs SET first_seen_at = %s WHERE key = 'k1'", (eight_days_ago,))
+    pg_conn.commit()
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["new_this_week"] == 0
+
+
+def test_dashboard_stats_total_sources(pg_conn):
+    from app.config import GreenhouseSource
+    user = _make_user(pg_conn)
+    s1 = GreenhouseSource(id="src1", name="S1", type="greenhouse", board_token="t1")
+    s2 = GreenhouseSource(id="src2", name="S2", type="greenhouse", board_token="t2")
+    db.add_source(pg_conn, user, s1)
+    db.add_source(pg_conn, user, s2)
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["total_sources"] == 2
+
+
+def test_dashboard_stats_total_runs_only_scrape(pg_conn):
+    user = _make_user(pg_conn)
+    r1 = db.start_run(pg_conn, kind="scrape", user_id=user)
+    db.finish_run(pg_conn, r1, 0, [])
+    r2 = db.start_run(pg_conn, kind="scrape", user_id=user)
+    db.finish_run(pg_conn, r2, 0, [])
+    r3 = db.start_run(pg_conn, kind="url_check", user_id=user)
+    db.finish_run(pg_conn, r3, 0, [])
+    stats = db.dashboard_stats(pg_conn, user)
+    assert stats["total_runs"] == 2
+
+
+def test_finish_run_stores_source_count(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[], source_count=5)
+
+    row = conn.execute("SELECT source_count FROM runs WHERE id = %s", (run_id,)).fetchone()
+    assert row[0] == 5
+
+
+def test_finish_run_default_source_count_zero(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[])
+
+    row = conn.execute("SELECT source_count FROM runs WHERE id = %s", (run_id,)).fetchone()
+    assert row[0] == 0
+
+
+def test_list_runs_includes_source_count(pg_conn):
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    db.finish_run(conn, run_id, new_job_count=0, failed_sources=[], source_count=3)
+
+    runs = db.list_runs(conn)
+
+    assert runs[0]["source_count"] == 3
+
+
+def test_deserialize_failed_sources_handles_missing_source_id(pg_conn):
+    import json as _json
+
+    conn = pg_conn
+    run_id = db.start_run(conn)
+    # Manually insert old-format JSON without source_id
+    old_json = _json.dumps([{"name": "Old Source", "url": "https://old.test/jobs"}])
+    conn.execute("UPDATE runs SET failed_sources = %s WHERE id = %s", (old_json, run_id))
+    conn.commit()
+
+    runs = db.list_runs(conn)
+    fs = runs[0]["failed_sources"][0]
+    assert fs["name"] == "Old Source"
+    assert fs["url"] == "https://old.test/jobs"
+    assert fs.get("source_id") is None

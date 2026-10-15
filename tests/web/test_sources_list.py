@@ -264,3 +264,18 @@ def test_source_health_never_when_only_url_check_run_exists(client, admin_user_i
 
     assert resp.status_code == 200
     assert "badge-never" in resp.text
+
+
+# --- Pagination jump-to-page (issue #224) ---
+
+def test_pagination_jump_shown_for_sources_when_many_pages(client, admin_user_id):
+    sources = [
+        {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
+        for i in range(55)
+    ]
+    _add_sources(client, admin_user_id, sources)
+
+    resp = client.get("/sources")
+
+    assert resp.status_code == 200
+    assert "pagination-jump" in resp.text

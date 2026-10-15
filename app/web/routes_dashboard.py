@@ -33,7 +33,8 @@ def _dashboard_context(conn, request: Request, page: str, sort: str, direction: 
         sort=sort, direction=direction, failures=failures_filter,
         user_id=filter_user_id,
     )
-    return {"runs": runs, "pagination": pagination, "failures": failures, "is_admin": is_admin}
+    stats = db.dashboard_stats(conn, filter_user_id)
+    return {"runs": runs, "pagination": pagination, "failures": failures, "is_admin": is_admin, "stats": stats}
 
 
 @router.get("/", response_class=HTMLResponse)

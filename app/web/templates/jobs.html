@@ -140,7 +140,7 @@
               aria-label="Override location for {{ job.title | e }}">&#128205;</button>
       {% endif %}
     </td>
-    <td data-label="Date found"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at }}</time></td>
+    <td data-label="Date found"><abbr title="{{ job.first_seen_at }}"><time datetime="{{ job.first_seen_at }}">{{ job.first_seen_at | timeago }}</time></abbr></td>
     <td data-label="Removed">
       {% if job.removed_at %}<time datetime="{{ job.removed_at }}">{{ job.removed_at }}</time>
       {% elif job.user_id == current_user_id %}
@@ -190,6 +190,18 @@
   {% if pagination.has_prev %}<a href="{{ query_url(request, '/jobs', page=pagination.page - 1) }}">Previous</a>{% endif %}
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
   {% if pagination.has_next %}<a href="{{ query_url(request, '/jobs', page=pagination.page + 1) }}">Next</a>{% endif %}
+  {% if pagination.total_pages > 2 %}
+  <form method="get" action="/jobs" class="pagination-jump">
+    {% for key, val in request.query_params.multi_items() %}
+    {% if key != "page" %}<input type="hidden" name="{{ key }}" value="{{ val }}">{% endif %}
+    {% endfor %}
+    <label>Go to page
+      <input type="number" name="page" min="1" max="{{ pagination.total_pages }}"
+             value="{{ pagination.page }}" style="width:4em">
+    </label>
+    <button type="submit">Go</button>
+  </form>
+  {% endif %}
 </nav>
 
 <dialog id="duplicate-modal" class="modal" aria-labelledby="duplicate-modal-title">
