@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-09-22 (branch `fix/issue-tiers`, v1.4.0)
+**Last reviewed:** 2026-10-12 (branch `feat/quick-wins-phase2`, v1.10.0)
 
 ## Rubric
 
@@ -35,6 +35,25 @@ Useful if secondary sources (Indeed/LinkedIn) are a big share of the feed;
 manual duplicate flagging (#82) covers it today. New table, similarity scoring,
 review UI, tests — a multi-day feature. Deliberately kept out of the v1.4.0 fix
 branch; brainstorm → spec → plan on its own branch before starting.
+
+## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
+
+| # | Title | Resolution |
+|---|---|---|
+| #218 | Keyword filters only match title | `apply_keyword_filters` now searches title, company, and location. |
+| #215 | Dates shown as raw ISO strings | Added `\|timeago` Jinja2 filter; all date cells show relative time with ISO on hover. |
+| #224 | No way to jump to a page | Jump-to-page form added to all paginated views (dashboard, jobs, sources) when total pages > 2. |
+| #214 | Dashboard has no at-a-glance stats | Four stat cards (total jobs, new this week, sources, runs) added to dashboard header. |
+| #219 | Run history doesn't show source counts | Runs now store `source_count`; table shows "N / M failed" with links to failed source edit pages. |
+
+## Resolved in v1.9.0 (`feat/quick-wins-phase1`)
+
+| # | Title | Resolution |
+|---|---|---|
+| #209 | No source health status visible | Health badges (ok/failed/never) added to sources list Last run column. |
+| #210 | Platform detector doesn't focus name field | Auto-focuses Name input after platform pre-fill. |
+| #211 | No way to test email settings | "Send test email" button on email settings page, rate-limited 3/10 min. |
+| #212 | Keyword search only finds by title | Full-text ILIKE search on title + company wired to /jobs and /jobs/map. |
 
 ## Resolved in v1.4.0 (`fix/issue-tiers`)
 
