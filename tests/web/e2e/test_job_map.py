@@ -1,5 +1,5 @@
 import os
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import psycopg
 
@@ -69,7 +69,7 @@ def test_job_map_does_not_use_osm_tile_server(live_server, page):
     osm_tile_requests = []
 
     def handle_request(request):
-        if "tile.openstreetmap.org" in request.url:
+        if urlparse(request.url).hostname == "tile.openstreetmap.org":
             osm_tile_requests.append(request.url)
 
     page.on("request", handle_request)
@@ -86,7 +86,7 @@ def test_job_map_uses_carto_tile_server(live_server, page):
     carto_requests = []
 
     def handle_request(request):
-        if "basemaps.cartocdn.com" in request.url:
+        if urlparse(request.url).hostname == "basemaps.cartocdn.com":
             carto_requests.append(request.url)
 
     page.on("request", handle_request)
