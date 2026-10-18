@@ -1,11 +1,17 @@
 import os
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import psycopg
 
 from app import db
 from app.models import Job
 from tests.conftest import owner_id_for
+
+
+def _hostname_matches(url: str, domain: str) -> bool:
+    """Return True if the URL's hostname is `domain` or any direct subdomain of it."""
+    hostname = urlparse(url).hostname or ""
+    return hostname == domain or hostname.endswith("." + domain)
 
 
 def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
@@ -35,6 +41,64 @@ def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
     popup_text = page.locator(".leaflet-popup").inner_text()
     assert "E2E Map Job" in popup_text
     assert "Acme" in popup_text
+
+
+def test_job_map_attribution_contains_osm_copyright_link(live_server, page):
+    """Attribution control must link to openstreetmap.org/copyright (OSM requirement)."""
+    page.goto(live_server + "/jobs/map")
+    attr_control = page.locator(".leaflet-control-attribution")
+    attr_control.wait_for()
+    html = attr_control.inner_html()
+    assert "openstreetmap.org/copyright" in html, (
+        f"Attribution control must link to openstreetmap.org/copyright; got: {html!r}"
+    )
+
+
+def test_job_map_attribution_contains_carto_link(live_server, page):
+    """Attribution control must credit CARTO (CARTO tile policy requirement)."""
+    page.goto(live_server + "/jobs/map")
+    attr_control = page.locator(".leaflet-control-attribution")
+    attr_control.wait_for()
+    html = attr_control.inner_html()
+    assert "carto.com/attributions" in html, (
+        f"Attribution control must link to carto.com/attributions; got: {html!r}"
+    )
+
+
+def test_job_map_does_not_use_osm_tile_server(live_server, page):
+    """Map must not request tiles from OSM's own servers (tile.openstreetmap.org).
+
+    OSM's tile CDN has strict usage policies that can block self-hosted apps
+    running on localhost or private IPs (issue #235).  CARTO tiles are used
+    instead.
+    """
+    osm_tile_requests = []
+
+    def handle_request(request):
+        if _hostname_matches(request.url, "tile.openstreetmap.org"):
+            osm_tile_requests.append(request.url)
+
+    page.on("request", handle_request)
+    page.goto(live_server + "/jobs/map")
+    # Give tiles a moment to start loading before checking
+    page.wait_for_timeout(500)
+    assert osm_tile_requests == [], (
+        f"Map requested tiles from tile.openstreetmap.org (should use CARTO): {osm_tile_requests[:3]}"
+    )
+
+
+def test_job_map_uses_carto_tile_server(live_server, page):
+    """Map must request tiles from CARTO's basemaps CDN."""
+    carto_requests = []
+
+    def handle_request(request):
+        if _hostname_matches(request.url, "basemaps.cartocdn.com"):
+            carto_requests.append(request.url)
+
+    page.on("request", handle_request)
+    page.goto(live_server + "/jobs/map")
+    page.wait_for_timeout(1000)
+    assert len(carto_requests) > 0, "Map made no requests to basemaps.cartocdn.com"
 
 
 def test_job_map_popup_escapes_a_title_containing_html_and_quote_characters(live_server, page):

@@ -1,11 +1,15 @@
 import re
+from importlib.metadata import version as _pkg_version
 
 import requests
 
 from app.geocoding.base import GeocodeResult, GeocoderTransientError
 
 _SEARCH_URL = "https://nominatim.openstreetmap.org/search"
-_USER_AGENT = "CareerSpyder/1.0 (+https://github.com/jasonkryst/CareerSpyder)"
+_USER_AGENT = (
+    f"CareerSpyder/{_pkg_version('careerspyder')}"
+    " (+https://github.com/jasonkryst/CareerSpyder)"
+)
 _US_ZIP_RE = re.compile(r"^\d{5}(-\d{4})?$")
 
 
