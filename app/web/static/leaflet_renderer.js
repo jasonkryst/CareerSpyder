@@ -41,8 +41,12 @@ window.CareerSpyderMap = (function () {
 
   function renderMap(containerId, locations) {
     const map = L.map(containerId).setView([39.8283, -98.5795], 4);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      attribution:
+        "&copy; <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener noreferrer\">OpenStreetMap</a> contributors"
+        + " &copy; <a href=\"https://carto.com/attributions\" target=\"_blank\" rel=\"noopener noreferrer\">CARTO</a>",
+      subdomains: "abcd",
+      maxZoom: 19,
     }).addTo(map);
 
     const cluster = L.markerClusterGroup();

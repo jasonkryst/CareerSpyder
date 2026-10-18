@@ -1,10 +1,11 @@
+from importlib.metadata import version as _pkg_version
 from unittest.mock import Mock, patch
 
 import pytest
 
 from app.geocoding.base import GeocodeResult, GeocoderTransientError
 from app.geocoding.factory import get_geocoder
-from app.geocoding.nominatim import NominatimGeocoder
+from app.geocoding.nominatim import _USER_AGENT, NominatimGeocoder
 from app.geocoding.service import geocode_pending
 
 
@@ -39,6 +40,28 @@ def test_nominatim_geocode_parses_a_successful_response():
     _, kwargs = mock_get.call_args
     assert kwargs["params"]["q"] == "Chicago, IL"
     assert "CareerSpyder" in kwargs["headers"]["User-Agent"]
+
+
+def test_nominatim_user_agent_contains_current_package_version():
+    """User-Agent must reflect the installed package version (from pyproject.toml).
+
+    A stale or fake version string can look like a spoofed identifier to the
+    Nominatim service and trigger blocking (issue #235).
+    """
+    installed = _pkg_version("careerspyder")
+    assert installed in _USER_AGENT, (
+        f"User-Agent {_USER_AGENT!r} does not contain installed version {installed!r}"
+    )
+
+
+def test_nominatim_user_agent_contains_repo_link():
+    """User-Agent must include a contact URL so Nominatim can identify the app."""
+    assert "github.com/jasonkryst/CareerSpyder" in _USER_AGENT
+
+
+def test_nominatim_user_agent_does_not_use_stale_1_0_placeholder():
+    """Guard against accidentally reverting to the old hardcoded '1.0' string."""
+    assert _USER_AGENT != "CareerSpyder/1.0 (+https://github.com/jasonkryst/CareerSpyder)"
 
 
 def test_nominatim_geocode_uses_structured_params_for_bare_zip():

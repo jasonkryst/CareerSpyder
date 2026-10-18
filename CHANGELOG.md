@@ -5,6 +5,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.10.1] — 2026-10-18
+
+### Fixed
+
+- **OSM tile blocking (issue #235).** The jobs map was loading tiles from
+  `tile.openstreetmap.org`, which blocks self-hosted apps running on
+  `localhost` or private IPs that cannot supply a valid Referer. Switched to
+  CARTO Voyager tiles (`basemaps.cartocdn.com`), which have no such
+  restriction.  Attribution now renders as required hyperlinks to both
+  `openstreetmap.org/copyright` and `carto.com/attributions`.
+- **Nominatim User-Agent version.** The geocoder's `User-Agent` header was
+  hardcoded to `CareerSpyder/1.0`; it now reads the installed package version
+  from `importlib.metadata` so it always matches `pyproject.toml`.
+
 ## [1.10.0] — 2026-10-12
 
 ### Added
