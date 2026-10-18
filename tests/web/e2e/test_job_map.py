@@ -8,6 +8,12 @@ from app.models import Job
 from tests.conftest import owner_id_for
 
 
+def _hostname_matches(url: str, domain: str) -> bool:
+    """Return True if the URL's hostname is `domain` or any direct subdomain of it."""
+    hostname = urlparse(url).hostname or ""
+    return hostname == domain or hostname.endswith("." + domain)
+
+
 def test_job_map_shows_a_marker_with_a_job_popup(live_server, page):
     conn = psycopg.connect(os.environ["DATABASE_URL"])
     job = Job(key="e2e-map-job", title="E2E Map Job", url="https://example.com/job/e2e-map-job",
@@ -69,7 +75,7 @@ def test_job_map_does_not_use_osm_tile_server(live_server, page):
     osm_tile_requests = []
 
     def handle_request(request):
-        if urlparse(request.url).hostname == "tile.openstreetmap.org":
+        if _hostname_matches(request.url, "tile.openstreetmap.org"):
             osm_tile_requests.append(request.url)
 
     page.on("request", handle_request)
@@ -86,7 +92,7 @@ def test_job_map_uses_carto_tile_server(live_server, page):
     carto_requests = []
 
     def handle_request(request):
-        if urlparse(request.url).hostname == "basemaps.cartocdn.com":
+        if _hostname_matches(request.url, "basemaps.cartocdn.com"):
             carto_requests.append(request.url)
 
     page.on("request", handle_request)
