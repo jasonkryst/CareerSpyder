@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-18
+
+### Added
+
+- **CARTO API key support.** Set `CARTO_API_KEY` as a container environment
+  variable to authenticate tile requests. When set, the key is appended to
+  each tile URL as `?api_key=<key>`; when unset the map continues to use the
+  free public basemaps endpoint unchanged.
+
 ## [1.10.1] — 2026-10-18
 
 ### Fixed

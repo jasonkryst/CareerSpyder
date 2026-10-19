@@ -39,9 +39,11 @@ window.CareerSpyderMap = (function () {
     return "<strong>" + escapeHtml(location.display_name) + "</strong><ul>" + items + "</ul>";
   }
 
-  function renderMap(containerId, locations) {
+  function renderMap(containerId, locations, apiKey) {
     const map = L.map(containerId).setView([39.8283, -98.5795], 4);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    const tileUrl = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+      + (apiKey ? "?api_key=" + encodeURIComponent(apiKey) : "");
+    L.tileLayer(tileUrl, {
       attribution:
         "&copy; <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener noreferrer\">OpenStreetMap</a> contributors"
         + " &copy; <a href=\"https://carto.com/attributions\" target=\"_blank\" rel=\"noopener noreferrer\">CARTO</a>",

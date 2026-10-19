@@ -1,4 +1,5 @@
 import functools
+import os
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -151,6 +152,7 @@ def jobs_map(
         states = db.list_job_states(conn, filter_user_id)
     return templates.TemplateResponse(request, "jobs_map.html", {
         "source_names": source_names, "locations": locations, "states": states,
+        "carto_api_key": os.environ.get("CARTO_API_KEY", ""),
         "filters": {
             "company": company, "search": search, "source": source, "location": location,
             "removed": removed, "emailed": emailed, "status": status,
