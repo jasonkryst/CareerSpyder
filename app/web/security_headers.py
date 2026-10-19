@@ -28,7 +28,7 @@ def _build_csp() -> str:
             " connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com;"
         )
     return (
-        "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; "
+        "default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com; "
         f"style-src 'self' 'unsafe-inline'; {script_src};{connect_src_directive} "
         "frame-ancestors 'none'; object-src 'none'"
     )
