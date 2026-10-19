@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-18
+
 ### Added
 
 - **CARTO API key support.** Set `CARTO_API_KEY` as a container environment
