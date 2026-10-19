@@ -5,6 +5,6 @@
   fetch(container.dataset.jobsUrl)
     .then(function (resp) { return resp.json(); })
     .then(function (locations) {
-      window.CareerSpyderMap.renderMap("map", locations);
+      window.CareerSpyderMap.renderMap("map", locations, container.dataset.cartoApiKey || "");
     });
 })();
