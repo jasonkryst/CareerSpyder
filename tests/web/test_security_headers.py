@@ -1,6 +1,6 @@
-def test_csp_allows_openstreetmap_tile_images(client):
+def test_csp_allows_carto_tile_images(client):
     resp = client.get("/")
-    assert "https://*.tile.openstreetmap.org" in resp.headers["Content-Security-Policy"]
+    assert "https://*.basemaps.cartocdn.com" in resp.headers["Content-Security-Policy"]
 
 
 def test_html_response_carries_baseline_security_headers(client):
