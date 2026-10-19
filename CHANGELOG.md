@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.11.2] — 2026-10-18
+
+### Fixed
+
+- **Wrong CARTO tile API key parameter.** The tile URL was appending
+  `?api_key=` but CARTO's basemaps API expects `?key=`. A mismatched
+  parameter name returns HTTP 200 with the key requirement watermarked
+  into the tile image rather than an error, so the wrong key was invisible
+  in the network tab.
+
 ## [1.11.1] — 2026-10-18
 
 ### Fixed
