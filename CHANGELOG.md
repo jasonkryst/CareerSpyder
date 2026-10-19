@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-10-18
+
+### Fixed
+
+- **CSP blocked CARTO tile images.** The Content Security Policy `img-src`
+  directive still listed `*.tile.openstreetmap.org` from before the v1.10.1
+  tile-provider switch, causing browsers to silently block all tile requests
+  and render the map grey. Updated to `*.basemaps.cartocdn.com`.
+
 ## [1.11.0] — 2026-10-18
 
 ### Added
