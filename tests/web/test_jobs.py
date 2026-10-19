@@ -234,6 +234,20 @@ def test_jobs_map_page_renders(client):
     assert "Jobs Map" in resp.text
 
 
+def test_jobs_map_omits_carto_key_attr_when_env_unset(client, monkeypatch):
+    monkeypatch.delenv("CARTO_API_KEY", raising=False)
+    resp = client.get("/jobs/map")
+    assert resp.status_code == 200
+    assert "data-carto-api-key" not in resp.text
+
+
+def test_jobs_map_injects_carto_key_attr_when_env_set(client, monkeypatch):
+    monkeypatch.setenv("CARTO_API_KEY", "test-key-abc")
+    resp = client.get("/jobs/map")
+    assert resp.status_code == 200
+    assert 'data-carto-api-key="test-key-abc"' in resp.text
+
+
 def test_jobs_map_data_groups_jobs_by_location(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
