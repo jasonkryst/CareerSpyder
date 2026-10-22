@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Documentation refreshed against the current codebase.** README,
+  AGENTS.md, SECURITY.md, docs/USAGE.md, ROADMAP.md, and
+  docs/issue-tiers.md no longer describe the pre-PostgreSQL design
+  (SQLite, `sources.json` as the source of truth), now document
+  `CARTO_API_KEY`, `GEOCODER_PROVIDER`, `TRUSTED_PROXIES`, and
+  `GITHUB_TOKEN`, describe import as an upsert rather than a
+  replacement, and match the current CI jobs and `master` ruleset.
+  ROADMAP.md drops items that have already shipped, and
+  docs/issue-tiers.md re-ranks every open issue.
+
 ## [1.11.2] — 2026-10-18
 
 ### Fixed
