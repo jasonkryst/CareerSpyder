@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-10-22
+
 ### Changed
 
 - **Documentation refreshed against the current codebase.** README,
@@ -15,7 +17,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `GITHUB_TOKEN`, describe import as an upsert rather than a
   replacement, and match the current CI jobs and `master` ruleset.
   ROADMAP.md drops items that have already shipped, and
-  docs/issue-tiers.md re-ranks every open issue.
+  docs/issue-tiers.md re-ranks every open issue. The in-app `/guide`
+  page (`app/web/templates/guide.html`) gets the same corrections, since
+  it had fallen out of sync with docs/USAGE.md.
+- **`master`'s branch ruleset tightened.** `trivy-fs` is now a required
+  status check alongside the other CI jobs. The disabled, redundant
+  "Protect Main" ruleset (a strict subset of the active one, covering
+  none of its status checks or code-scanning gates) was deleted so only
+  one ruleset governs `master`. `integration-test` was deliberately left
+  optional: it already runs with `continue-on-error: true` by design
+  (live Infor-portal timeouts are expected noise), so GitHub reports its
+  conclusion as success regardless of outcome — marking it "required"
+  would be cosmetic. The repo-admin "always" bypass was kept as-is: this
+  is a single-admin-owned repo, so it serves as a documented break-glass
+  rather than a gap.
+
+### Fixed
+
+- **Four environment variables the app reads weren't wired through
+  Docker Compose.** `CARTO_API_KEY`, `GEOCODER_PROVIDER`,
+  `TRUSTED_PROXIES`, and `GITHUB_TOKEN` (plus `ADMIN_PASSWORD_HASH`,
+  the documented alternative to `ADMIN_PASSWORD`) were read by the app
+  but not passed through by `docker-compose.yml` or
+  `docker-compose.prod.yml`'s `environment:` blocks, so setting them in
+  `.env` had no effect. `.env.example` now documents all five.
 
 ## [1.11.2] — 2026-10-18
 
