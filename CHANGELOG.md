@@ -10,6 +10,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **"What's New" modal** ([#241](https://github.com/jasonkryst/CareerSpyder/issues/241)). Clicking the version number in the footer (any page) opens a dialog showing the current release's `CHANGELOG.md` entry. The content is read from `CHANGELOG.md` once at process startup and rendered server-side (`app/web/whats_new.py`) — no runtime fetch, so no CSP relaxation is needed for it.
+- **Admin users page shows per-user source and job counts** ([#216](https://github.com/jasonkryst/CareerSpyder/issues/216)). `db.list_users` now returns `source_count` and `active_job_count` for each user, rendered as two new columns on `/users`.
+- **Invite management: status, resend, and revoke** ([#217](https://github.com/jasonkryst/CareerSpyder/issues/217)). `/users` now lists every invite the admin has sent with a Pending/Accepted/Expired badge. A pending invite can be revoked (immediately expired, blocking registration) or resent (the old link is invalidated and a fresh one is issued inline), both scoped to the admin who created the invite.
+
+### Fixed
+
+- **`db.get_new_jobs` bound one SQL parameter per scraped job.** A single large source returning 65,535+ postings in one run would have exceeded PostgreSQL's per-statement parameter limit. Switched to `key = ANY(%s)` with a single array parameter.
+- **Digest subject line ignored source failures when new jobs were also found.** It now mentions both, e.g. "CareerSpyder: 5 new job(s), 2 source(s) failed", instead of only the job count.
 
 ## [1.12.0] — 2026-10-22
 

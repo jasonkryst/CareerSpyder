@@ -130,6 +130,25 @@ def test_check_job_urls_with_no_user_id_checks_each_owners_own_url(pg_conn, two_
     assert bob_removed is None
 
 
+def test_revoke_invite_by_a_different_admin_returns_false(pg_conn, two_users):
+    alice, bob = two_users
+    invite = db.create_invite(pg_conn, "target@test.local", alice)
+    token = str(invite["token"])
+
+    assert db.revoke_invite(pg_conn, bob, token) is False
+    assert db.get_invite(pg_conn, token)["used_at"] is None
+    assert db.claim_invite(pg_conn, token) is True  # untouched by bob's attempt
+
+
+def test_resend_invite_by_a_different_admin_returns_none(pg_conn, two_users):
+    alice, bob = two_users
+    invite = db.create_invite(pg_conn, "target2@test.local", alice)
+    token = str(invite["token"])
+
+    assert db.resend_invite(pg_conn, bob, token) is None
+    assert db.claim_invite(pg_conn, token) is True  # original invite still valid
+
+
 def test_status_history_is_kept_per_owner(pg_conn, two_users):
     alice, bob = two_users
     _save(pg_conn, alice)
