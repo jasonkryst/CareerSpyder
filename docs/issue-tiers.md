@@ -30,9 +30,6 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 |---|---|---|---|---|
 | 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
 | 1 | [#213](https://github.com/jasonkryst/CareerSpyder/issues/213) | Live run progress feedback during "Run now" | H | M |
-| 2 | [#216](https://github.com/jasonkryst/CareerSpyder/issues/216) | Admin users page — per-user job and source counts | M | S |
-| 2 | [#217](https://github.com/jasonkryst/CareerSpyder/issues/217) | Invite management — expiry date, resend, revoke | M | S |
-| 2 | [#241](https://github.com/jasonkryst/CareerSpyder/issues/241) | "What's New" modal | L | S |
 | 2 | [#226](https://github.com/jasonkryst/CareerSpyder/issues/226) | Digest — opt-in weekly check-in on clean runs | L | S |
 | 3 | [#222](https://github.com/jasonkryst/CareerSpyder/issues/222) | Bulk job status update via multi-select | M | M |
 | 3 | [#220](https://github.com/jasonkryst/CareerSpyder/issues/220) | Per-job notes field | M | M |
@@ -57,13 +54,6 @@ settings — no code change.
 Highest-impact open feature: a 30-source run can take minutes with no
 feedback. Option B (polling `GET /run-status` JSON) fits the dashboard's
 existing auto-refresh polling and e2e coverage better than SSE.
-
-### #216, #217 — Admin page improvements · M / S
-Both self-contained in `/users`; #216 is a query + two columns, #217 a
-pending-invites section plus resend/revoke routes. Good to pair in one PR.
-### #241 — "What's New" modal · L / S
-Unlabeled. Likely shape: a dialog shown once per version change, fed from
-CHANGELOG.md, last-seen version in `localStorage`. Mirror MyFinances #289.
 
 ### #226 — Weekly check-in · L / S
 Strictly opt-in, so it doesn't violate AGENTS.md's "clean run stays
