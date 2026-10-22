@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-22 (branch `feat/weekly-checkin`, v1.14.0)
+**Last reviewed:** 2026-10-22 (branch `fix/audit-polish-u5-u6`, v1.15.0)
 
 ## Rubric
 
