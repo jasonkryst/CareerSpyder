@@ -11,13 +11,15 @@ time; **(from review)** were flagged as minor/non-blocking by a code review
 and parked; **(from audit)** come from
 [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
 
-_Last reviewed 2026-10-22 against v1.13.0. Items verified as already
+_Last reviewed 2026-10-22 against v1.15.0. Items verified as already
 shipped (SMTP port 465 / implicit TLS, missed-run catch-up at startup, the
 1 MB import cap, the `/sources/test-preview` concurrency limit, friendly
 validation/preview errors (U2), the "Listing status" vs "Job status"
 filter labels (U4), `role="alert"` on form error banners (A3), the
 local-vs-Docker Python version mismatch, the `get_new_jobs` per-job bind
-parameters, and the digest subject line ignoring failures) were removed
+parameters, the digest subject line ignoring failures, required-field
+indication on the source form (U5), and the confirm-modal's non-JS
+fallback (U6)) were removed
 in that pass._
 
 ## Security & access
@@ -59,15 +61,18 @@ in that pass._
   extraction for supported platforms, and a filter UI control. A Lever-only first cut
   would be much smaller.
 
-## UI, UX & accessibility
-
-- **Smaller UX/accessibility polish items (from audit).** No
-  required-field indication on the source form (U5); the confirm-modal
-  has no non-JS fallback, so Delete/Import submit with zero warning if JS
-  is blocked (U6). See the audit for details.
-
 ## Testing & tooling
 
 - **No settings-survives-a-restart test (from review).** `/settings`
   writes are covered unit-wise, but nothing simulates a container restart
   to confirm persisted settings actually reload correctly.
+- **Whole-page substring assertions are fragile now that every page embeds
+  the current release's CHANGELOG.md prose (the "What's New" modal, #241).**
+  `app/web/whats_new.py::whats_new_html` only renders the one version
+  section matching the running `app_version`, so this only bites when a
+  release's own changelog wording happens to contain a string some
+  unrelated test asserts is absent from `resp.text` (hit once already:
+  `test_settings_data_import_form_has_confirm_guard` broke on a v1.15.0
+  entry mentioning `window.confirm()`, fixed by scoping the assertion to
+  the specific form element). Prefer scoping a new "X is absent" assertion
+  to the element/container it's actually about rather than the whole page.

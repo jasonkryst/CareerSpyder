@@ -651,11 +651,21 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
 
 
 def test_settings_data_import_form_has_confirm_guard(client):
+    from bs4 import BeautifulSoup
+
     resp = client.get("/settings/data")
+    soup = BeautifulSoup(resp.text, "html.parser")
 
     assert 'id="import-form"' in resp.text
     assert 'data-confirm-message="Importing will replace your entire source list. Continue?"' in resp.text
-    assert "confirm(" not in resp.text
+    # Scoped to the form itself, not the whole page: the footer's "What's
+    # New" modal (every page) renders prose from CHANGELOG.md that can
+    # legitimately mention "confirm(" (e.g. describing the confirm-modal.js
+    # fallback) without that being the old inline-onclick pattern this
+    # guards against.
+    import_form = soup.find(id="import-form")
+    assert import_form is not None
+    assert "confirm(" not in str(import_form)
 
 
 def test_post_preferences_rejects_malformed_email_and_does_not_save(client, admin_user_id):

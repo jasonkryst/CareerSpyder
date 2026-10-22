@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-10-22
+
+### Fixed
+
+- **Source form gave no indication of which fields were required for the selected source type (audit U5).** Each required field now shows a `*` marker, and the `required` attribute is toggled per-type in `showFieldsFor()` rather than left static — a static `required` on a field hidden by `display: none` silently blocks the whole form from submitting with no visible feedback, so it has to track the current selection exactly.
+- **Found while fixing U5: selecting "Lever" in the source form hid the Board token field entirely.** It lived only inside the Greenhouse-only `.type-fields` container; Lever's own container had no input at all, making it impossible to set a board token for a Lever source through the UI. No prior test created a Lever source through the form, so this went unnoticed. Same class of bug as issue #35's `url` field, which was already fixed correctly.
+- **Destructive-action confirmations (Delete source, Import settings) had no fallback if `<dialog>`/`showModal` wasn't supported (audit U6).** `confirm-modal.js` now falls back to `window.confirm()` in that case, instead of the form submitting immediately with no warning at all.
+
 ## [1.14.0] — 2026-10-22
 
 ### Added

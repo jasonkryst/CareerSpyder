@@ -386,6 +386,11 @@ th a:hover {
   font-size: 0.9375rem;
 }
 
+.required-mark {
+  color: var(--error-fg);
+  font-weight: 700;
+}
+
 code {
   background: var(--bg);
   border: 1px solid var(--border);

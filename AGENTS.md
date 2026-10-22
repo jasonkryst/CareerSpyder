@@ -126,6 +126,15 @@ existing tests — don't casually relax them:
   (`tests/web/e2e/conftest.py`) passes `bypass_csp=True` because
   Playwright's own `wait_for_function`/`expect` helpers use `eval()`
   internally — that's test-tooling only, not a CSP relaxation for users.
+- **`app/web/static/confirm-modal.js` falls back to `window.confirm()`
+  when `<dialog>`/`showModal` isn't supported** (audit U6), so a
+  destructive action (Delete source, Import settings) still warns on an
+  older browser. If JavaScript is blocked or fails to load entirely,
+  there is no fallback — the form submits immediately with no warning.
+  That full-no-JS case is an accepted trade-off (the `.type-fields`
+  show/hide in `source_form.html` already depends on JS the same way),
+  not an oversight; a real fix would need a server-side confirmation
+  step, which is out of scope for this low-priority gap.
 - **The Dockerfile's image-level user is root; the server process isn't.**
   `docker-entrypoint.sh` needs to run as root on every container start (to
   `chown` `/app/config` regardless of host ownership), then drops to uid
