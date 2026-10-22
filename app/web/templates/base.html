@@ -34,6 +34,7 @@
   <script src="/static/dashboard.js?v={{ app_version }}" defer></script>
   <script src="/static/confirm-modal.js?v={{ app_version }}" defer></script>
   <script src="/static/toast.js?v={{ app_version }}" defer></script>
+  <script src="/static/whats-new.js?v={{ app_version }}" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
@@ -84,7 +85,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <p>{{ app_name }} v{{ app_version }}</p>
+    <p><button type="button" id="whats-new-trigger" class="btn-link">{{ app_name }} v{{ app_version }}</button></p>
   </footer>
   <div id="toast-container" aria-live="polite" aria-atomic="true">
     {% if request.query_params.get("flash") %}
@@ -100,6 +101,13 @@
     <div class="modal-actions">
       <button type="button" id="confirm-modal-cancel">Cancel</button>
       <button type="button" id="confirm-modal-confirm" class="btn-primary">Confirm</button>
+    </div>
+  </dialog>
+  <dialog id="whats-new-modal" class="modal" aria-labelledby="whats-new-modal-title">
+    <h2 id="whats-new-modal-title">What's new in v{{ app_version }}</h2>
+    <div id="whats-new-modal-body">{{ whats_new_html|safe }}</div>
+    <div class="modal-actions">
+      <button type="button" id="whats-new-modal-close" class="btn-primary">Close</button>
     </div>
   </dialog>
 </body>

@@ -389,7 +389,7 @@ def test_dashboard_no_failed_sources_cell_is_empty(client):
     resp = client.get("/")
 
     assert resp.status_code == 200
-    assert "<ul" not in resp.text
+    assert "failed-sources-list" not in resp.text
 
 
 # --- URL check run row tests (issue #116) ---
@@ -451,7 +451,7 @@ def test_url_check_row_failed_sources_cell_is_empty(client):
 
     resp = client.get("/")
 
-    assert "<ul" not in resp.text
+    assert "failed-sources-list" not in resp.text
 
 
 def test_mixed_run_types_both_appear_in_dashboard(client):

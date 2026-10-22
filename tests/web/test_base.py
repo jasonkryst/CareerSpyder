@@ -157,6 +157,31 @@ def test_confirm_modal_js_is_served(client):
     assert "data-confirm-message" in resp.text
 
 
+def test_footer_version_is_a_whats_new_trigger_button(client):
+    resp = client.get("/")
+
+    assert 'id="whats-new-trigger"' in resp.text
+    assert f"v{version('careerspyder')}" in resp.text
+
+
+def test_whats_new_modal_markup_present_on_every_page(client):
+    resp = client.get("/")
+
+    assert 'id="whats-new-modal"' in resp.text
+    assert 'id="whats-new-modal-title"' in resp.text
+    assert 'id="whats-new-modal-body"' in resp.text
+    assert 'id="whats-new-modal-close"' in resp.text
+    assert 'aria-labelledby="whats-new-modal-title"' in resp.text
+
+
+def test_whats_new_js_is_served(client):
+    resp = client.get("/static/whats-new.js")
+
+    assert resp.status_code == 200
+    assert "showModal" in resp.text
+    assert "whats-new-trigger" in resp.text
+
+
 def test_style_css_has_filter_bar_and_sort_link_rules(client):
     resp = client.get("/static/style.css")
 
