@@ -19,10 +19,9 @@ def init_db(dsn: str) -> ConnectionPool:
 def get_new_jobs(conn: psycopg.Connection, user_id: str, jobs: list[Job]) -> list[Job]:
     if not jobs:
         return []
-    placeholders = ",".join(["%s"] * len(jobs))
     keys = [j.key for j in jobs]
     rows = conn.execute(
-        f"SELECT key FROM jobs WHERE user_id = %s AND key IN ({placeholders})", [user_id, *keys],
+        "SELECT key FROM jobs WHERE user_id = %s AND key = ANY(%s)", [user_id, keys],
     ).fetchall()
     known = {r[0] for r in rows}
     return [j for j in jobs if j.key not in known]
@@ -785,10 +784,15 @@ def get_user_by_email(conn: psycopg.Connection, email: str) -> dict | None:
 
 def list_users(conn: psycopg.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, username, email, role, is_active, created_at FROM users ORDER BY created_at"
+        "SELECT u.id, u.username, u.email, u.role, u.is_active, u.created_at, "
+        "(SELECT COUNT(*) FROM sources WHERE sources.user_id = u.id) AS source_count, "
+        "(SELECT COUNT(*) FROM jobs WHERE jobs.user_id = u.id AND jobs.removed_at IS NULL) "
+        "AS active_job_count "
+        "FROM users u ORDER BY u.created_at"
     ).fetchall()
     return [{"id": str(r[0]), "username": r[1], "email": r[2],
-             "role": r[3], "is_active": r[4], "created_at": str(r[5])} for r in rows]
+             "role": r[3], "is_active": r[4], "created_at": str(r[5]),
+             "source_count": r[6], "active_job_count": r[7]} for r in rows]
 
 
 def deactivate_user(conn: psycopg.Connection, user_id: str) -> None:
@@ -858,13 +862,65 @@ def release_invite(conn: psycopg.Connection, token: str) -> None:
 
 
 def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
+    """Every invite created by this admin, newest first, with a computed
+    `status` of 'pending', 'accepted', or 'expired' (expiry is also how a
+    revoked invite is represented -- see revoke_invite)."""
     rows = conn.execute(
-        "SELECT token, email, expires_at, used_at FROM invite_tokens "
-        "WHERE created_by = %s ORDER BY expires_at DESC",
+        "SELECT token, email, created_at, expires_at, used_at FROM invite_tokens "
+        "WHERE created_by = %s ORDER BY created_at DESC",
         (created_by,),
     ).fetchall()
-    return [{"token": str(r[0]), "email": r[1], "expires_at": str(r[2]),
-             "used_at": str(r[3]) if r[3] else None} for r in rows]
+    now = datetime.now(UTC)
+    result = []
+    for token, email, created_at, expires_at, used_at in rows:
+        if used_at is not None:
+            status = "accepted"
+        elif expires_at is not None and expires_at < now:
+            status = "expired"
+        else:
+            status = "pending"
+        result.append({
+            "token": str(token), "email": email, "created_at": str(created_at),
+            "expires_at": str(expires_at), "used_at": str(used_at) if used_at else None,
+            "status": status,
+        })
+    return result
+
+
+def revoke_invite(conn: psycopg.Connection, created_by: str, token: str) -> bool:
+    """Immediately expire a pending invite owned by created_by so it can no
+    longer be used to register. Returns False if the token doesn't exist,
+    isn't owned by created_by, or has already been accepted."""
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        return False
+    cur = conn.execute(
+        "UPDATE invite_tokens SET expires_at = NOW() "
+        "WHERE token = %s AND created_by = %s AND used_at IS NULL",
+        (token, created_by),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def resend_invite(conn: psycopg.Connection, created_by: str, token: str) -> dict | None:
+    """Invalidate an existing, not-yet-accepted invite owned by created_by and
+    issue a fresh one for the same email. Returns the new invite dict, or
+    None if the token doesn't exist, isn't owned by created_by, or has
+    already been accepted."""
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        return None
+    row = conn.execute(
+        "SELECT email FROM invite_tokens WHERE token = %s AND created_by = %s AND used_at IS NULL",
+        (token, created_by),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE invite_tokens SET expires_at = NOW() WHERE token = %s", (token,))
+    return create_invite(conn, row[0], created_by)
 
 
 # ---------------------------------------------------------------------------

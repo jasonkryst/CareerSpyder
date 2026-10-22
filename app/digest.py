@@ -69,10 +69,12 @@ def build_digest(
     statuses = statuses or {}
     secondary_source_ids = secondary_source_ids or set()
 
-    subject = (
-        f"CareerSpyder: {len(new_jobs)} {job_label}(s)" if new_jobs
-        else "CareerSpyder: run had failed sources"
-    )
+    subject_bits = []
+    if new_jobs:
+        subject_bits.append(f"{len(new_jobs)} {job_label}(s)")
+    if failed_sources:
+        subject_bits.append(f"{len(failed_sources)} source(s) failed")
+    subject = "CareerSpyder: " + ", ".join(subject_bits)
 
     parts: list[str] = []
     if searched_at is not None:

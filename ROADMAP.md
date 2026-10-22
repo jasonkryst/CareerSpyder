@@ -11,12 +11,14 @@ time; **(from review)** were flagged as minor/non-blocking by a code review
 and parked; **(from audit)** come from
 [docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
 
-_Last reviewed 2026-10-22 against v1.11.2. Items verified as already
+_Last reviewed 2026-10-22 against v1.13.0. Items verified as already
 shipped (SMTP port 465 / implicit TLS, missed-run catch-up at startup, the
 1 MB import cap, the `/sources/test-preview` concurrency limit, friendly
 validation/preview errors (U2), the "Listing status" vs "Job status"
-filter labels (U4), `role="alert"` on form error banners (A3), and the
-local-vs-Docker Python version mismatch) were removed in that pass._
+filter labels (U4), `role="alert"` on form error banners (A3), the
+local-vs-Docker Python version mismatch, the `get_new_jobs` per-job bind
+parameters, and the digest subject line ignoring failures) were removed
+in that pass._
 
 ## Security & access
 
@@ -29,15 +31,6 @@ local-vs-Docker Python version mismatch) were removed in that pass._
   the redirect URL's query string rather than in the session. Moving it
   into the session would be cleaner but is not exploitable (the message is
   HTML-escaped in the template). See SECURITY.md's residual-risks section.
-
-## Reliability & operations
-
-- **New-job lookup binds one SQL parameter per job (from review).**
-  `db.get_new_jobs` builds `key IN (%s, %s, …)` with one placeholder per
-  scraped job. PostgreSQL caps a single statement at 65,535 bound
-  parameters, and one large ATS board can already return 500+ postings.
-  Switching to `key = ANY(%s)` with a single list parameter removes the
-  limit (and the dynamic SQL) in one line.
 
 ## Features
 
@@ -65,10 +58,6 @@ local-vs-Docker Python version mismatch) were removed in that pass._
   Implementing requires: a `job_type` field on the `Job` model and DB schema, per-adapter
   extraction for supported platforms, and a filter UI control. A Lever-only first cut
   would be much smaller.
-- **Digest subject line doesn't mention failures when jobs also exist
-  (from review).** `app/digest.py::build_digest` only reflects the new-job
-  count in the subject when there are new jobs, even if the same run also
-  had source failures (e.g. it could read "5 new jobs, 2 sources failed").
 
 ## UI, UX & accessibility
 
