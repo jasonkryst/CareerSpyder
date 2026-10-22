@@ -66,3 +66,13 @@ in that pass._
 - **No settings-survives-a-restart test (from review).** `/settings`
   writes are covered unit-wise, but nothing simulates a container restart
   to confirm persisted settings actually reload correctly.
+- **Whole-page substring assertions are fragile now that every page embeds
+  the current release's CHANGELOG.md prose (the "What's New" modal, #241).**
+  `app/web/whats_new.py::whats_new_html` only renders the one version
+  section matching the running `app_version`, so this only bites when a
+  release's own changelog wording happens to contain a string some
+  unrelated test asserts is absent from `resp.text` (hit once already:
+  `test_settings_data_import_form_has_confirm_guard` broke on a v1.15.0
+  entry mentioning `window.confirm()`, fixed by scoping the assertion to
+  the specific form element). Prefer scoping a new "X is absent" assertion
+  to the element/container it's actually about rather than the whole page.
