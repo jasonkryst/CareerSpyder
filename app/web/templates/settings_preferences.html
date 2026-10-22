@@ -63,6 +63,8 @@
       {% if "applied" in digest_exclude_statuses_set %}checked{% endif %}> Applied</label>
     <label><input type="checkbox" name="digest_exclude_statuses" value="accepted"
       {% if "accepted" in digest_exclude_statuses_set %}checked{% endif %}> Accepted</label>
+    <p class="hint">Weekly check-in: on quiet weeks (nothing new, nothing failed) CareerSpyder normally stays silent.</p>
+    <label><input type="checkbox" name="send_weekly_checkin" {% if settings.send_weekly_checkin %}checked{% endif %}> Send a brief check-in email on Sunday even when there's nothing new</label>
   </fieldset>
 </div>
 

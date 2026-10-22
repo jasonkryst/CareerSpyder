@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-10-22
+
+### Added
+
+- **Opt-in weekly check-in email** ([#226](https://github.com/jasonkryst/CareerSpyder/issues/226)). A new `/settings/preferences` checkbox ("Send a brief check-in email on Sunday even when there's nothing new") lets a user get a minimal "No new jobs this week. N source(s) configured, all healthy." email on quiet weeks. Off by default — the "clean run stays silent" behavior is unchanged unless a user explicitly opts in, and even then only fires on Sunday.
+
 ## [1.13.0] — 2026-10-22
 
 ### Added

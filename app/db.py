@@ -185,7 +185,8 @@ def count_runs(conn: psycopg.Connection, *, failures: str | None = None, user_id
 def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
     row = conn.execute(
         "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs, "
-        "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses "
+        "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses, "
+        "send_weekly_checkin "
         "FROM settings WHERE user_id = %s",
         (user_id,),
     ).fetchone()
@@ -198,6 +199,7 @@ def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
         "hide_not_interested_on_map": row[7],
         "digest_max_per_company": row[8] or 0,
         "digest_exclude_statuses": row[9] or "",
+        "send_weekly_checkin": row[10],
     }
 
 
@@ -230,20 +232,22 @@ def save_preferences(
     hide_not_interested_on_map: bool = True,
     digest_max_per_company: int = 0,
     digest_exclude_statuses: str = "",
+    send_weekly_checkin: bool = False,
 ) -> None:
     conn.execute(
         "INSERT INTO settings "
         "(user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map, "
-        "digest_max_per_company, digest_exclude_statuses) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "digest_max_per_company, digest_exclude_statuses, send_weekly_checkin) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
         "ON CONFLICT(user_id) DO UPDATE SET "
         "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, "
         "email_to=excluded.email_to, "
         "hide_not_interested_on_map=excluded.hide_not_interested_on_map, "
         "digest_max_per_company=excluded.digest_max_per_company, "
-        "digest_exclude_statuses=excluded.digest_exclude_statuses",
+        "digest_exclude_statuses=excluded.digest_exclude_statuses, "
+        "send_weekly_checkin=excluded.send_weekly_checkin",
         (user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map,
-         digest_max_per_company, digest_exclude_statuses),
+         digest_max_per_company, digest_exclude_statuses, send_weekly_checkin),
     )
     conn.commit()
 

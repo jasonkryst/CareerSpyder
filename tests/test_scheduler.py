@@ -63,6 +63,81 @@ def test_run_and_notify_sends_email_when_digest_present(pg_dsn, monkeypatch):
         pool.close()
 
 
+def test_run_and_notify_forces_checkin_on_sunday_when_preference_is_on(pg_dsn, monkeypatch):
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setattr(scheduler, "_today_code", lambda tz: "sun")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_id = _seed_user(conn)
+            _configure(conn, user_id)
+            db.save_preferences(
+                conn, user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+                send_weekly_checkin=True,
+            )
+
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": [], "run_id": 1})()
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={user_id: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=Digest("Subj", "<p>Body</p>")) as mock_digest:
+            scheduler.run_and_notify(pool)
+
+        assert mock_digest.call_args.kwargs["force_checkin"] is True
+        assert mock_digest.call_args.kwargs["source_count"] == 0
+    finally:
+        pool.close()
+
+
+def test_run_and_notify_does_not_force_checkin_when_preference_is_off(pg_dsn, monkeypatch):
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setattr(scheduler, "_today_code", lambda tz: "sun")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_id = _seed_user(conn)
+            _configure(conn, user_id)  # send_weekly_checkin defaults to False
+
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": [], "run_id": 1})()
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={user_id: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=None) as mock_digest:
+            scheduler.run_and_notify(pool)
+
+        assert mock_digest.call_args.kwargs["force_checkin"] is False
+    finally:
+        pool.close()
+
+
+def test_run_and_notify_does_not_force_checkin_on_a_non_sunday_even_when_preference_is_on(pg_dsn, monkeypatch):
+    from psycopg_pool import ConnectionPool
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setattr(scheduler, "_today_code", lambda tz: "mon")
+    pool = ConnectionPool(pg_dsn, min_size=1, max_size=2, open=True)
+    try:
+        with pool.connection() as conn:
+            user_id = _seed_user(conn)
+            _configure(conn, user_id)
+            db.save_preferences(
+                conn, user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+                send_weekly_checkin=True,
+            )
+
+        fake_summary = type("S", (), {"new_jobs": [], "failed_sources": [], "run_id": 1})()
+
+        with patch("app.scheduler.db.list_all_sources_by_user", return_value={user_id: []}), \
+             patch("app.scheduler.orchestrator.run_once", return_value=fake_summary), \
+             patch("app.scheduler.digest.build_digest", return_value=None) as mock_digest:
+            scheduler.run_and_notify(pool)
+
+        assert mock_digest.call_args.kwargs["force_checkin"] is False
+    finally:
+        pool.close()
+
+
 def test_run_and_notify_skips_email_when_digest_is_none(pg_dsn, monkeypatch):
     from psycopg_pool import ConnectionPool
     monkeypatch.setenv("SMTP_PASSWORD", "secret")

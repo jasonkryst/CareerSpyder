@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-22 (branch `feat/whats-new-modal`, v1.13.0)
+**Last reviewed:** 2026-10-22 (branch `feat/weekly-checkin`, v1.14.0)
 
 ## Rubric
 
@@ -30,7 +30,6 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 |---|---|---|---|---|
 | 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
 | 1 | [#213](https://github.com/jasonkryst/CareerSpyder/issues/213) | Live run progress feedback during "Run now" | H | M |
-| 2 | [#226](https://github.com/jasonkryst/CareerSpyder/issues/226) | Digest — opt-in weekly check-in on clean runs | L | S |
 | 3 | [#222](https://github.com/jasonkryst/CareerSpyder/issues/222) | Bulk job status update via multi-select | M | M |
 | 3 | [#220](https://github.com/jasonkryst/CareerSpyder/issues/220) | Per-job notes field | M | M |
 | 3 | [#221](https://github.com/jasonkryst/CareerSpyder/issues/221) | Settings import — diff/preview before commit | M | M |
@@ -55,10 +54,6 @@ Highest-impact open feature: a 30-source run can take minutes with no
 feedback. Option B (polling `GET /run-status` JSON) fits the dashboard's
 existing auto-refresh polling and e2e coverage better than SSE.
 
-### #226 — Weekly check-in · L / S
-Strictly opt-in, so it doesn't violate AGENTS.md's "clean run stays
-silent" constraint — but update that constraint's wording when it lands.
-
 ### #222, #220, #221 — Jobs/import workflow · M / M
 #222 and #225 share a checkbox + bulk-toolbar pattern; build it once.
 #221 needs a two-step flow with a session-held confirmation token.
@@ -82,6 +77,7 @@ scoring function can be built and unit-tested standalone first.
 | #241 | "What's New" modal | Clicking the version number in the footer opens a dialog with the current release's `CHANGELOG.md` entry, server-rendered by `app/web/whats_new.py`. `v1.13.0`. |
 | #216 | Admin users page — per-user job and source counts | `db.list_users` returns `source_count`/`active_job_count`; `/users` renders them as two new columns. `v1.13.0`. |
 | #217 | Invite management — expiry date, resend, revoke | `/users` lists every invite with a Pending/Accepted/Expired badge; `db.revoke_invite`/`db.resend_invite` (scoped to the creating admin) back new `POST /users/invites/{token}/revoke` and `POST /users/invite/resend` routes. `v1.13.0`. |
+| #226 | Digest — opt-in weekly check-in on clean runs | `send_weekly_checkin` preference (off by default) in `/settings/preferences`; `build_digest`'s `force_checkin` param returns a minimal "all clear" digest instead of `None`, only on Sunday. `v1.14.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 

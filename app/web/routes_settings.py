@@ -165,6 +165,7 @@ async def save_preferences(
     email_days = ",".join(day for day in DAY_CODES if day in selected_days)
     resend_jobs = "resend_jobs" in form
     hide_not_interested_on_map = "hide_not_interested_on_map" in form
+    send_weekly_checkin = "send_weekly_checkin" in form
     submitted_emails = [addr.strip() for addr in _str_list_field(form, "email_to") if addr.strip()]
 
     raw_max = form.get("digest_max_per_company")
@@ -214,6 +215,7 @@ async def save_preferences(
             conn, current_user["id"], email_days, resend_jobs, email_to, hide_not_interested_on_map,
             digest_max_per_company=digest_max_per_company,
             digest_exclude_statuses=digest_exclude_statuses,
+            send_weekly_checkin=send_weekly_checkin,
         )
     return flash_redirect("/settings/preferences", "Preferences saved.")
 
@@ -233,7 +235,7 @@ def clear_cache(
 
 DEFAULT_PREFERENCES = {
     "email_days": [], "resend_jobs": False, "email_to": [], "hide_not_interested_on_map": True,
-    "digest_max_per_company": 0, "digest_exclude_statuses": [],
+    "digest_max_per_company": 0, "digest_exclude_statuses": [], "send_weekly_checkin": False,
 }
 
 
@@ -252,11 +254,12 @@ def _export_payload(conn, user_id: str) -> dict:
             "digest_exclude_statuses": [
                 s for s in (settings["digest_exclude_statuses"] or "").split(",") if s
             ],
+            "send_weekly_checkin": settings["send_weekly_checkin"],
         }
     return {"sources": [s.model_dump() for s in sources], "preferences": preferences}
 
 
-def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, str] | None:
+def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, str, bool] | None:
     preferences = data.get("preferences")
     if preferences is None:
         return None
@@ -294,7 +297,14 @@ def _parse_preferences_import(data: dict) -> tuple[str, bool, str, bool, int, st
     else:
         digest_exclude_statuses = ""
 
-    return email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses
+    send_weekly_checkin = preferences.get("send_weekly_checkin")
+    if not isinstance(send_weekly_checkin, bool):
+        send_weekly_checkin = False
+
+    return (
+        email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max_per_company,
+        digest_exclude_statuses, send_weekly_checkin,
+    )
 
 
 @router.get("/settings/data/export")
@@ -346,10 +356,14 @@ async def import_settings(
     with request.app.state.pool.connection() as conn:
         count = db.import_sources(conn, current_user["id"], sources)
         if parsed_preferences is not None:
-            email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max, digest_excl = parsed_preferences
+            (
+                email_days, resend_jobs, email_to, hide_not_interested_on_map, digest_max,
+                digest_excl, send_weekly_checkin,
+            ) = parsed_preferences
             db.save_preferences(
                 conn, current_user["id"], email_days, resend_jobs, email_to, hide_not_interested_on_map,
                 digest_max_per_company=digest_max, digest_exclude_statuses=digest_excl,
+                send_weekly_checkin=send_weekly_checkin,
             )
 
     redirect_message = f"Imported {count} source(s)."

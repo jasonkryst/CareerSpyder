@@ -71,12 +71,19 @@ def _run_user(conn, user_id: str, sources: list, tz: str, force: bool) -> None:
     # into "Newly identified" / "Already identified" sections per company.
     emailed_keys = db.get_emailed_keys(conn, user_id, [j.key for j in jobs_to_send]) if resend else None
 
+    # Opt-in weekly check-in (#226): only on Sunday, and only if the user
+    # turned it on. Every other day stays silent on a clean run exactly as
+    # before -- this never fires when there's an actual digest to send.
+    force_checkin = _today_code(tz) == "sun" and bool(settings and settings.get("send_weekly_checkin"))
+
     d = digest.build_digest(
         jobs_to_send, summary.failed_sources, job_label,
         statuses=statuses, searched_at=datetime.now(UTC), jobs_url=jobs_url,
         secondary_source_ids=secondary_source_ids,
         emailed_keys=emailed_keys,
         max_per_company=(settings or {}).get("digest_max_per_company", 0),
+        force_checkin=force_checkin,
+        source_count=len(sources),
     )
     if d is None:
         return
