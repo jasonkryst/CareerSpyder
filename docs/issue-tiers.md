@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-22 (branch `docs/backlog-refresh`, v1.11.2)
+**Last reviewed:** 2026-10-22 (branch `feat/admin-invites-and-fixes`, v1.13.0)
 
 ## Rubric
 
@@ -30,8 +30,6 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 |---|---|---|---|---|
 | 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
 | 1 | [#213](https://github.com/jasonkryst/CareerSpyder/issues/213) | Live run progress feedback during "Run now" | H | M |
-| 2 | [#216](https://github.com/jasonkryst/CareerSpyder/issues/216) | Admin users page — per-user job and source counts | M | S |
-| 2 | [#217](https://github.com/jasonkryst/CareerSpyder/issues/217) | Invite management — expiry date, resend, revoke | M | S |
 | 2 | [#241](https://github.com/jasonkryst/CareerSpyder/issues/241) | "What's New" modal | L | S |
 | 2 | [#226](https://github.com/jasonkryst/CareerSpyder/issues/226) | Digest — opt-in weekly check-in on clean runs | L | S |
 | 3 | [#222](https://github.com/jasonkryst/CareerSpyder/issues/222) | Bulk job status update via multi-select | M | M |
@@ -40,10 +38,7 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 | 4 | [#225](https://github.com/jasonkryst/CareerSpyder/issues/225) | Sources list — bulk enable/disable | L | M |
 | 4 | [#91](https://github.com/jasonkryst/CareerSpyder/issues/91) | Auto-dedup engine for secondary sources | M | L |
 
-Untracked limitations (no issue filed) live in [ROADMAP.md](../ROADMAP.md);
-the cheapest of those — `db.get_new_jobs`' per-job bind parameters and the
-digest subject ignoring failures — are XS and could ride along with any
-Tier 2 PR.
+Untracked limitations (no issue filed) live in [ROADMAP.md](../ROADMAP.md).
 
 ### #240 — Pipeline security · H / XS
 Mostly in place already: the active "Default Branch Protection" ruleset on
@@ -60,10 +55,6 @@ settings — no code change.
 Highest-impact open feature: a 30-source run can take minutes with no
 feedback. Option B (polling `GET /run-status` JSON) fits the dashboard's
 existing auto-refresh polling and e2e coverage better than SSE.
-
-### #216, #217 — Admin page improvements · M / S
-Both self-contained in `/users`; #216 is a query + two columns, #217 a
-pending-invites section plus resend/revoke routes. Good to pair in one PR.
 
 ### #241 — "What's New" modal · L / S
 Unlabeled. Likely shape: a dialog shown once per version change, fed from
@@ -93,6 +84,8 @@ scoring function can be built and unit-tested standalone first.
 | # | Title | Evidence |
 |---|---|---|
 | #223 | Job status select — AJAX save to preserve scroll position | `jobs.html`'s status `<select>` saves via `fetch()` with a toast and no `onchange` submit; covered by `tests/web/e2e/test_job_status.py`. |
+| #216 | Admin users page — per-user job and source counts | `db.list_users` returns `source_count`/`active_job_count`; `/users` renders them as two new columns. `v1.13.0`. |
+| #217 | Invite management — expiry date, resend, revoke | `/users` lists every invite with a Pending/Accepted/Expired badge; `db.revoke_invite`/`db.resend_invite` (scoped to the creating admin) back new `POST /users/invites/{token}/revoke` and `POST /users/invite/resend` routes. `v1.13.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 

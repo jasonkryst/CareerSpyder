@@ -31,6 +31,16 @@ def test_includes_failed_sources_section():
     assert "failed" in result.subject.lower()
 
 
+def test_subject_mentions_both_new_jobs_and_failures():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [FailedSource("Bad Co"), FailedSource("Worse Co")])
+
+    assert "1 new job" in result.subject
+    assert "2 source" in result.subject
+    assert "failed" in result.subject.lower()
+
+
 def test_scraped_fields_are_html_escaped():
     jobs = [
         Job(

@@ -29,6 +29,58 @@
 </form>
 </div>
 
+{% if invites %}
+<div class="card">
+<h2>Invites</h2>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Email</th>
+      <th scope="col">Created</th>
+      <th scope="col">Expires</th>
+      <th scope="col">Status</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for inv in invites %}
+    <tr>
+      <td data-label="Email">{{ inv.email }}</td>
+      <td data-label="Created">{{ inv.created_at[:10] }}</td>
+      <td data-label="Expires">{{ inv.expires_at[:10] }}</td>
+      <td data-label="Status">
+        {% if inv.status == "accepted" %}Accepted
+        {% elif inv.status == "expired" %}<span class="badge-secondary">Expired</span>
+        {% else %}<span class="badge-secondary">Pending</span>
+        {% endif %}
+      </td>
+      <td data-label="Actions">
+        {% if inv.status == "pending" %}
+        <button type="button" class="btn-link" onclick="navigator.clipboard.writeText('{{ inv.url }}')">Copy link</button>
+        {% endif %}
+        {% if inv.status != "accepted" %}
+        <form method="post" action="/users/invite/resend" style="display:inline">
+          <input type="hidden" name="token" value="{{ inv.token }}">
+          <button type="submit" class="btn-link">Resend</button>
+        </form>
+        {% endif %}
+        {% if inv.status == "pending" %}
+        <form method="post" action="/users/invites/{{ inv.token }}/revoke" style="display:inline">
+          <button type="submit" class="btn-link btn-danger"
+            data-confirm-title="Revoke invite"
+            data-confirm-message="Revoke the invite for {{ inv.email }}? The link will stop working immediately.">Revoke</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endif %}
+
 <div class="card">
 <h2>All users</h2>
 <div class="table-scroll">
@@ -40,6 +92,8 @@
       <th scope="col">Role</th>
       <th scope="col">Status</th>
       <th scope="col">Joined</th>
+      <th scope="col">Sources</th>
+      <th scope="col">Jobs</th>
       <th scope="col">Actions</th>
     </tr>
   </thead>
@@ -51,6 +105,8 @@
       <td data-label="Role">{{ u.role }}</td>
       <td data-label="Status">{% if u.is_active %}Active{% else %}<span class="badge-secondary">Inactive</span>{% endif %}</td>
       <td data-label="Joined">{{ u.created_at[:10] }}</td>
+      <td data-label="Sources">{{ u.source_count }}</td>
+      <td data-label="Jobs">{{ u.active_job_count }}</td>
       <td data-label="Actions">
         {% if u.is_active and u.id != request.state.user.id %}
         <form method="post" action="/users/{{ u.id }}/deactivate" style="display:inline">
