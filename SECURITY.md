@@ -47,6 +47,17 @@ It is **not** designed for open-internet self-registration.
 | `SECRET_KEY` | Signs session cookies and password-reset links. Must be ≥ 32 random characters. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `PUBLIC_BASE_URL` | The site's canonical HTTPS URL. Enables `Secure` session cookies, and is used for invite/reset links. |
 | `ALLOWED_HOSTS` | Comma-separated hostnames the app will serve (e.g. `jobs.example.com,localhost`). Include `localhost` so Docker's healthcheck keeps working. When unset, all hosts are accepted. |
+| `TRUSTED_PROXIES` | Recommended behind a reverse proxy: comma-separated proxy IPs whose forwarded-for headers the rate limiter trusts (see [Rate limiting](#rate-limiting)). |
+
+### Rate limiting
+
+Login, registration, account recovery, and password reset are rate-limited
+per client IP; **Run now**, URL checks, test emails, and password changes
+are rate-limited per user. Limits are in-memory (per process). Behind a
+reverse proxy, set `TRUSTED_PROXIES` to the proxy's IP(s) so the limiter
+reads the client IP from `X-Forwarded-For` — without it every client
+shares the proxy's IP and one bucket. Forwarded headers from any other
+peer are ignored, so they can't be spoofed to dodge the limit.
 
 ### CSRF protection
 
@@ -105,8 +116,9 @@ reported as new findings:
   when unsupported crashes the browser process. See Task 13 in the
   [security remediation plan](docs/superpowers/plans/2026-09-27-security-remediation.md).
 - **Flash messages travel as query-string parameters (L6).** After a
-  redirect (e.g. "Source saved"), the success/error message is passed in
-  the URL's query string rather than in the session. This is cosmetic (the
+  redirect (e.g. "Source saved"), `app/web/flash.py` passes the
+  success/error message in the URL's query string rather than in the
+  session. This is cosmetic (the
   message is HTML-escaped in the template), not exploitable, but could be
   moved into the session for cleanliness. Tracked in
   [ROADMAP.md](ROADMAP.md).
@@ -114,12 +126,21 @@ reported as new findings:
   `<script>` blocks and has no nonce/hash plumbing. This is a known
   trade-off, not an oversight.
 
+## Supply chain and CI
+
+GitHub Actions are pinned by commit SHA and the Docker base images by
+digest; Dependabot proposes updates weekly. Every PR runs Ruff (including
+flake8-bandit rules), mypy, pytest, pip-audit, Trivy (filesystem and
+image), hadolint, and CodeQL. A repository ruleset on `master` requires
+these checks to pass, blocks merges on high-or-higher CodeQL/Trivy
+alerts, and rejects force-pushes and branch deletion.
+
 ## Audit history
 
 - **2026-09-27:** Comprehensive security audit covering auth, CSRF, SSRF,
   SQLi, rate limiting, session management, and CVE scanning. Remediated
   across three phases (v1.5.0 tenant isolation, v1.6.0 auth hardening,
-  v1.7.0 outbound requests) plus a fourth phase (this release) for
-  hardening and documentation.
+  v1.7.0 outbound requests) plus a fourth phase for hardening and
+  documentation.
 - **2026-09-04:** Full application audit (security, testing, a11y, i18n,
   performance, database, core functionality, devops/code quality).

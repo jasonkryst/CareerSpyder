@@ -7,9 +7,13 @@ see [README.md](../README.md).
 ## Getting started
 
 1. Open the web UI and go to **Sources**.
-2. Click **Add source**, pick a **Type**, and fill in its fields — see
+2. Click **Add source** and paste the employer's careers-page URL —
+   CareerSpyder detects the platform for most supported ATSes and
+   pre-fills the **Type** and its fields. Otherwise pick a **Type** and
+   fill in its fields yourself — see
    [Source types & examples](#source-types--examples) below for example
-   values.
+   values. If the platform isn't recognized, **Report as unsupported**
+   files (or pre-fills) a GitHub issue asking for it.
 3. Click **Test this source** to preview the jobs it currently finds
    before saving.
 4. Click **Save**.
@@ -19,9 +23,10 @@ see [README.md](../README.md).
    for the postings themselves, or wait for the digest email if new jobs
    were found.
 
-After that, CareerSpyder scrapes automatically once a day at the
-configured hour — no further action needed unless you're adding more
-sources or changing settings.
+After that, CareerSpyder scrapes automatically on its configured
+schedule (`RUN_CRON`, daily at 07:00 by default) — no further action
+needed unless you're adding more sources or changing settings. If the
+container was down when a run was due, it catches up on the next start.
 
 ## Web UI tour
 
@@ -31,11 +36,12 @@ displayed in your browser's local timezone.
 
 | Page | Purpose |
 |---|---|
-| Dashboard (`/`) | A **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, sortable table of past runs — start/finish time, new job count, failed source names — filterable by whether a run had failed sources. A **Refresh** button re-fetches the latest rows, and the page auto-refreshes itself every 10 seconds while a run is still in progress. |
-| Jobs (`/jobs`) | Every job ever found — company, search name, title/link (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected/Not Interested, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by company, source, location, removed/emailed status, and status. **Defaults to Active jobs only** on first load; select "All" from the Status filter to include removed jobs. A **Map view** link shows the same filtered jobs as pins on a map, clustered by proximity, with a job list popup per location and a fixed home-location marker — jobs whose location couldn't be resolved are excluded from the map but still filterable/visible in the table under "Other / Unresolved", and jobs marked Not Interested are excluded from the map by default (toggle in Preferences). |
-| Sources (`/sources`) | Sortable (name/type/company) and type-filterable table of configured sources with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
-| Settings → Email (`/settings/email`) | SMTP host/port/from address (the password is a container env var, not editable here). |
-| Settings → Data (`/settings/data`) | Clear the job dedup cache, and export/import `sources.json`. Importing asks for confirmation via a themed dialog before replacing the source list. |
+| Dashboard (`/`) | Stat cards (total jobs, new this week, sources, runs) and a **Run now** button (always triggers an immediate scrape, regardless of configured check days) at the top, plus a paginated, sortable table of past runs — start/finish time, new job count, "N / M sources failed" with links to each failed source — filterable by whether a run had failed sources. A **Refresh** button re-fetches the latest rows, and the page auto-refreshes itself every 10 seconds while a run is still in progress. |
+| Jobs (`/jobs`) | Every job ever found — company, search name, title/link (opens in a new tab), location, dates found/removed, age, emailed status, status (Applied/Ignored/Accepted/Rejected/Not Interested, with a per-job change history), and a summary where available. Sortable by company, title, date found, or age; filterable by free-text search (title + company), company, source, location, state, zip/radius, listing status, emailed, job status, and duplicates. Changing a job's status saves immediately without reloading the page. **Defaults to Active jobs only** on first load; select "All" from the **Listing status** filter to include removed jobs. A **Map view** link shows the same filtered jobs as pins on a map, clustered by proximity, with a job list popup per location and a fixed home-location marker — jobs whose location couldn't be resolved are excluded from the map but still filterable/visible in the table under "Other / Unresolved", and jobs marked Not Interested are excluded from the map by default (toggle in Preferences). |
+| Sources (`/sources`) | Sortable (name/type/company) and type-filterable table of configured sources, each with a last-run health badge (ok/failed/never), with Edit/Delete actions (delete asks for confirmation via a themed dialog) and an **Add source** button. |
+| Settings → Email (`/settings/email`) | SMTP host/port/from address (the password is a container env var, not editable here), plus a **Send test email** button. |
+| Settings → Data (`/settings/data`) | Clear the job dedup cache, and export/import a `settings.json` containing your sources and preferences. Importing asks for confirmation via a themed dialog, then adds or updates sources by id — it never deletes sources that aren't in the file. |
+| Settings → Account (`/settings/account`) | Change your password. Your other signed-in sessions are signed out. |
 | Settings → Preferences (`/settings/preferences`) | Theme, which days to check for jobs, resend behavior, digest recipients (validated email addresses), and whether Not Interested jobs are hidden from the map (on by default). |
 
 This app also has an in-app copy of this page at `/guide`, one click from
@@ -162,4 +168,5 @@ found in the target site's `cws_opts` JS object.
 ---
 
 `include_keywords` / `exclude_keywords` are optional on every type —
-case-insensitive title filters, matched against the job title only.
+case-insensitive filters matched against the job's title, company, and
+location.

@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-12 (branch `feat/quick-wins-phase2`, v1.10.0)
+**Last reviewed:** 2026-10-22 (branch `docs/backlog-refresh`, v1.11.2)
 
 ## Rubric
 
@@ -28,13 +28,71 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 
 | Tier | # | Title | Impact | Effort |
 |---|---|---|---|---|
+| 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
+| 1 | [#213](https://github.com/jasonkryst/CareerSpyder/issues/213) | Live run progress feedback during "Run now" | H | M |
+| 2 | [#216](https://github.com/jasonkryst/CareerSpyder/issues/216) | Admin users page — per-user job and source counts | M | S |
+| 2 | [#217](https://github.com/jasonkryst/CareerSpyder/issues/217) | Invite management — expiry date, resend, revoke | M | S |
+| 2 | [#241](https://github.com/jasonkryst/CareerSpyder/issues/241) | "What's New" modal | L | S |
+| 2 | [#226](https://github.com/jasonkryst/CareerSpyder/issues/226) | Digest — opt-in weekly check-in on clean runs | L | S |
+| 3 | [#222](https://github.com/jasonkryst/CareerSpyder/issues/222) | Bulk job status update via multi-select | M | M |
+| 3 | [#220](https://github.com/jasonkryst/CareerSpyder/issues/220) | Per-job notes field | M | M |
+| 3 | [#221](https://github.com/jasonkryst/CareerSpyder/issues/221) | Settings import — diff/preview before commit | M | M |
+| 4 | [#225](https://github.com/jasonkryst/CareerSpyder/issues/225) | Sources list — bulk enable/disable | L | M |
 | 4 | [#91](https://github.com/jasonkryst/CareerSpyder/issues/91) | Auto-dedup engine for secondary sources | M | L |
+
+Untracked limitations (no issue filed) live in [ROADMAP.md](../ROADMAP.md);
+the cheapest of those — `db.get_new_jobs`' per-job bind parameters and the
+digest subject ignoring failures — are XS and could ride along with any
+Tier 2 PR.
+
+### #240 — Pipeline security · H / XS
+Mostly in place already: the active "Default Branch Protection" ruleset on
+`master` requires `lint`, `typecheck`, `test`, `dependency-audit`,
+`build-scan-smoketest`, `Analyze Python`, and `CodeQL`; blocks deletion and
+force-push; and gates on CodeQL/Trivy code-scanning alerts (high or
+higher). Remaining gaps vs. BookWheel #257: `integration-test` and
+`trivy-fs` run in CI but aren't required checks; the admin role has
+"always" bypass (decide and record whether that's intended); and a
+disabled duplicate ruleset ("Protect Main") should be deleted. All repo
+settings — no code change.
+
+### #213 — Live run progress · H / M
+Highest-impact open feature: a 30-source run can take minutes with no
+feedback. Option B (polling `GET /run-status` JSON) fits the dashboard's
+existing auto-refresh polling and e2e coverage better than SSE.
+
+### #216, #217 — Admin page improvements · M / S
+Both self-contained in `/users`; #216 is a query + two columns, #217 a
+pending-invites section plus resend/revoke routes. Good to pair in one PR.
+
+### #241 — "What's New" modal · L / S
+Unlabeled. Likely shape: a dialog shown once per version change, fed from
+CHANGELOG.md, last-seen version in `localStorage`. Mirror MyFinances #289.
+
+### #226 — Weekly check-in · L / S
+Strictly opt-in, so it doesn't violate AGENTS.md's "clean run stays
+silent" constraint — but update that constraint's wording when it lands.
+
+### #222, #220, #221 — Jobs/import workflow · M / M
+#222 and #225 share a checkbox + bulk-toolbar pattern; build it once.
+#221 needs a two-step flow with a session-held confirmation token.
+
+### #225 — Bulk enable/disable sources · L / M
+Labeled `complexity:low`, but needs an `enabled` flag on every source
+model, an orchestrator skip, a migration, and new UI — re-scored to M.
 
 ### #91 — Auto-dedup engine · M / L
 Useful if secondary sources (Indeed/LinkedIn) are a big share of the feed;
 manual duplicate flagging (#82) covers it today. New table, similarity scoring,
 review UI, tests — a multi-day feature. Deliberately kept out of the v1.4.0 fix
-branch; brainstorm → spec → plan on its own branch before starting.
+branch; brainstorm → spec → plan on its own branch before starting. The
+scoring function can be built and unit-tested standalone first.
+
+## Already shipped — close
+
+| # | Title | Evidence |
+|---|---|---|
+| #223 | Job status select — AJAX save to preserve scroll position | `jobs.html`'s status `<select>` saves via `fetch()` with a toast and no `onchange` submit; covered by `tests/web/e2e/test_job_status.py`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 
