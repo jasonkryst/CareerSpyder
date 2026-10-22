@@ -73,9 +73,15 @@ existing tests — don't casually relax them:
   see below) and `tests/integration/` (`@pytest.mark.integration`, live
   sites, auto-skipped unless their env vars are set).
 - **The digest email is sent only if a run has ≥1 new job or ≥1 failed
-  source.** A clean run (nothing new, nothing failed) must stay silent —
-  `app/digest.py::build_digest` returns `None` in that case, and
-  `app/scheduler.py::run_and_notify` short-circuits on `None`.
+  source.** A clean run (nothing new, nothing failed) must stay silent by
+  default — `app/digest.py::build_digest` returns `None` in that case, and
+  `app/scheduler.py::run_and_notify` short-circuits on `None`. The one
+  exception is the opt-in `send_weekly_checkin` preference (off by
+  default): when a user has turned it on, `build_digest`'s `force_checkin`
+  returns a minimal "all clear" digest instead of `None`, but only on the
+  weekly check-in day (Sunday, per `app/scheduler.py::_run_user`) — every
+  other day, and every user who hasn't opted in, stays silent exactly as
+  before.
 - **Sources live in the per-user `sources` table** (config stored as
   JSONB), read fresh on every run and every `/sources` request — no
   restart needed after an edit. All reads/writes go through `app/db.py`

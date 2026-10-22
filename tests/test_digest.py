@@ -8,6 +8,36 @@ def test_returns_none_when_nothing_new_and_no_failures():
     assert build_digest([], []) is None
 
 
+def test_force_checkin_returns_none_is_overridden_by_an_all_clear_digest():
+    result = build_digest([], [], force_checkin=True, source_count=3)
+
+    assert result is not None
+    assert "no new jobs" in result.html_body.lower()
+    assert "3" in result.html_body
+
+
+def test_force_checkin_includes_the_searched_at_timestamp():
+    when = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
+
+    result = build_digest([], [], force_checkin=True, source_count=1, searched_at=when)
+
+    assert "2026" in result.html_body
+
+
+def test_force_checkin_is_a_no_op_when_there_is_actual_content():
+    jobs = [Job(key="1", title="Engineer", url="https://x.test/1", company="Acme", source_name="s")]
+
+    result = build_digest(jobs, [], force_checkin=True, source_count=1)
+
+    assert "2 new job" not in result.subject
+    assert "1 new job" in result.subject
+    assert "no new jobs" not in result.html_body.lower()
+
+
+def test_force_checkin_defaults_to_off():
+    assert build_digest([], [], source_count=5) is None
+
+
 def test_groups_new_jobs_by_company():
     jobs = [
         Job(key="1", title="Backend Engineer", url="https://x.test/1", company="Acme", source_name="s"),

@@ -222,7 +222,7 @@ CHANGELOG.md entry.
 | `/settings/email` | SMTP host/port/from address, plus a rate-limited **Send test email** button. The SMTP password is intentionally not present here (see [Secrets](#secrets)). |
 | `/settings/data` | Clear the job dedup cache (the next run will re-report every currently known job as new and may send a large digest email), and export/import a `settings.json` of your sources and preferences (max 1 MB; import adds or updates sources by id without deleting any, and asks for confirmation via a themed dialog first). |
 | `/settings/account` | Change your own password (signs out your other sessions). |
-| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, one or more recipient addresses (server-stored, validated client- and server-side), and whether Not Interested jobs are hidden from `/jobs/map` (on by default). |
+| `/settings/preferences` | Light/Dark/System theme choice (client-side, `localStorage` only). Also: which days of the week to check for jobs and send a digest, whether a still-listed job is resent every digest or emailed once ever, one or more recipient addresses (server-stored, validated client- and server-side), whether Not Interested jobs are hidden from `/jobs/map` (on by default), and an opt-in weekly check-in email sent on Sunday even when a run finds nothing new (off by default — a clean run otherwise stays silent). |
 
 CareerSpyder can also be installed as an app from your browser's
 install/Add to Home Screen prompt, for a standalone window and app icon.

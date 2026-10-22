@@ -114,6 +114,25 @@ def test_settings_preferences_page_unchecks_hide_not_interested_when_turned_off(
     assert 'name="hide_not_interested_on_map" checked' not in resp.text
 
 
+def test_settings_preferences_page_shows_weekly_checkin_checkbox_unchecked_by_default(client):
+    resp = client.get("/settings/preferences")
+
+    assert 'name="send_weekly_checkin"' in resp.text
+    assert 'name="send_weekly_checkin" checked' not in resp.text
+
+
+def test_settings_preferences_page_checks_weekly_checkin_when_stored(client, admin_user_id):
+    from app import db
+    db.save_preferences(
+        client.app.state.conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+        send_weekly_checkin=True,
+    )
+
+    resp = client.get("/settings/preferences")
+
+    assert 'name="send_weekly_checkin" checked' in resp.text
+
+
 def test_settings_preferences_page_shows_stored_recipients(client, admin_user_id):
     from app import db
     db.save_preferences(client.app.state.conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "a@x.test,b@x.test")
@@ -194,6 +213,32 @@ def test_post_preferences_unchecked_hide_not_interested_is_stored_as_false(clien
     from app import db
     settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is False
+
+
+def test_post_preferences_saves_weekly_checkin_when_checked(client, admin_user_id):
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon"],
+        "email_to": ["a@x.test"],
+        "send_weekly_checkin": "on",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    from app import db
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
+    assert settings["send_weekly_checkin"] is True
+
+
+def test_post_preferences_unchecked_weekly_checkin_is_stored_as_false(client, admin_user_id):
+    from app import db
+    db.save_preferences(
+        client.app.state.conn, admin_user_id, "mon,tue,wed,thu,fri,sat,sun", False, "to@x.test",
+        send_weekly_checkin=True,
+    )
+
+    client.post("/settings/preferences", data={"email_days": ["mon"], "email_to": ["a@x.test"]})
+
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
+    assert settings["send_weekly_checkin"] is False
 
 
 def test_post_preferences_drops_blank_recipient_rows(client, admin_user_id):
@@ -323,6 +368,7 @@ def test_get_export_settings_returns_sources_and_preferences_as_download(client,
         "hide_not_interested_on_map": True,
         "digest_max_per_company": 0,
         "digest_exclude_statuses": [],
+        "send_weekly_checkin": False,
     }
 
 
@@ -435,6 +481,61 @@ def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_t
 
     settings = db.get_settings(client.app.state.conn, admin_user_id)
     assert settings["hide_not_interested_on_map"] is True
+
+
+def test_post_import_settings_with_preferences_imports_send_weekly_checkin(client, admin_user_id):
+    import json
+    from urllib.parse import urlparse
+
+    from app import db
+
+    db.save_preferences(
+        client.app.state.conn, admin_user_id, "mon", True, "old@x.test", send_weekly_checkin=False,
+    )
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["tue"], "resend_jobs": False, "email_to": ["new@x.test"],
+            "send_weekly_checkin": True,
+        },
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert urlparse(resp.headers["location"]).path == "/settings/data"
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
+    assert settings["send_weekly_checkin"] is True
+
+
+def test_post_import_settings_with_malformed_send_weekly_checkin_falls_back_to_false(client, admin_user_id):
+    import json
+
+    from app import db
+
+    db.save_preferences(
+        client.app.state.conn, admin_user_id, "mon", True, "old@x.test", send_weekly_checkin=True,
+    )
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {
+            "email_days": ["tue"], "resend_jobs": False, "email_to": ["new@x.test"],
+            "send_weekly_checkin": "yes",
+        },
+    }).encode()
+
+    client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    settings = db.get_settings(client.app.state.conn, admin_user_id)
+    assert settings["send_weekly_checkin"] is False
 
 
 def test_post_import_settings_without_preferences_key_leaves_stored_preferences_untouched(client, admin_user_id):
