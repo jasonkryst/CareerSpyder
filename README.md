@@ -205,7 +205,9 @@ redeploys.
 
 Every save, update, or delete action across these pages shows a brief
 toast confirmation in the top-right corner. Dates are stored as UTC but
-displayed in your browser's local timezone.
+displayed in your browser's local timezone. Clicking the version number in
+the footer (any page) opens a "What's new" dialog showing that release's
+CHANGELOG.md entry.
 
 | Page | Purpose |
 |---|---|

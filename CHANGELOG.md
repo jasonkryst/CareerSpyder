@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-10-22
+
+### Added
+
+- **"What's New" modal** ([#241](https://github.com/jasonkryst/CareerSpyder/issues/241)). Clicking the version number in the footer (any page) opens a dialog showing the current release's `CHANGELOG.md` entry. The content is read from `CHANGELOG.md` once at process startup and rendered server-side (`app/web/whats_new.py`) — no runtime fetch, so no CSP relaxation is needed for it.
+
 ## [1.12.0] — 2026-10-22
 
 ### Changed
