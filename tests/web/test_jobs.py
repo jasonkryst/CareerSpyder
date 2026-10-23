@@ -526,12 +526,52 @@ def test_post_bulk_status_rejects_invalid_status(client):
     assert resp.status_code == 400
 
 
+def test_post_bulk_status_rejects_empty_status(client):
+    # The toolbar's status <select> has no selectable blank option (a disabled
+    # placeholder occupies value=""), so an empty submission means something
+    # bypassed the form -- treat it as a 400, never a silent status-clear.
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": ""})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_status_none_sentinel_clears_status(client):
+    conn = client.app.state.conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_status(conn, uid, "k1", "applied")
+
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": "none"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_jobs_page_bulk_status_select_has_no_default_destructive_option(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    select = soup.select_one('#bulk-status-form select[name="status"]')
+    assert select is not None
+    assert select.has_attr("required")
+    placeholder = select.find("option", attrs={"value": ""})
+    assert placeholder is not None
+    assert placeholder.has_attr("disabled")
+    assert placeholder.has_attr("selected")
+    clear_option = select.find("option", attrs={"value": "none"})
+    assert clear_option is not None
+
+
 def test_post_bulk_status_rejects_more_than_200_keys(client):
-    keys = [f"k{i}" for i in range(201)]
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="real1")], db.start_run(conn), user_id=owner_id_for(conn))
+    keys = ["real1", *[f"k{i}" for i in range(200)]]  # 201 total, one real key
 
     resp = client.post("/jobs/bulk-status", data={"keys": keys, "status": "applied"})
 
     assert resp.status_code == 400
+    assert db.list_jobs(conn)[0]["status"] is None
 
 
 def test_post_bulk_status_with_no_keys_flashes_zero(client):

@@ -426,3 +426,17 @@ def test_run_once_clears_progress_even_when_a_step_raises(pg_conn, monkeypatch):
     with pytest.raises(RuntimeError):
         orchestrator.run_once(conn, [], user_id=uid)
     assert run_progress.get(uid) is None
+
+
+def test_run_once_clears_progress_when_start_run_itself_raises(pg_conn, monkeypatch):
+    import pytest
+
+    from app import run_progress
+
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    monkeypatch.setattr(db, "start_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError):
+        orchestrator.run_once(conn, [], user_id=uid)
+    assert run_progress.get(uid) is None

@@ -397,6 +397,28 @@ def test_post_import_settings_replaces_sources_and_redirects(client, admin_user_
         assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
 
 
+def test_post_import_force_as_query_param_also_commits_immediately(client, admin_user_id):
+    import json
+    from urllib.parse import parse_qs, urlparse
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new2", "name": "New2", "type": "lever", "board_token": "new2"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import?force=1",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Imported 1 source(s)."]
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new2"]
+
+
 def test_post_import_settings_with_preferences_overwrites_stored_preferences(client, admin_user_id):
     import json
     from urllib.parse import parse_qs, urlparse
@@ -849,6 +871,21 @@ def test_post_import_rejects_oversized_file(client):
     assert "too large" in resp.text.lower()
 
 
+def test_post_import_confirm_step_also_rejects_an_oversized_sources_json(client):
+    # Starlette's Request.form() itself caps a single field at 1 MiB by
+    # default and turns the overage into HTTPException(400) before the
+    # route's own 413 check ever sees it -- either way, nothing this large
+    # reaches json.loads/SourcesFile validation unbounded.
+    oversized = "x" * (1 * 1024 * 1024 + 1)
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": oversized},
+    )
+
+    assert resp.status_code == 400
+
+
 def test_post_import_accepts_file_at_exactly_the_size_limit(client):
     import json
 
@@ -984,6 +1021,29 @@ def test_post_import_without_force_shows_preview_and_does_not_write(client, admi
         assert db.list_sources(conn, admin_user_id) == []
 
 
+def test_post_import_preview_accepts_a_utf16_encoded_file(client, admin_user_id):
+    import json
+
+    from app import db
+
+    # json.loads auto-detects UTF-16/32 by BOM, so a Notepad "Unicode" save
+    # validates fine -- the preview must not then crash trying to re-encode
+    # the parsed data as UTF-8 text for the confirm step's hidden field.
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode("utf-16")
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 200
+    assert "New" in resp.text
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
+
+
 def test_post_import_confirm_step_writes_the_previewed_sources(client, admin_user_id):
     import json
 
@@ -1006,6 +1066,41 @@ def test_post_import_confirm_step_writes_the_previewed_sources(client, admin_use
     assert resp.status_code == 303
     with client.app.state.pool.connection() as conn:
         assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
+
+
+def test_post_import_confirm_round_trips_the_rendered_hidden_field(client, admin_user_id):
+    import json
+
+    from bs4 import BeautifulSoup
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{
+            "id": "new3", "name": 'A "Co" & <Sons>', "type": "lever", "board_token": "new3",
+        }],
+    }).encode()
+
+    preview = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+    soup = BeautifulSoup(preview.text, "html.parser")
+    hidden = soup.select_one('input[name="sources_json"]')
+    assert hidden is not None
+    rendered_json = hidden["value"]
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": rendered_json},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        sources = db.list_sources(conn, admin_user_id)
+    assert [s.id for s in sources] == ["new3"]
+    assert sources[0].name == 'A "Co" & <Sons>'
 
 
 def test_post_import_preview_shows_updated_and_unchanged_sources(client, admin_user_id):

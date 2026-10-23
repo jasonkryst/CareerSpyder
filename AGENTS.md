@@ -128,8 +128,14 @@ existing tests — don't casually relax them:
   internally — that's test-tooling only, not a CSP relaxation for users.
 - **`app/web/static/confirm-modal.js` falls back to `window.confirm()`
   when `<dialog>`/`showModal` isn't supported** (audit U6), so a
-  destructive action (Delete source, Import settings) still warns on an
-  older browser. If JavaScript is blocked or fails to load entirely,
+  destructive action (Delete source, Clear job cache) still warns on an
+  older browser. Settings import (`/settings/data/import`) no longer uses
+  this guard at all — uploading a file now renders a diff preview (added/
+  updated/unchanged sources, changed preference keys) and nothing is
+  written until a second "Confirm import" submit, which replaces the old
+  blind confirm-modal dialog with an informed one; the one-step behavior
+  survives as a `force=1` escape hatch for scripted imports. If JavaScript
+  is blocked or fails to load entirely,
   there is no fallback — the form submits immediately with no warning.
   That full-no-JS case is an accepted trade-off (the `.type-fields`
   show/hide in `source_form.html` already depends on JS the same way),

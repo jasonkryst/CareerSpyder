@@ -94,8 +94,9 @@
 <form method="post" action="/jobs/bulk-status" id="bulk-status-form" class="bulk-status-toolbar" hidden>
   <span id="bulk-selected-count">0 selected</span>
   <label>Set status
-    <select name="status">
-      <option value="">Clear status</option>
+    <select name="status" required>
+      <option value="" disabled selected>Choose status&hellip;</option>
+      <option value="none">Clear status</option>
       {% for value, label in statuses.items() %}
       <option value="{{ value }}">{{ label }}</option>
       {% endfor %}

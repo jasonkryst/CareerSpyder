@@ -373,12 +373,20 @@ async def import_settings(
                 request, "settings_data.html", {"error": "Choose a file to import."}, status_code=400,
             )
         raw = await upload.read()
-        if len(raw) > _IMPORT_MAX_BYTES:
-            return templates.TemplateResponse(
-                request, "settings_data.html",
-                {"error": "Import file is too large (max 1 MB)."},
-                status_code=413,
-            )
+
+    # Starlette's own Request.form() already caps any single field (so also
+    # "sources_json" on the confirm path, not just the uploaded file) at 1 MiB
+    # by default and turns an oversized one into HTTPException(400) before this
+    # line ever runs. This check stays as explicit, resilient defense-in-depth
+    # -- it's one coherent limit applied by this route's own logic rather than
+    # one path depending on an unstated framework default -- and it's what
+    # produces the friendlier themed error on the upload path.
+    if len(raw) > _IMPORT_MAX_BYTES:
+        return templates.TemplateResponse(
+            request, "settings_data.html",
+            {"error": "Import file is too large (max 1 MB)."},
+            status_code=413,
+        )
 
     try:
         data = json.loads(raw)
@@ -404,7 +412,7 @@ async def import_settings(
         return templates.TemplateResponse(request, "settings_data.html", {
             "preview": {
                 "diff": diff, "pref_diff": pref_diff,
-                "sources_json": raw.decode("utf-8"),
+                "sources_json": json.dumps(data),
                 "added_count": len(diff["added"]), "updated_count": len(diff["updated"]),
                 "unchanged_count": len(diff["unchanged"]),
             },
