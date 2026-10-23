@@ -547,7 +547,7 @@ def test_post_bulk_status_only_updates_the_callers_own_jobs(client, member_user_
 
     client.post("/jobs/bulk-status", data={"keys": ["mine", "theirs"], "status": "applied"})
 
-    theirs_status = [r["status"] for r in db.list_jobs(conn) if r["key"] == "theirs"][0]
+    theirs_status = next(r["status"] for r in db.list_jobs(conn) if r["key"] == "theirs")
     assert theirs_status is None
 
 

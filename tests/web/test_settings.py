@@ -660,22 +660,20 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
         assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["s1"]
 
 
-def test_settings_data_import_form_has_confirm_guard(client):
+def test_settings_data_import_form_has_no_blind_confirm_guard(client):
     from bs4 import BeautifulSoup
 
     resp = client.get("/settings/data")
     soup = BeautifulSoup(resp.text, "html.parser")
 
+    # The diff preview page (shown after upload, before any write) replaced
+    # the old blind "Continue?" confirm-modal guard on the upload form --
+    # it never needed one since nothing is written at this point.
     assert 'id="import-form"' in resp.text
-    assert 'data-confirm-message="Importing will replace your entire source list. Continue?"' in resp.text
-    # Scoped to the form itself, not the whole page: the footer's "What's
-    # New" modal (every page) renders prose from CHANGELOG.md that can
-    # legitimately mention "confirm(" (e.g. describing the confirm-modal.js
-    # fallback) without that being the old inline-onclick pattern this
-    # guards against.
     import_form = soup.find(id="import-form")
     assert import_form is not None
-    assert "confirm(" not in str(import_form)
+    assert import_form.get("data-confirm-title") is None
+    assert import_form.get("data-confirm-message") is None
 
 
 def test_post_preferences_rejects_malformed_email_and_does_not_save(client, admin_user_id):
@@ -963,3 +961,94 @@ def test_import_keeps_only_the_first_five_recipients(client, admin_user_id):
     with client.app.state.pool.connection() as conn:
         settings = db.get_settings(conn, admin_user_id)
     assert settings["email_to"].count(",") == 4  # 5 addresses, 4 commas
+
+
+def test_post_import_without_force_shows_preview_and_does_not_write(client, admin_user_id):
+    import json
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 200
+    assert "New" in resp.text
+    assert "Added" in resp.text
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
+
+
+def test_post_import_confirm_step_writes_the_previewed_sources(client, admin_user_id):
+    import json
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+    client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": payload.decode()},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
+
+
+def test_post_import_preview_shows_updated_and_unchanged_sources(client, admin_user_id):
+    import json
+
+    from app import config, db
+
+    existing = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    with client.app.state.pool.connection() as conn:
+        db.add_source(conn, admin_user_id, existing)
+    payload = json.dumps({"sources": [
+        {"id": "s1", "name": "Acme Renamed", "type": "greenhouse", "board_token": "acme"},
+    ]}).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert "Acme Renamed" in resp.text
+    assert "Updated" in resp.text
+
+
+def test_post_import_preview_shows_preference_changes(client, admin_user_id):
+    import json
+
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {"email_days": ["tue"], "resend_jobs": True, "email_to": ["new@x.test"]},
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert "new@x.test" in resp.text
+
+
+def test_post_import_invalid_json_still_errors_at_preview_time(client):
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", b"not json", "application/json")},
+    )
+
+    assert resp.status_code == 400

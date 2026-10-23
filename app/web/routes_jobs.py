@@ -235,7 +235,7 @@ async def bulk_update_job_status(
     current_user: dict = Depends(require_user),
 ):
     form = await request.form()
-    keys = form.getlist("keys")
+    keys = [k for k in form.getlist("keys") if isinstance(k, str)]
     status = _form_str(dict(form.items()), "status") or None
     if status is not None and status not in STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
