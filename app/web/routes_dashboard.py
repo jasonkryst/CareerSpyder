@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from psycopg_pool import ConnectionPool
 
-from app import checker, db
+from app import checker, db, run_progress
 from app.orchestrator import _run_lock
 from app.scheduler import run_and_notify
 from app.web import ratelimit
@@ -73,6 +73,14 @@ def run_now(
         force=True, only_user_id=only_user_id,
     )
     return RedirectResponse(url="/", status_code=303)
+
+
+@router.get("/run-status")
+def run_status(current_user: dict = Depends(require_user)):
+    progress = run_progress.get(current_user["id"])
+    if progress is None:
+        return {"running": False}
+    return {"running": True, **progress}
 
 
 def _run_url_check(pool: ConnectionPool, run_id: int, user_id: str | None = None) -> None:
