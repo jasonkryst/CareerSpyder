@@ -385,6 +385,7 @@ def test_post_import_settings_replaces_sources_and_redirects(client, admin_user_
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -415,6 +416,7 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -448,6 +450,7 @@ def test_post_import_settings_with_preferences_imports_hide_not_interested_on_ma
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -476,6 +479,7 @@ def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_t
     client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -503,6 +507,7 @@ def test_post_import_settings_with_preferences_imports_send_weekly_checkin(clien
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -531,6 +536,7 @@ def test_post_import_settings_with_malformed_send_weekly_checkin_falls_back_to_f
     client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -550,6 +556,7 @@ def test_post_import_settings_without_preferences_key_leaves_stored_preferences_
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -577,6 +584,7 @@ def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -600,6 +608,7 @@ def test_post_import_settings_with_preferences_shows_toast_after_redirect(client
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
     )
 
     assert resp.status_code == 200
@@ -618,6 +627,7 @@ def test_post_import_settings_without_preferences_shows_toast_after_redirect(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
     )
 
     assert resp.status_code == 200
@@ -726,6 +736,7 @@ def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -849,6 +860,7 @@ def test_post_import_accepts_file_at_exactly_the_size_limit(client):
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", padded, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -944,6 +956,7 @@ def test_import_keeps_only_the_first_five_recipients(client, admin_user_id):
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
