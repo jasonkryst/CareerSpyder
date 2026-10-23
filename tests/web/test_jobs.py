@@ -613,6 +613,16 @@ def test_jobs_page_escapes_html_in_notes(client):
     assert "&lt;script&gt;" in resp.text
 
 
+def test_jobs_page_shows_notes_column_and_edit_button(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'id="notes-modal"' in resp.text
+    assert 'class="notes-btn icon-btn"' in resp.text
+
+
 def test_jobs_page_shows_status_select_with_current_status_selected(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))

@@ -118,6 +118,7 @@
     <th scope="col">Emailed</th>
     <th scope="col">Status</th>
     <th scope="col">Summary</th>
+    <th scope="col">Notes</th>
     {% if is_admin %}<th scope="col">User</th>{% endif %}
   </tr>
   </thead>
@@ -198,6 +199,16 @@
       {% endif %}
     </td>
     <td data-label="Summary">{{ job.summary or "—" }}</td>
+    <td data-label="Notes">
+      <span class="notes-text">{{ (job.notes[:60] ~ "…") if job.notes and job.notes|length > 60 else (job.notes or "—") }}</span>
+      {% if job.user_id == current_user_id %}
+      <button type="button" class="notes-btn icon-btn"
+              data-key="{{ job.key }}"
+              data-title="{{ job.title | e }}"
+              data-notes="{{ job.notes or '' }}"
+              aria-label="Edit notes for {{ job.title | e }}">&#128221;</button>
+      {% endif %}
+    </td>
     {% if is_admin %}<td data-label="User">{{ job.username or "" }}</td>{% endif %}
   </tr>
   {% endfor %}
@@ -258,6 +269,23 @@
       <button type="submit" class="btn-primary" id="override-save-btn">Save</button>
       <button type="button" id="override-clear-btn">Clear override</button>
       <button type="button" id="override-cancel-btn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="notes-modal" class="modal" aria-labelledby="notes-modal-title">
+  <h2 id="notes-modal-title">Job Notes</h2>
+  <p id="notes-modal-job" class="modal-subtitle"></p>
+  <form id="notes-form">
+    <input type="hidden" id="notes-key" name="key">
+    <label for="notes-input">
+      Notes
+      <textarea id="notes-input" name="notes" rows="4"
+                placeholder="e.g. interviewed 2026-10-05, applied via recruiter Jane"></textarea>
+    </label>
+    <div class="modal-actions">
+      <button type="submit" class="btn-primary" id="notes-save-btn">Save</button>
+      <button type="button" id="notes-cancel-btn">Cancel</button>
     </div>
   </form>
 </dialog>
@@ -559,6 +587,51 @@
     });
 
     locClear.addEventListener("click", function () { postOverride(""); });
+  }
+
+  /* ── Notes modal ───────────────────────────────────────────────────────── */
+  var notesModal = document.getElementById("notes-modal");
+  if (notesModal && typeof notesModal.showModal === "function") {
+    var notesForm = document.getElementById("notes-form");
+    var notesKey = document.getElementById("notes-key");
+    var notesInput = document.getElementById("notes-input");
+    var notesJobEl = document.getElementById("notes-modal-job");
+    var notesCancelBtn = document.getElementById("notes-cancel-btn");
+    var activeNotesBtn = null;
+
+    document.querySelectorAll(".notes-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        activeNotesBtn = btn;
+        notesKey.value = btn.dataset.key;
+        notesInput.value = btn.dataset.notes || "";
+        notesJobEl.textContent = btn.dataset.title;
+        notesModal.showModal();
+        notesInput.focus();
+      });
+    });
+
+    notesCancelBtn.addEventListener("click", function () { notesModal.close(); });
+
+    notesForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var data = new FormData(notesForm);
+      var result = await postJson("/jobs/notes", data);
+      if (result.ok) {
+        notesModal.close();
+        toast(result.body.message);
+        if (activeNotesBtn) {
+          var row = activeNotesBtn.closest("tr");
+          var notes = result.body.notes || "";
+          activeNotesBtn.dataset.notes = notes;
+          var notesCell = row.querySelector('td[data-label="Notes"] .notes-text');
+          if (notesCell) {
+            notesCell.textContent = notes.length > 60 ? notes.slice(0, 60) + "…" : (notes || "—");
+          }
+        }
+      } else {
+        toast(result.body.detail || "Failed to save notes.");
+      }
+    });
   }
 })();
 </script>
