@@ -504,6 +504,53 @@ def test_post_job_status_unknown_key_returns_404(client):
     assert resp.status_code == 404
 
 
+def test_post_bulk_status_updates_selected_jobs_and_flashes_count(client):
+    conn = client.app.state.conn
+    uid = owner_id_for(conn)
+    for k in ("k1", "k2"):
+        db.save_jobs(conn, [make_job(key=k)], db.start_run(conn), user_id=uid)
+
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1", "k2"], "status": "applied"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/jobs"
+    assert parse_qs(location.query)["flash"] == ["Updated 2 job(s)."]
+    rows = {r["key"]: r["status"] for r in db.list_jobs(conn)}
+    assert rows == {"k1": "applied", "k2": "applied"}
+
+
+def test_post_bulk_status_rejects_invalid_status(client):
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": "bogus"})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_status_rejects_more_than_200_keys(client):
+    keys = [f"k{i}" for i in range(201)]
+
+    resp = client.post("/jobs/bulk-status", data={"keys": keys, "status": "applied"})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_status_with_no_keys_flashes_zero(client):
+    resp = client.post("/jobs/bulk-status", data={"keys": [], "status": "applied"}, follow_redirects=False)
+
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Updated 0 job(s)."]
+
+
+def test_post_bulk_status_only_updates_the_callers_own_jobs(client, member_user_id_for_admin):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="mine")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="theirs", source_id="s2")], db.start_run(conn), user_id=member_user_id_for_admin)
+
+    client.post("/jobs/bulk-status", data={"keys": ["mine", "theirs"], "status": "applied"})
+
+    theirs_status = [r["status"] for r in db.list_jobs(conn) if r["key"] == "theirs"][0]
+    assert theirs_status is None
+
+
 def test_jobs_page_shows_status_select_with_current_status_selected(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))

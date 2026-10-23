@@ -229,6 +229,23 @@ async def update_job_status(
     return flash_redirect("/jobs", message)
 
 
+@router.post("/jobs/bulk-status")
+async def bulk_update_job_status(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = await request.form()
+    keys = form.getlist("keys")
+    status = _form_str(dict(form.items()), "status") or None
+    if status is not None and status not in STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if len(keys) > 200:
+        raise HTTPException(status_code=400, detail="Too many jobs selected (max 200).")
+    with request.app.state.pool.connection() as conn:
+        count = db.bulk_set_status(conn, current_user["id"], keys, status)
+    return flash_redirect("/jobs", f"Updated {count} job(s).")
+
+
 @router.post("/jobs/remove")
 async def remove_job(
     request: Request,
