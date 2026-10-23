@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-23
+
+### Added
+
+- **Live run-progress feedback on "Run now"** ([#213](https://github.com/jasonkryst/CareerSpyder/issues/213)). The dashboard now polls a new `GET /run-status` endpoint while a scrape is in progress and shows which source is currently being scraped and how many of the configured sources have finished (e.g. "Scraping Acme Corp… (3/28)"). Progress is tracked in an in-memory, per-user store (`app/run_progress.py`) — no schema change, and it resets harmlessly on a container restart.
+- **Bulk job status update on `/jobs`** ([#222](https://github.com/jasonkryst/CareerSpyder/issues/222)). A checkbox per row (plus a "select all on page" checkbox) feeds a bulk toolbar that applies one status to every selected job in a single request, instead of one page reload per job. Server-side ownership is enforced via the same `user_id` scoping as every other per-user mutation — a key belonging to another user is silently skipped, not trusted from the form. Capped at 200 keys per request.
+- **Per-job notes field** ([#220](https://github.com/jasonkryst/CareerSpyder/issues/220)). A new nullable `jobs.notes` column lets a user record free-text context ("interviewed 2026-10-05", "applied via recruiter Jane") against a job, editable via a modal matching the existing duplicate-marking modal pattern. Notes are user-supplied text and render through Jinja2's normal autoescaping, same as every other job field.
+- **Settings-import preview before committing** ([#221](https://github.com/jasonkryst/CareerSpyder/issues/221)). Uploading a `settings.json` file to `/settings/data/import` now shows a diff (added / updated / unchanged sources, plus changed preference keys) and requires a separate "Confirm import" before anything is written — replacing the old silent immediate overwrite. There's deliberately no "removed" section: `db.import_sources` only ever upserts, so nothing is ever deleted by an import, with or without the preview. The previous one-step behavior remains available as a `force=1` escape hatch for scripted/automated imports.
+
 ## [1.15.0] — 2026-10-22
 
 ### Fixed
