@@ -819,6 +819,49 @@ def test_set_job_status_on_unknown_key_raises_key_error(pg_conn):
         db.set_job_status(conn, owner_id_for(conn), "does-not-exist", "applied")
 
 
+def test_bulk_set_status_updates_all_given_keys(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    for k in ("k1", "k2", "k3"):
+        db.save_jobs(conn, [make_job(key=k)], db.start_run(conn), user_id=uid)
+
+    count = db.bulk_set_status(conn, uid, ["k1", "k2"], "applied")
+
+    assert count == 2
+    rows = {r["key"]: r["status"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "applied" and rows["k2"] == "applied" and rows["k3"] is None
+
+
+def test_bulk_set_status_can_clear_status(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_status(conn, uid, "k1", "applied")
+
+    count = db.bulk_set_status(conn, uid, ["k1"], None)
+
+    assert count == 1
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_bulk_set_status_records_history_for_each_updated_key(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.bulk_set_status(conn, uid, ["k1"], "ignored")
+
+    history = db.get_job_status_history(conn, [(uid, "k1")])
+    assert history[(uid, "k1")][0]["status"] == "ignored"
+
+
+def test_bulk_set_status_ignores_empty_key_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_status(conn, uid, [], "applied") == 0
+
+
 def test_get_job_status_history_omits_key_with_no_changes(pg_conn):
     conn = pg_conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))

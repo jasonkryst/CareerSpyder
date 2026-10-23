@@ -597,6 +597,29 @@ def set_job_status(conn: psycopg.Connection, user_id: str, key: str, status: str
     conn.commit()
 
 
+def bulk_set_status(conn: psycopg.Connection, user_id: str, keys: list[str], status: str | None) -> int:
+    """Set `status` on every key in `keys` owned by `user_id`; keys owned by
+    another user (or not found) are silently excluded, not errored -- bulk
+    updates are scoped via this WHERE clause rather than trusting the caller
+    to only submit keys it owns. Returns the number of rows actually updated."""
+    if not keys:
+        return 0
+    now = _now()
+    cur = conn.execute(
+        "UPDATE jobs SET status = %s WHERE user_id = %s AND key = ANY(%s) RETURNING key",
+        (status, user_id, keys),
+    )
+    updated_keys = [row[0] for row in cur.fetchall()]
+    if updated_keys:
+        with conn.cursor() as c:
+            c.executemany(
+                "INSERT INTO job_status_history (user_id, job_key, status, changed_at) VALUES (%s, %s, %s, %s)",
+                [(user_id, key, status, now) for key in updated_keys],
+            )
+    conn.commit()
+    return len(updated_keys)
+
+
 def get_geocoded_location(conn: psycopg.Connection, location: str) -> dict | None:
     row = conn.execute(
         "SELECT display_name, city, region, country, lat, lng, provider FROM geocoded_locations "
