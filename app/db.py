@@ -368,7 +368,7 @@ def list_jobs(
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
-        "jobs.is_duplicate, jobs.duplicate_of, users.username, jobs.user_id::text "
+        "jobs.is_duplicate, jobs.duplicate_of, users.username, jobs.user_id::text, jobs.notes "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
@@ -387,7 +387,7 @@ def list_jobs(
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
             "is_duplicate": bool(r[16]), "duplicate_of": r[17], "username": r[18],
-            "user_id": r[19],
+            "user_id": r[19], "notes": r[20],
         }
         for r in rows
     ]
@@ -710,6 +710,15 @@ def clear_job_duplicate(conn: psycopg.Connection, user_id: str, key: str) -> Non
     cur = conn.execute(
         "UPDATE jobs SET is_duplicate = FALSE, duplicate_of = NULL WHERE user_id = %s AND key = %s",
         (user_id, key),
+    )
+    if cur.rowcount == 0:
+        raise KeyError(key)
+    conn.commit()
+
+
+def set_job_notes(conn: psycopg.Connection, user_id: str, key: str, notes: str) -> None:
+    cur = conn.execute(
+        "UPDATE jobs SET notes = %s WHERE user_id = %s AND key = %s", (notes, user_id, key),
     )
     if cur.rowcount == 0:
         raise KeyError(key)

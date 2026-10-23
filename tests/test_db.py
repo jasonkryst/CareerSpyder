@@ -862,6 +862,44 @@ def test_bulk_set_status_ignores_empty_key_list(pg_conn):
     assert db.bulk_set_status(conn, uid, [], "applied") == 0
 
 
+def test_set_job_notes_stores_text(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.set_job_notes(conn, uid, "k1", "interviewed 2026-10-05")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "interviewed 2026-10-05"
+
+
+def test_set_job_notes_can_clear_to_empty_string(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_notes(conn, uid, "k1", "something")
+
+    db.set_job_notes(conn, uid, "k1", "")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == ""
+
+
+def test_set_job_notes_unknown_key_raises_keyerror(pg_conn):
+    conn = pg_conn
+
+    with pytest.raises(KeyError):
+        db.set_job_notes(conn, owner_id_for(conn), "nope", "x")
+
+
+def test_list_jobs_defaults_notes_to_none(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    assert db.list_jobs(conn)[0]["notes"] is None
+
+
 def test_get_job_status_history_omits_key_with_no_changes(pg_conn):
     conn = pg_conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
