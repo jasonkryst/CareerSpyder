@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-23 (branch `feat/225-bulk-enable-sources`, v2.1.0)
+**Last reviewed:** 2026-10-23 (branch `fix/254-filter-bar-layout`, v2.2.0)
 
 ## Rubric
 
@@ -29,7 +29,6 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 | Tier | # | Title | Impact | Effort |
 |---|---|---|---|---|
 | 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
-| 3 | [#254](https://github.com/jasonkryst/CareerSpyder/issues/254) | Jobs/sources filter bar layout is unstructured and not responsive | M | S-M |
 | 4 | [#91](https://github.com/jasonkryst/CareerSpyder/issues/91) | Auto-dedup engine for secondary sources | M | L |
 
 Untracked limitations (no issue filed) live in [ROADMAP.md](../ROADMAP.md).
@@ -44,11 +43,6 @@ higher). Remaining gaps vs. BookWheel #257: `integration-test` and
 "always" bypass (decide and record whether that's intended); and a
 disabled duplicate ruleset ("Protect Main") should be deleted. All repo
 settings — no code change.
-
-### #254 — Filter bar layout · M / S-M
-Pure CSS/markup restructuring of `.filter-bar` on `/jobs` and `/sources`
-(grouping, responsive breakpoints) — no backend change, no new query
-params.
 
 ### #91 — Auto-dedup engine · M / L
 Useful if secondary sources (Indeed/LinkedIn) are a big share of the feed;
@@ -71,6 +65,7 @@ scoring function can be built and unit-tested standalone first.
 | #220 | Per-job notes field | Nullable `jobs.notes` column (migration `0006`); edit modal mirrors the duplicate-marking modal; `db.set_job_notes`/`POST /jobs/notes`. `v2.0.0`. |
 | #221 | Settings import — diff/preview before commit | Uploading now renders an inline diff (added/updated/unchanged sources, changed preference keys) with a "Confirm import" step before any write; `app/config.py::diff_import`. Simpler single-page flow, not a separate token-backed route. The old immediate-overwrite behavior remains as a `force=1` escape hatch for scripted imports. `v2.0.0`. |
 | #225 | Sources list — bulk enable/disable | Every source gains an `enabled` flag (default `true`); `app/orchestrator.py::run_once` skips disabled sources entirely while leaving their already-found jobs untouched. Checkbox column + bulk toolbar (Enable/Disable selected) on `/sources`, backed by `db.bulk_set_enabled` (ownership-scoped, capped at 200 ids/request); Status column and filter; single-source edit form gained an Enabled checkbox. `v2.1.0`. |
+| #254 | Jobs/sources filter bar layout unstructured and not responsive | `/jobs`'s ~11 filter fields grouped into labeled `<fieldset>` sections (Search/Location/Status/Admin), responsive single-column stacking under 40rem, and the whole panel collapsed behind a `<details>`/`<summary>` toggle by default (native, no JS) that auto-opens when a filter is active. Active filters render as removable chips (`app/web/query_params.py::remove_filter_url`/`remove_filter_value_url`, multi-value-safe unlike `query_url`). `v2.2.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 

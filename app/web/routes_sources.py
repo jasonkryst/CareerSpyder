@@ -17,6 +17,7 @@ from app.textutils import safe_url_scheme
 from app.web.auth import require_user
 from app.web.flash import flash_redirect
 from app.web.pagination import paginate
+from app.web.query_params import remove_filter_url
 from app.web.source_form import echo_source, source_from_form
 from app.web.templating import templates
 from app.web.validation import fmt_validation_error
@@ -62,11 +63,24 @@ def list_sources(
         all_sources = sorted(all_sources, key=key_fn, reverse=(direction == "desc"))
     pagination = paginate(len(all_sources), page, PAGE_SIZE)
     sources = all_sources[pagination.offset : pagination.offset + PAGE_SIZE]
+    active_filters = []
+    if source_type:
+        active_filters.append({
+            "label": f"Type: {source_type}",
+            "remove_url": remove_filter_url(request, "/sources", "type"),
+        })
+    if enabled_filter:
+        label = "Enabled only" if enabled_filter == "true" else "Disabled only"
+        active_filters.append({
+            "label": f"Status: {label}",
+            "remove_url": remove_filter_url(request, "/sources", "enabled"),
+        })
     return templates.TemplateResponse(
         request, "sources_list.html", {
             "sources": sources, "pagination": pagination,
             "available_types": available_types,
             "filters": {"type": source_type, "enabled": enabled_filter},
+            "active_filters": active_filters,
             "health": health,
         },
     )

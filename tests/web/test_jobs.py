@@ -598,6 +598,130 @@ def test_jobs_page_shows_bulk_status_toolbar_markup(client):
     assert 'id="select-all-jobs"' in resp.text
 
 
+# --- Filter bar layout (issue #254) ---
+
+def test_jobs_filter_bar_groups_fields_into_fieldsets(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    filter_bar = soup.select_one("form.filter-bar")
+    assert filter_bar is not None
+    groups = filter_bar.select("fieldset.filter-group")
+    legends = [g.find("legend").get_text(strip=True) for g in groups]
+    # `client` is logged in as admin, so an "Admin" group also appears.
+    assert legends == ["Search", "Location", "Status", "Admin"]
+    # Fields stay inside their group -- e.g. "state" (location-related) must
+    # not end up in the "Status" group (job status/removed/emailed/duplicates).
+    location_group = next(g for g in groups if g.find("legend").get_text(strip=True) == "Location")
+    assert location_group.select_one('select[name="state"]') is not None
+    status_group = next(g for g in groups if g.find("legend").get_text(strip=True) == "Status")
+    assert status_group.select_one('select[name="state"]') is None
+    assert status_group.select_one('select[name="removed"]') is not None
+
+
+def test_jobs_filter_bar_admin_group_only_shown_to_admin(client, member_client):
+    admin_resp = client.get("/jobs")
+    member_resp = member_client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    admin_soup = BeautifulSoup(admin_resp.text, "html.parser")
+    member_soup = BeautifulSoup(member_resp.text, "html.parser")
+    admin_legends = [g.find("legend").get_text(strip=True) for g in admin_soup.select("fieldset.filter-group")]
+    member_legends = [g.find("legend").get_text(strip=True) for g in member_soup.select("fieldset.filter-group")]
+    assert "Admin" in admin_legends
+    assert "Admin" not in member_legends
+
+
+def test_jobs_filter_bar_submit_button_in_actions_wrapper(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    actions = soup.select_one("form.filter-bar .filter-actions")
+    assert actions is not None
+    assert actions.select_one('button[type="submit"]') is not None
+
+
+def test_jobs_filter_panel_closed_by_default_with_no_active_filters(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel is not None
+    assert panel.has_attr("open") is False
+    assert soup.select_one(".active-filters") is None
+
+
+def test_jobs_filter_panel_opens_automatically_when_a_filter_is_active(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel.has_attr("open") is True
+
+
+def test_jobs_active_filter_chip_renders_label_and_removes_only_that_filter(client):
+    resp = client.get("/jobs?company=Acme&search=engineer")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    labels = [c.get_text(" ", strip=True) for c in chips]
+    assert any("Company: Acme" in label for label in labels)
+    assert any('Search: "engineer"' in label for label in labels)
+    company_chip = next(c for c in chips if "Company" in c.get_text())
+    assert "company=" not in company_chip["href"]
+    assert "search=engineer" in company_chip["href"]
+
+
+def test_jobs_multi_value_filter_chip_removes_only_that_one_value(client):
+    resp = client.get("/jobs?state=IL&state=NY")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    il_chip = next(c for c in chips if c.get_text(strip=True).startswith("State: IL"))
+    assert "state=IL" not in il_chip["href"]
+    assert "state=NY" in il_chip["href"]
+
+
+def test_jobs_zip_and_radius_collapse_into_one_chip(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        resp = client.get("/jobs?zip=60148&radius=50")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    zip_chips = [c for c in chips if "60148" in c.get_text()]
+    assert len(zip_chips) == 1
+    assert "50 mi" in zip_chips[0].get_text()
+    assert "zip=" not in zip_chips[0]["href"]
+    assert "radius=" not in zip_chips[0]["href"]
+
+
+def test_jobs_active_filter_chip_escapes_html_in_user_supplied_filter_value(client):
+    """company/search/location flow straight from the query string into a
+    chip label -- same escaping expectation as test_jobs_page_escapes_html_in_notes."""
+    resp = client.get("/jobs?company=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
+def test_jobs_active_filters_clear_all_chip_links_to_bare_jobs_path(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    clear = soup.select_one(".active-filters .chip-clear")
+    assert clear is not None
+    assert clear["href"] == "/jobs"
+
+
 def test_jobs_page_checkbox_disabled_for_jobs_not_owned_by_viewer(client, member_user_id_for_admin):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="theirs", source_id="s2")], db.start_run(conn), user_id=member_user_id_for_admin)
