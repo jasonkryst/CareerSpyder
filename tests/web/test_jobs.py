@@ -703,6 +703,15 @@ def test_jobs_zip_and_radius_collapse_into_one_chip(client):
     assert "radius=" not in zip_chips[0]["href"]
 
 
+def test_jobs_active_filter_chip_escapes_html_in_user_supplied_filter_value(client):
+    """company/search/location flow straight from the query string into a
+    chip label -- same escaping expectation as test_jobs_page_escapes_html_in_notes."""
+    resp = client.get("/jobs?company=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
 def test_jobs_active_filters_clear_all_chip_links_to_bare_jobs_path(client):
     resp = client.get("/jobs?company=Acme")
 
