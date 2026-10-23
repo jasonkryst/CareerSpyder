@@ -1047,6 +1047,22 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
     conn.commit()
 
 
+def bulk_set_enabled(conn: psycopg.Connection, user_id: str, source_ids: list[str], enabled: bool) -> int:
+    """Set `enabled` on every id in `source_ids` owned by `user_id`; ids owned
+    by another user (or not found) are silently excluded, not errored -- same
+    scoping approach as bulk_set_status. Returns the number of rows updated."""
+    if not source_ids:
+        return 0
+    cur = conn.execute(
+        "UPDATE sources SET config = jsonb_set(config, '{enabled}', %s::jsonb), "
+        "updated_at = NOW() WHERE user_id = %s AND id = ANY(%s)",
+        (json.dumps(enabled), user_id, source_ids),
+    )
+    count = cur.rowcount
+    conn.commit()
+    return count
+
+
 def source_last_run_status(
     conn: psycopg.Connection, source_names: list[str], user_id: str,
 ) -> dict[str, str]:

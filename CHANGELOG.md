@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-23
+
+### Added
+
+- **Bulk enable/disable on `/sources`** ([#225](https://github.com/jasonkryst/CareerSpyder/issues/225)). Every source config gains an `enabled` flag (default `true`); disabled sources stay configured and keep their already-found jobs, but are skipped entirely on the next run — no adapter call, no entry in the progress bar, no failed-source report even if the site is down. A checkbox column plus a "select all on page" checkbox feed a bulk toolbar with **Enable selected** / **Disable selected** buttons, mirroring the `/jobs` bulk-status toolbar (#222). The source list gained a Status column (Enabled/Disabled badge) and a Status filter (All / Enabled only / Disabled only). The single-source edit form also gained an **Enabled** checkbox, so editing a disabled source doesn't silently re-enable it.
+
 ## [2.0.0] — 2026-10-23
 
 ### Added

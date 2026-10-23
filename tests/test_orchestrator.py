@@ -108,6 +108,70 @@ def test_run_once_collects_new_jobs_and_isolates_failures(pg_conn):
     assert runs[0]["failed_sources"] == [{"name": "Bad Co", "url": "https://jobs.lever.co/bad", "source_id": "s2"}]
 
 
+def test_run_once_skips_disabled_sources(pg_conn):
+    conn = pg_conn
+    active_source = GreenhouseSource(id="s1", name="Active Co", type="greenhouse", board_token="active")
+    disabled_source = GreenhouseSource(id="s2", name="Paused Co", type="greenhouse", board_token="paused",
+                                        enabled=False)
+
+    calls = []
+
+    def fake_fetch(source):
+        calls.append(source.name)
+        return [Job(key=f"{source.name}:1", title="Role", url="https://x.test/1", source_name=source.name)]
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        summary = orchestrator.run_once(conn, [active_source, disabled_source], user_id=owner_id_for(conn))
+
+    assert calls == ["Active Co"]
+    assert summary.failed_sources == []
+
+
+def test_run_once_progress_total_excludes_disabled_sources(pg_conn, monkeypatch):
+    conn = pg_conn
+    active_source = GreenhouseSource(id="s1", name="Active Co", type="greenhouse", board_token="active")
+    disabled_source = GreenhouseSource(id="s2", name="Paused Co", type="greenhouse", board_token="paused",
+                                        enabled=False)
+
+    totals = []
+    orig_start = orchestrator.run_progress.start
+
+    def spy_start(user_id, total):
+        totals.append(total)
+        orig_start(user_id, total)
+
+    monkeypatch.setattr(orchestrator.run_progress, "start", spy_start)
+
+    def fake_fetch(source):
+        return []
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [active_source, disabled_source], user_id=owner_id_for(conn))
+
+    assert totals == [1]
+
+
+def test_run_once_leaves_a_disabled_sources_existing_jobs_active(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    disabled_source = GreenhouseSource(id="s2", name="Paused Co", type="greenhouse", board_token="paused",
+                                        enabled=False)
+    db.save_jobs(
+        conn,
+        [Job(key="gh:1", title="Old Role", url="https://x.test/1", source_name="Paused Co", source_id="s2")],
+        db.start_run(conn, user_id=uid), user_id=uid,
+    )
+
+    def fake_fetch(source):
+        return []
+
+    with patch.dict(orchestrator.ADAPTERS, {"greenhouse": fake_fetch}):
+        orchestrator.run_once(conn, [disabled_source], user_id=uid)
+
+    row = conn.execute("SELECT removed_at FROM jobs WHERE key = 'gh:1'").fetchone()
+    assert row[0] is None
+
+
 def test_run_once_does_not_report_previously_seen_jobs_as_new(pg_conn):
     conn = pg_conn
     source = GreenhouseSource(id="s1", name="Good Co", type="greenhouse", board_token="good")
