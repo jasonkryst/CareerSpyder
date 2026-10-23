@@ -862,6 +862,52 @@ def test_bulk_set_status_ignores_empty_key_list(pg_conn):
     assert db.bulk_set_status(conn, uid, [], "applied") == 0
 
 
+def test_bulk_set_enabled_disables_all_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1", "s2"], False)
+
+    assert count == 2
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": False}
+
+
+def test_bulk_set_enabled_can_re_enable(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1", enabled=False))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1"], True)
+
+    assert count == 1
+    assert db.list_sources(conn, uid)[0].enabled is True
+
+
+def test_bulk_set_enabled_only_affects_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    db.bulk_set_enabled(conn, uid, ["s1"], False)
+
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": True}
+
+
+def test_bulk_set_enabled_ignores_empty_id_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_enabled(conn, uid, [], False) == 0
+
+
 def test_set_job_notes_stores_text(pg_conn):
     conn = pg_conn
     uid = owner_id_for(conn)

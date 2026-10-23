@@ -44,6 +44,7 @@ def list_sources(
     sort: str = "",
     direction: str = Query("", alias="dir"),
     source_type: str = Query("", alias="type"),
+    enabled_filter: str = Query("", alias="enabled"),
     current_user: dict = Depends(require_user),
 ):
     with request.app.state.pool.connection() as conn:
@@ -52,6 +53,10 @@ def list_sources(
     available_types = sorted({s.type for s in all_sources})
     if source_type:
         all_sources = [s for s in all_sources if s.type == source_type]
+    if enabled_filter == "true":
+        all_sources = [s for s in all_sources if s.enabled]
+    elif enabled_filter == "false":
+        all_sources = [s for s in all_sources if not s.enabled]
     key_fn = _SOURCE_SORT_KEYS.get(sort)
     if key_fn:
         all_sources = sorted(all_sources, key=key_fn, reverse=(direction == "desc"))
@@ -60,10 +65,30 @@ def list_sources(
     return templates.TemplateResponse(
         request, "sources_list.html", {
             "sources": sources, "pagination": pagination,
-            "available_types": available_types, "filters": {"type": source_type},
+            "available_types": available_types,
+            "filters": {"type": source_type, "enabled": enabled_filter},
             "health": health,
         },
     )
+
+
+@router.post("/sources/bulk-toggle")
+async def bulk_toggle_sources(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = await request.form()
+    ids = [i for i in form.getlist("ids") if isinstance(i, str)]
+    raw_enabled = form.get("enabled")
+    if raw_enabled not in ("true", "false"):
+        raise HTTPException(status_code=400, detail="Choose enable or disable")
+    enabled = raw_enabled == "true"
+    if len(ids) > 200:
+        raise HTTPException(status_code=400, detail="Too many sources selected (max 200).")
+    with request.app.state.pool.connection() as conn:
+        count = db.bulk_set_enabled(conn, current_user["id"], ids, enabled)
+    verb = "Enabled" if enabled else "Disabled"
+    return flash_redirect("/sources", f"{verb} {count} source(s).")
 
 
 @router.post("/sources/{source_id}/delete")

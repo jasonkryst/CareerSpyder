@@ -105,6 +105,26 @@ def test_bulk_set_status_with_mixed_ownership_only_updates_owned_keys(pg_conn, t
     assert bob_status is None
 
 
+def test_bulk_set_enabled_by_a_non_owner_updates_nothing(pg_conn, two_users):
+    from app.config import GreenhouseSource
+    alice, bob = two_users
+    db.add_source(pg_conn, alice, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    count = db.bulk_set_enabled(pg_conn, bob, ["s1"], False)
+    assert count == 0
+    assert db.list_sources(pg_conn, alice)[0].enabled is True
+
+
+def test_bulk_set_enabled_with_mixed_ownership_only_updates_owned_ids(pg_conn, two_users):
+    from app.config import GreenhouseSource
+    alice, bob = two_users
+    db.add_source(pg_conn, alice, GreenhouseSource(id="shared", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(pg_conn, bob, GreenhouseSource(id="shared2", name="S2", type="greenhouse", board_token="t2"))
+    count = db.bulk_set_enabled(pg_conn, alice, ["shared", "shared2"], False)
+    assert count == 1
+    assert db.list_sources(pg_conn, alice)[0].enabled is False
+    assert db.list_sources(pg_conn, bob)[0].enabled is True
+
+
 def test_clear_jobs_only_deletes_the_callers_jobs(pg_conn, two_users):
     alice, bob = two_users
     _save(pg_conn, alice)
