@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-23 (branch `feat/issues-213-220-221-222`, v2.0.0)
+**Last reviewed:** 2026-10-23 (branch `fix/254-filter-bar-layout`, v2.1.0)
 
 ## Rubric
 
@@ -69,6 +69,7 @@ scoring function can be built and unit-tested standalone first.
 | #222 | Bulk job status update via multi-select | Checkbox column + "select all on page" + bulk toolbar on `/jobs`, backed by `db.bulk_set_status` (ownership-scoped via SQL, capped at 200 keys/request). `v2.0.0`. |
 | #220 | Per-job notes field | Nullable `jobs.notes` column (migration `0006`); edit modal mirrors the duplicate-marking modal; `db.set_job_notes`/`POST /jobs/notes`. `v2.0.0`. |
 | #221 | Settings import — diff/preview before commit | Uploading now renders an inline diff (added/updated/unchanged sources, changed preference keys) with a "Confirm import" step before any write; `app/config.py::diff_import`. Simpler single-page flow, not a separate token-backed route. The old immediate-overwrite behavior remains as a `force=1` escape hatch for scripted imports. `v2.0.0`. |
+| #254 | Jobs/sources filter bar layout unstructured and not responsive | `/jobs`'s ~11 filter fields grouped into labeled `<fieldset>` sections (Search/Location/Status/Admin), responsive single-column stacking under 40rem, and the whole panel collapsed behind a `<details>`/`<summary>` toggle by default (native, no JS) that auto-opens when a filter is active. Active filters render as removable chips (`app/web/query_params.py::remove_filter_url`/`remove_filter_value_url`, multi-value-safe unlike `query_url`). `v2.1.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 

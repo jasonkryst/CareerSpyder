@@ -6,91 +6,115 @@
   <h1>Jobs</h1>
   <a href="{{ query_url(request, '/jobs/map') }}" class="btn">Map view</a>
 </div>
+{% if active_filters %}
+<div class="active-filters">
+  {% for f in active_filters %}
+  <a class="chip" href="{{ f.remove_url }}">{{ f.label }} <span aria-hidden="true">&times;</span></a>
+  {% endfor %}
+  <a class="chip chip-clear" href="/jobs">Clear filters</a>
+</div>
+{% endif %}
+<details class="filter-panel" {% if active_filters %}open{% endif %}>
+  <summary>Filters{% if active_filters %} <span class="filter-count">{{ active_filters | length }}</span>{% endif %}</summary>
 <form method="get" action="/jobs" class="filter-bar">
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
-  <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
-  <label>Search
-    <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
-  </label>
-  <label>Search name
-    <select name="source" multiple>
-      {% for name in source_names %}
-      <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Location
-    <select name="location">
-      <option value="">All locations</option>
-      <option value="__unresolved__" {% if filters.location == "__unresolved__" %}selected{% endif %}>Other / Unresolved</option>
-      {% for name in locations %}
-      <option value="{{ name }}" {% if filters.location == name %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>State
-    <select name="state" multiple>
-      {% for s in states %}
-      <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Near zip/city
-    <input type="text" name="zip" value="{{ filters.zip }}" placeholder="e.g. 60148">
-  </label>
-  <label>Radius
-    <select name="radius">
-      {% for mi in [10, 25, 50, 100] %}
-      <option value="{{ mi }}" {% if (filters.radius | int) == mi %}selected{% endif %}>{{ mi }} mi</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% if filters.zip_error %}
-  <p class="error" role="alert">Could not resolve that location — radius filter not applied.</p>
-  {% endif %}
-  <label>Listing status
-    <select name="removed">
-      <option value="">All</option>
-      <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
-      <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
-    </select>
-  </label>
-  <label>Emailed
-    <select name="emailed">
-      <option value="">All</option>
-      <option value="sent" {% if filters.emailed == "sent" %}selected{% endif %}>Emailed</option>
-      <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
-    </select>
-  </label>
-  <label>Job status
-    <select name="status" multiple>
-      <option value="none" {% if "none" in filters.status %}selected{% endif %}>No status</option>
-      {% for value, label in statuses.items() %}
-      <option value="{{ value }}" {% if value in filters.status %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Duplicates
-    <select name="duplicates">
-      <option value="" {% if not filters.duplicates %}selected{% endif %}>Hidden</option>
-      <option value="include" {% if filters.duplicates == "include" %}selected{% endif %}>Include</option>
-      <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
-    </select>
-  </label>
+  <fieldset class="filter-group">
+    <legend>Search</legend>
+    <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+    <label>Search
+      <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
+    </label>
+    <label>Search name
+      <select name="source" multiple>
+        {% for name in source_names %}
+        <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+  <fieldset class="filter-group">
+    <legend>Location</legend>
+    <label>Location
+      <select name="location">
+        <option value="">All locations</option>
+        <option value="__unresolved__" {% if filters.location == "__unresolved__" %}selected{% endif %}>Other / Unresolved</option>
+        {% for name in locations %}
+        <option value="{{ name }}" {% if filters.location == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>State
+      <select name="state" multiple>
+        {% for s in states %}
+        <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Near zip/city
+      <input type="text" name="zip" value="{{ filters.zip }}" placeholder="e.g. 60148">
+    </label>
+    <label>Radius
+      <select name="radius">
+        {% for mi in [10, 25, 50, 100] %}
+        <option value="{{ mi }}" {% if (filters.radius | int) == mi %}selected{% endif %}>{{ mi }} mi</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if filters.zip_error %}
+    <p class="error" role="alert">Could not resolve that location — radius filter not applied.</p>
+    {% endif %}
+  </fieldset>
+  <fieldset class="filter-group">
+    <legend>Status</legend>
+    <label>Listing status
+      <select name="removed">
+        <option value="">All</option>
+        <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
+        <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
+      </select>
+    </label>
+    <label>Emailed
+      <select name="emailed">
+        <option value="">All</option>
+        <option value="sent" {% if filters.emailed == "sent" %}selected{% endif %}>Emailed</option>
+        <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
+      </select>
+    </label>
+    <label>Job status
+      <select name="status" multiple>
+        <option value="none" {% if "none" in filters.status %}selected{% endif %}>No status</option>
+        {% for value, label in statuses.items() %}
+        <option value="{{ value }}" {% if value in filters.status %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Duplicates
+      <select name="duplicates">
+        <option value="" {% if not filters.duplicates %}selected{% endif %}>Hidden</option>
+        <option value="include" {% if filters.duplicates == "include" %}selected{% endif %}>Include</option>
+        <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
+      </select>
+    </label>
+  </fieldset>
   {% if is_admin %}
-  <label>User
-    <select name="user">
-      <option value="">All users</option>
-      {% for u in users %}
-      <option value="{{ u.id }}" {% if filters.user == u.id %}selected{% endif %}>{{ u.username }}</option>
-      {% endfor %}
-    </select>
-  </label>
+  <fieldset class="filter-group">
+    <legend>Admin</legend>
+    <label>User
+      <select name="user">
+        <option value="">All users</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if filters.user == u.id %}selected{% endif %}>{{ u.username }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
   {% endif %}
-  <button type="submit">Filter</button>
-  {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
+  <div class="filter-actions">
+    <button type="submit">Filter</button>
+  </div>
 </form>
+</details>
 <form method="post" action="/jobs/bulk-status" id="bulk-status-form" class="bulk-status-toolbar" hidden>
   <span id="bulk-selected-count">0 selected</span>
   <label>Set status

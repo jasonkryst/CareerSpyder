@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-23
+
+### Added
+
+- **Redesigned filter bar on `/jobs` and `/sources`** ([#254](https://github.com/jasonkryst/CareerSpyder/issues/254)). The jobs filter bar's ~11 fields are now grouped into labeled sections (Search, Location, Status, and an admin-only User section) instead of one flat, unstructured row, and both pages' filter bars stack cleanly to a single column on narrow viewports instead of wrapping raggedly. The whole filter form is now collapsed behind a **Filters** toggle by default (native `<details>`/`<summary>`, no JS) and opens automatically whenever a filter is already applied. Active filters render as removable chips above the panel — click a chip's "×" to drop just that one filter (a multi-select filter like State or Job status removes only that one value, leaving the others selected) or **Clear filters** to reset everything; both link to a plain URL, no JavaScript required. Pure CSS/markup/route restructuring — existing filter query params, their defaults, and the page's underlying data/pagination behavior are unchanged.
+
 ## [2.0.0] — 2026-10-23
 
 ### Added

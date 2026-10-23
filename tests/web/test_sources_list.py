@@ -268,6 +268,50 @@ def test_source_health_never_when_only_url_check_run_exists(client, admin_user_i
 
 # --- Pagination jump-to-page (issue #224) ---
 
+# --- Filter bar layout (issue #254) ---
+
+def test_sources_filter_bar_submit_button_in_actions_wrapper(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+    ])
+
+    resp = client.get("/sources?type=greenhouse")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    actions = soup.select_one("form.filter-bar .filter-actions")
+    assert actions is not None
+    assert actions.select_one('button[type="submit"]') is not None
+
+
+def test_sources_filter_panel_closed_by_default_with_no_active_filters(client):
+    resp = client.get("/sources")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel is not None
+    assert panel.has_attr("open") is False
+    assert soup.select_one(".active-filters") is None
+
+
+def test_sources_filter_panel_opens_and_shows_chip_when_a_filter_is_active(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+    ])
+
+    resp = client.get("/sources?type=greenhouse")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel.has_attr("open") is True
+    chip = soup.select_one(".active-filters .chip:not(.chip-clear)")
+    assert chip is not None
+    assert "Type: greenhouse" in chip.get_text()
+    assert "type=" not in chip["href"]
+
+
 def test_pagination_jump_shown_for_sources_when_many_pages(client, admin_user_id):
     sources = [
         {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
