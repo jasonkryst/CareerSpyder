@@ -91,10 +91,23 @@
   <button type="submit">Filter</button>
   {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
+<form method="post" action="/jobs/bulk-status" id="bulk-status-form" class="bulk-status-toolbar" hidden>
+  <span id="bulk-selected-count">0 selected</span>
+  <label>Set status
+    <select name="status">
+      <option value="">Clear status</option>
+      {% for value, label in statuses.items() %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Apply to selected</button>
+</form>
 <div class="table-scroll">
 <table>
   <thead>
   <tr>
+    <th scope="col"><input type="checkbox" id="select-all-jobs" aria-label="Select all jobs on this page"></th>
     {{ sort_th(request, '/jobs', 'company', 'Company') }}
     <th scope="col">Search name</th>
     {{ sort_th(request, '/jobs', 'title', 'Title') }}
@@ -111,6 +124,11 @@
   <tbody>
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
+    <td data-label="Select">
+      <input type="checkbox" name="keys" value="{{ job.key }}" form="bulk-status-form" class="job-select"
+             {% if job.user_id != current_user_id %}disabled{% endif %}
+             aria-label="Select {{ job.title | e }}">
+    </td>
     <td data-label="Company">{{ job.company or "—" }}</td>
     <td data-label="Search name">
       {{ job.source_name }}
@@ -270,6 +288,30 @@
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  /* ── Bulk status toolbar ──────────────────────────────────────────────── */
+  var bulkForm = document.getElementById("bulk-status-form");
+  var selectAll = document.getElementById("select-all-jobs");
+  var bulkCount = document.getElementById("bulk-selected-count");
+  var jobCheckboxes = Array.prototype.slice.call(document.querySelectorAll(".job-select:not([disabled])"));
+
+  function updateBulkToolbar() {
+    if (!bulkForm) return;
+    var checked = jobCheckboxes.filter(function (cb) { return cb.checked; });
+    if (bulkCount) bulkCount.textContent = checked.length + " selected";
+    bulkForm.hidden = checked.length === 0;
+  }
+
+  jobCheckboxes.forEach(function (cb) {
+    cb.addEventListener("change", updateBulkToolbar);
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      jobCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+      updateBulkToolbar();
+    });
   }
 
   /* ── Status dropdown ──────────────────────────────────────────────────── */

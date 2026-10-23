@@ -551,6 +551,25 @@ def test_post_bulk_status_only_updates_the_callers_own_jobs(client, member_user_
     assert theirs_status is None
 
 
+def test_jobs_page_shows_bulk_status_toolbar_markup(client):
+    resp = client.get("/jobs")
+
+    assert 'id="bulk-status-form"' in resp.text
+    assert 'id="select-all-jobs"' in resp.text
+
+
+def test_jobs_page_checkbox_disabled_for_jobs_not_owned_by_viewer(client, member_user_id_for_admin):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="theirs", source_id="s2")], db.start_run(conn), user_id=member_user_id_for_admin)
+
+    resp = client.get("/jobs?user=" + member_user_id_for_admin)
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cb = soup.select_one('input.job-select[value="theirs"]')
+    assert cb is not None and cb.has_attr("disabled")
+
+
 def test_jobs_page_shows_status_select_with_current_status_selected(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
