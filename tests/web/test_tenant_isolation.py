@@ -119,6 +119,7 @@ def test_import_with_another_users_source_id_does_not_touch_it(member_client, me
     ]})
     resp = member_client.post(
         "/settings/data/import", files={"file": ("s.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
