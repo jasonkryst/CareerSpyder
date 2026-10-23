@@ -385,6 +385,7 @@ def test_post_import_settings_replaces_sources_and_redirects(client, admin_user_
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -394,6 +395,28 @@ def test_post_import_settings_replaces_sources_and_redirects(client, admin_user_
     assert parse_qs(location.query)["flash"] == ["Imported 1 source(s)."]
     with client.app.state.pool.connection() as conn:
         assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
+
+
+def test_post_import_force_as_query_param_also_commits_immediately(client, admin_user_id):
+    import json
+    from urllib.parse import parse_qs, urlparse
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new2", "name": "New2", "type": "lever", "board_token": "new2"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import?force=1",
+        files={"file": ("settings.json", payload, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Imported 1 source(s)."]
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new2"]
 
 
 def test_post_import_settings_with_preferences_overwrites_stored_preferences(client, admin_user_id):
@@ -415,6 +438,7 @@ def test_post_import_settings_with_preferences_overwrites_stored_preferences(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -448,6 +472,7 @@ def test_post_import_settings_with_preferences_imports_hide_not_interested_on_ma
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -476,6 +501,7 @@ def test_post_import_settings_with_malformed_hide_not_interested_falls_back_to_t
     client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -503,6 +529,7 @@ def test_post_import_settings_with_preferences_imports_send_weekly_checkin(clien
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -531,6 +558,7 @@ def test_post_import_settings_with_malformed_send_weekly_checkin_falls_back_to_f
     client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -550,6 +578,7 @@ def test_post_import_settings_without_preferences_key_leaves_stored_preferences_
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -577,6 +606,7 @@ def test_post_import_settings_with_malformed_preferences_falls_back_to_defaults(
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -600,6 +630,7 @@ def test_post_import_settings_with_preferences_shows_toast_after_redirect(client
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
     )
 
     assert resp.status_code == 200
@@ -618,6 +649,7 @@ def test_post_import_settings_without_preferences_shows_toast_after_redirect(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
     )
 
     assert resp.status_code == 200
@@ -650,22 +682,20 @@ def test_post_import_settings_with_invalid_json_returns_400_and_leaves_sources(c
         assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["s1"]
 
 
-def test_settings_data_import_form_has_confirm_guard(client):
+def test_settings_data_import_form_has_no_blind_confirm_guard(client):
     from bs4 import BeautifulSoup
 
     resp = client.get("/settings/data")
     soup = BeautifulSoup(resp.text, "html.parser")
 
+    # The diff preview page (shown after upload, before any write) replaced
+    # the old blind "Continue?" confirm-modal guard on the upload form --
+    # it never needed one since nothing is written at this point.
     assert 'id="import-form"' in resp.text
-    assert 'data-confirm-message="Importing will replace your entire source list. Continue?"' in resp.text
-    # Scoped to the form itself, not the whole page: the footer's "What's
-    # New" modal (every page) renders prose from CHANGELOG.md that can
-    # legitimately mention "confirm(" (e.g. describing the confirm-modal.js
-    # fallback) without that being the old inline-onclick pattern this
-    # guards against.
     import_form = soup.find(id="import-form")
     assert import_form is not None
-    assert "confirm(" not in str(import_form)
+    assert import_form.get("data-confirm-title") is None
+    assert import_form.get("data-confirm-message") is None
 
 
 def test_post_preferences_rejects_malformed_email_and_does_not_save(client, admin_user_id):
@@ -726,6 +756,7 @@ def test_post_import_settings_with_malformed_email_drops_it_but_keeps_others(cli
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -840,6 +871,21 @@ def test_post_import_rejects_oversized_file(client):
     assert "too large" in resp.text.lower()
 
 
+def test_post_import_confirm_step_also_rejects_an_oversized_sources_json(client):
+    # Starlette's Request.form() itself caps a single field at 1 MiB by
+    # default and turns the overage into HTTPException(400) before the
+    # route's own 413 check ever sees it -- either way, nothing this large
+    # reaches json.loads/SourcesFile validation unbounded.
+    oversized = "x" * (1 * 1024 * 1024 + 1)
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": oversized},
+    )
+
+    assert resp.status_code == 400
+
+
 def test_post_import_accepts_file_at_exactly_the_size_limit(client):
     import json
 
@@ -849,6 +895,7 @@ def test_post_import_accepts_file_at_exactly_the_size_limit(client):
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", padded, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
 
@@ -944,9 +991,159 @@ def test_import_keeps_only_the_first_five_recipients(client, admin_user_id):
     resp = client.post(
         "/settings/data/import",
         files={"file": ("settings.json", payload, "application/json")},
+        data={"force": "1"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
     with client.app.state.pool.connection() as conn:
         settings = db.get_settings(conn, admin_user_id)
     assert settings["email_to"].count(",") == 4  # 5 addresses, 4 commas
+
+
+def test_post_import_without_force_shows_preview_and_does_not_write(client, admin_user_id):
+    import json
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 200
+    assert "New" in resp.text
+    assert "Added" in resp.text
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
+
+
+def test_post_import_preview_accepts_a_utf16_encoded_file(client, admin_user_id):
+    import json
+
+    from app import db
+
+    # json.loads auto-detects UTF-16/32 by BOM, so a Notepad "Unicode" save
+    # validates fine -- the preview must not then crash trying to re-encode
+    # the parsed data as UTF-8 text for the confirm step's hidden field.
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode("utf-16")
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert resp.status_code == 200
+    assert "New" in resp.text
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id) == []
+
+
+def test_post_import_confirm_step_writes_the_previewed_sources(client, admin_user_id):
+    import json
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{"id": "new", "name": "New", "type": "lever", "board_token": "new"}],
+    }).encode()
+    client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": payload.decode()},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        assert [s.id for s in db.list_sources(conn, admin_user_id)] == ["new"]
+
+
+def test_post_import_confirm_round_trips_the_rendered_hidden_field(client, admin_user_id):
+    import json
+
+    from bs4 import BeautifulSoup
+
+    from app import db
+
+    payload = json.dumps({
+        "sources": [{
+            "id": "new3", "name": 'A "Co" & <Sons>', "type": "lever", "board_token": "new3",
+        }],
+    }).encode()
+
+    preview = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+    soup = BeautifulSoup(preview.text, "html.parser")
+    hidden = soup.select_one('input[name="sources_json"]')
+    assert hidden is not None
+    rendered_json = hidden["value"]
+
+    resp = client.post(
+        "/settings/data/import",
+        data={"confirmed": "1", "sources_json": rendered_json},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        sources = db.list_sources(conn, admin_user_id)
+    assert [s.id for s in sources] == ["new3"]
+    assert sources[0].name == 'A "Co" & <Sons>'
+
+
+def test_post_import_preview_shows_updated_and_unchanged_sources(client, admin_user_id):
+    import json
+
+    from app import config, db
+
+    existing = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    with client.app.state.pool.connection() as conn:
+        db.add_source(conn, admin_user_id, existing)
+    payload = json.dumps({"sources": [
+        {"id": "s1", "name": "Acme Renamed", "type": "greenhouse", "board_token": "acme"},
+    ]}).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert "Acme Renamed" in resp.text
+    assert "Updated" in resp.text
+
+
+def test_post_import_preview_shows_preference_changes(client, admin_user_id):
+    import json
+
+    payload = json.dumps({
+        "sources": [],
+        "preferences": {"email_days": ["tue"], "resend_jobs": True, "email_to": ["new@x.test"]},
+    }).encode()
+
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", payload, "application/json")},
+    )
+
+    assert "new@x.test" in resp.text
+
+
+def test_post_import_invalid_json_still_errors_at_preview_time(client):
+    resp = client.post(
+        "/settings/data/import",
+        files={"file": ("settings.json", b"not json", "application/json")},
+    )
+
+    assert resp.status_code == 400

@@ -229,6 +229,26 @@ async def update_job_status(
     return flash_redirect("/jobs", message)
 
 
+@router.post("/jobs/bulk-status")
+async def bulk_update_job_status(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = await request.form()
+    keys = [k for k in form.getlist("keys") if isinstance(k, str)]
+    raw_status = _form_str(dict(form.items()), "status")
+    if raw_status == "":
+        raise HTTPException(status_code=400, detail="Choose a status")
+    status = None if raw_status == "none" else raw_status
+    if status is not None and status not in STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if len(keys) > 200:
+        raise HTTPException(status_code=400, detail="Too many jobs selected (max 200).")
+    with request.app.state.pool.connection() as conn:
+        count = db.bulk_set_status(conn, current_user["id"], keys, status)
+    return flash_redirect("/jobs", f"Updated {count} job(s).")
+
+
 @router.post("/jobs/remove")
 async def remove_job(
     request: Request,
@@ -283,6 +303,26 @@ async def update_job_duplicate(
             "duplicate_of": duplicate_of if action != "clear" else None,
         })
     return flash_redirect("/jobs", message)
+
+
+@router.post("/jobs/notes")
+async def update_job_notes(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+    notes = _form_str(form, "notes")
+    try:
+        with request.app.state.pool.connection() as conn:
+            db.set_job_notes(conn, current_user["id"], key, notes)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if _wants_json(request):
+        return JSONResponse({"ok": True, "message": "Notes saved.", "notes": notes})
+    return flash_redirect("/jobs", "Notes saved.")
 
 
 @router.post("/jobs/location-override")

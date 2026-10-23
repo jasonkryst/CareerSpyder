@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-10-22 (branch `fix/audit-polish-u5-u6`, v1.15.0)
+**Last reviewed:** 2026-10-23 (branch `feat/issues-213-220-221-222`, v2.0.0)
 
 ## Rubric
 
@@ -29,10 +29,6 @@ when issues are opened/closed (see "Maintaining this list" at the bottom).
 | Tier | # | Title | Impact | Effort |
 |---|---|---|---|---|
 | 1 | [#240](https://github.com/jasonkryst/CareerSpyder/issues/240) | Pipeline security (match BookWheel #257 ruleset baseline) | H | XS |
-| 1 | [#213](https://github.com/jasonkryst/CareerSpyder/issues/213) | Live run progress feedback during "Run now" | H | M |
-| 3 | [#222](https://github.com/jasonkryst/CareerSpyder/issues/222) | Bulk job status update via multi-select | M | M |
-| 3 | [#220](https://github.com/jasonkryst/CareerSpyder/issues/220) | Per-job notes field | M | M |
-| 3 | [#221](https://github.com/jasonkryst/CareerSpyder/issues/221) | Settings import — diff/preview before commit | M | M |
 | 4 | [#225](https://github.com/jasonkryst/CareerSpyder/issues/225) | Sources list — bulk enable/disable | L | M |
 | 4 | [#91](https://github.com/jasonkryst/CareerSpyder/issues/91) | Auto-dedup engine for secondary sources | M | L |
 
@@ -48,15 +44,6 @@ higher). Remaining gaps vs. BookWheel #257: `integration-test` and
 "always" bypass (decide and record whether that's intended); and a
 disabled duplicate ruleset ("Protect Main") should be deleted. All repo
 settings — no code change.
-
-### #213 — Live run progress · H / M
-Highest-impact open feature: a 30-source run can take minutes with no
-feedback. Option B (polling `GET /run-status` JSON) fits the dashboard's
-existing auto-refresh polling and e2e coverage better than SSE.
-
-### #222, #220, #221 — Jobs/import workflow · M / M
-#222 and #225 share a checkbox + bulk-toolbar pattern; build it once.
-#221 needs a two-step flow with a session-held confirmation token.
 
 ### #225 — Bulk enable/disable sources · L / M
 Labeled `complexity:low`, but needs an `enabled` flag on every source
@@ -78,6 +65,10 @@ scoring function can be built and unit-tested standalone first.
 | #216 | Admin users page — per-user job and source counts | `db.list_users` returns `source_count`/`active_job_count`; `/users` renders them as two new columns. `v1.13.0`. |
 | #217 | Invite management — expiry date, resend, revoke | `/users` lists every invite with a Pending/Accepted/Expired badge; `db.revoke_invite`/`db.resend_invite` (scoped to the creating admin) back new `POST /users/invites/{token}/revoke` and `POST /users/invite/resend` routes. `v1.13.0`. |
 | #226 | Digest — opt-in weekly check-in on clean runs | `send_weekly_checkin` preference (off by default) in `/settings/preferences`; `build_digest`'s `force_checkin` param returns a minimal "all clear" digest instead of `None`, only on Sunday. `v1.14.0`. |
+| #213 | Live run progress feedback during "Run now" | `GET /run-status` polling endpoint backed by `app/run_progress.py`'s in-memory per-user store, written from `orchestrator.run_once` per source; dashboard polls it and shows "Scraping \<source\>… (done/total)". `v2.0.0`. |
+| #222 | Bulk job status update via multi-select | Checkbox column + "select all on page" + bulk toolbar on `/jobs`, backed by `db.bulk_set_status` (ownership-scoped via SQL, capped at 200 keys/request). `v2.0.0`. |
+| #220 | Per-job notes field | Nullable `jobs.notes` column (migration `0006`); edit modal mirrors the duplicate-marking modal; `db.set_job_notes`/`POST /jobs/notes`. `v2.0.0`. |
+| #221 | Settings import — diff/preview before commit | Uploading now renders an inline diff (added/updated/unchanged sources, changed preference keys) with a "Confirm import" step before any write; `app/config.py::diff_import`. Simpler single-page flow, not a separate token-backed route. The old immediate-overwrite behavior remains as a `force=1` escape hatch for scripted imports. `v2.0.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 

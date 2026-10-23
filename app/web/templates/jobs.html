@@ -91,10 +91,24 @@
   <button type="submit">Filter</button>
   {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
 </form>
+<form method="post" action="/jobs/bulk-status" id="bulk-status-form" class="bulk-status-toolbar" hidden>
+  <span id="bulk-selected-count">0 selected</span>
+  <label>Set status
+    <select name="status" required>
+      <option value="" disabled selected>Choose status&hellip;</option>
+      <option value="none">Clear status</option>
+      {% for value, label in statuses.items() %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Apply to selected</button>
+</form>
 <div class="table-scroll">
 <table>
   <thead>
   <tr>
+    <th scope="col"><input type="checkbox" id="select-all-jobs" aria-label="Select all jobs on this page"></th>
     {{ sort_th(request, '/jobs', 'company', 'Company') }}
     <th scope="col">Search name</th>
     {{ sort_th(request, '/jobs', 'title', 'Title') }}
@@ -105,12 +119,18 @@
     <th scope="col">Emailed</th>
     <th scope="col">Status</th>
     <th scope="col">Summary</th>
+    <th scope="col">Notes</th>
     {% if is_admin %}<th scope="col">User</th>{% endif %}
   </tr>
   </thead>
   <tbody>
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
+    <td data-label="Select">
+      <input type="checkbox" name="keys" value="{{ job.key }}" form="bulk-status-form" class="job-select"
+             {% if job.user_id != current_user_id %}disabled{% endif %}
+             aria-label="Select {{ job.title | e }}">
+    </td>
     <td data-label="Company">{{ job.company or "—" }}</td>
     <td data-label="Search name">
       {{ job.source_name }}
@@ -180,6 +200,16 @@
       {% endif %}
     </td>
     <td data-label="Summary">{{ job.summary or "—" }}</td>
+    <td data-label="Notes">
+      <span class="notes-text">{{ (job.notes[:60] ~ "…") if job.notes and job.notes|length > 60 else (job.notes or "—") }}</span>
+      {% if job.user_id == current_user_id %}
+      <button type="button" class="notes-btn icon-btn"
+              data-key="{{ job.key }}"
+              data-title="{{ job.title | e }}"
+              data-notes="{{ job.notes or '' }}"
+              aria-label="Edit notes for {{ job.title | e }}">&#128221;</button>
+      {% endif %}
+    </td>
     {% if is_admin %}<td data-label="User">{{ job.username or "" }}</td>{% endif %}
   </tr>
   {% endfor %}
@@ -244,6 +274,23 @@
   </form>
 </dialog>
 
+<dialog id="notes-modal" class="modal" aria-labelledby="notes-modal-title">
+  <h2 id="notes-modal-title">Job Notes</h2>
+  <p id="notes-modal-job" class="modal-subtitle"></p>
+  <form id="notes-form">
+    <input type="hidden" id="notes-key" name="key">
+    <label for="notes-input">
+      Notes
+      <textarea id="notes-input" name="notes" rows="4"
+                placeholder="e.g. interviewed 2026-10-05, applied via recruiter Jane"></textarea>
+    </label>
+    <div class="modal-actions">
+      <button type="submit" class="btn-primary" id="notes-save-btn">Save</button>
+      <button type="button" id="notes-cancel-btn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 /* ── Shared helpers ─────────────────────────────────────────────────────── */
 (function () {
@@ -270,6 +317,30 @@
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  /* ── Bulk status toolbar ──────────────────────────────────────────────── */
+  var bulkForm = document.getElementById("bulk-status-form");
+  var selectAll = document.getElementById("select-all-jobs");
+  var bulkCount = document.getElementById("bulk-selected-count");
+  var jobCheckboxes = Array.prototype.slice.call(document.querySelectorAll(".job-select:not([disabled])"));
+
+  function updateBulkToolbar() {
+    if (!bulkForm) return;
+    var checked = jobCheckboxes.filter(function (cb) { return cb.checked; });
+    if (bulkCount) bulkCount.textContent = checked.length + " selected";
+    bulkForm.hidden = checked.length === 0;
+  }
+
+  jobCheckboxes.forEach(function (cb) {
+    cb.addEventListener("change", updateBulkToolbar);
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      jobCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+      updateBulkToolbar();
+    });
   }
 
   /* ── Status dropdown ──────────────────────────────────────────────────── */
@@ -517,6 +588,51 @@
     });
 
     locClear.addEventListener("click", function () { postOverride(""); });
+  }
+
+  /* ── Notes modal ───────────────────────────────────────────────────────── */
+  var notesModal = document.getElementById("notes-modal");
+  if (notesModal && typeof notesModal.showModal === "function") {
+    var notesForm = document.getElementById("notes-form");
+    var notesKey = document.getElementById("notes-key");
+    var notesInput = document.getElementById("notes-input");
+    var notesJobEl = document.getElementById("notes-modal-job");
+    var notesCancelBtn = document.getElementById("notes-cancel-btn");
+    var activeNotesBtn = null;
+
+    document.querySelectorAll(".notes-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        activeNotesBtn = btn;
+        notesKey.value = btn.dataset.key;
+        notesInput.value = btn.dataset.notes || "";
+        notesJobEl.textContent = btn.dataset.title;
+        notesModal.showModal();
+        notesInput.focus();
+      });
+    });
+
+    notesCancelBtn.addEventListener("click", function () { notesModal.close(); });
+
+    notesForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var data = new FormData(notesForm);
+      var result = await postJson("/jobs/notes", data);
+      if (result.ok) {
+        notesModal.close();
+        toast(result.body.message);
+        if (activeNotesBtn) {
+          var row = activeNotesBtn.closest("tr");
+          var notes = result.body.notes || "";
+          activeNotesBtn.dataset.notes = notes;
+          var notesCell = row.querySelector('td[data-label="Notes"] .notes-text');
+          if (notesCell) {
+            notesCell.textContent = notes.length > 60 ? notes.slice(0, 60) + "…" : (notes || "—");
+          }
+        }
+      } else {
+        toast(result.body.detail || "Failed to save notes.");
+      }
+    });
   }
 })();
 </script>

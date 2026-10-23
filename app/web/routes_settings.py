@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 from app import db, emailer
-from app.config import SourcesFile
+from app.config import SourcesFile, diff_import
 from app.models import JOB_STATUSES
 from app.web import ratelimit
 from app.web.auth import (
@@ -321,24 +321,73 @@ def export_settings(
     )
 
 
+_PREFERENCE_LABELS = {
+    "email_days": "Check days", "resend_jobs": "Resend jobs",
+    "email_to": "Digest recipients", "hide_not_interested_on_map": "Hide Not Interested on map",
+    "digest_max_per_company": "Max jobs per company", "digest_exclude_statuses": "Excluded statuses",
+    "send_weekly_checkin": "Weekly check-in email",
+}
+
+
+def _preference_diff(existing_settings, parsed) -> list[dict]:
+    """Changed-keys-only diff between stored settings and a parsed import
+    tuple, for the import preview. Returns [] when the file has no
+    preferences section at all (nothing would change)."""
+    if parsed is None:
+        return []
+    (
+        email_days, resend_jobs, email_to, hide_not_interested_on_map,
+        digest_max_per_company, digest_exclude_statuses, send_weekly_checkin,
+    ) = parsed
+    new = {
+        "email_days": email_days, "resend_jobs": resend_jobs, "email_to": email_to,
+        "hide_not_interested_on_map": hide_not_interested_on_map,
+        "digest_max_per_company": digest_max_per_company,
+        "digest_exclude_statuses": digest_exclude_statuses,
+        "send_weekly_checkin": send_weekly_checkin,
+    }
+    old = existing_settings or {}
+    changes = []
+    for key, label in _PREFERENCE_LABELS.items():
+        old_value = old.get(key) if existing_settings is not None else None
+        if old_value != new[key]:
+            changes.append({"label": label, "old": old_value, "new": new[key]})
+    return changes
+
+
 @router.post("/settings/data/import")
 async def import_settings(
     request: Request,
     current_user: dict = Depends(require_user),
 ):
     form = await request.form()
-    upload = form.get("file")
-    if not isinstance(upload, UploadFile) or not upload.filename:
-        return templates.TemplateResponse(
-            request, "settings_data.html", {"error": "Choose a file to import."}, status_code=400,
-        )
-    raw = await upload.read()
+    force = request.query_params.get("force") == "1" or form.get("force") == "1"
+    confirmed = form.get("confirmed") == "1"
+
+    if confirmed:
+        raw = str(form.get("sources_json") or "").encode("utf-8")
+    else:
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile) or not upload.filename:
+            return templates.TemplateResponse(
+                request, "settings_data.html", {"error": "Choose a file to import."}, status_code=400,
+            )
+        raw = await upload.read()
+
+    # Starlette's own Request.form() already caps any single field (so also
+    # "sources_json" on the confirm path, not just the uploaded file) at 1 MiB
+    # by default and turns an oversized one into HTTPException(400) before this
+    # line ever runs. This check stays as explicit, resilient defense-in-depth
+    # -- it's one coherent limit applied by this route's own logic rather than
+    # one path depending on an unstated framework default -- and it's what
+    # produces the friendlier themed error on the upload path.
     if len(raw) > _IMPORT_MAX_BYTES:
         return templates.TemplateResponse(
             request, "settings_data.html",
             {"error": "Import file is too large (max 1 MB)."},
             status_code=413,
         )
+
     try:
         data = json.loads(raw)
         sources = SourcesFile.model_validate(data).sources
@@ -353,6 +402,22 @@ async def import_settings(
         )
 
     parsed_preferences = _parse_preferences_import(data)
+
+    if not force and not confirmed:
+        with request.app.state.pool.connection() as conn:
+            existing_sources = db.list_sources(conn, current_user["id"])
+            existing_settings = db.get_settings(conn, current_user["id"])
+        diff = diff_import(existing_sources, sources)
+        pref_diff = _preference_diff(existing_settings, parsed_preferences)
+        return templates.TemplateResponse(request, "settings_data.html", {
+            "preview": {
+                "diff": diff, "pref_diff": pref_diff,
+                "sources_json": json.dumps(data),
+                "added_count": len(diff["added"]), "updated_count": len(diff["updated"]),
+                "unchanged_count": len(diff["unchanged"]),
+            },
+        })
+
     with request.app.state.pool.connection() as conn:
         count = db.import_sources(conn, current_user["id"], sources)
         if parsed_preferences is not None:

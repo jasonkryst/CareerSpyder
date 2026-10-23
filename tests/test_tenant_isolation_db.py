@@ -54,7 +54,8 @@ def test_run_once_for_one_user_leaves_other_users_jobs_active(pg_conn, two_users
     lambda conn, uid: db.set_job_duplicate(conn, uid, KEY),
     lambda conn, uid: db.clear_job_duplicate(conn, uid, KEY),
     lambda conn, uid: db.clear_location_override(conn, uid, KEY),
-], ids=["remove", "status", "dup", "undup", "clear-override"])
+    lambda conn, uid: db.set_job_notes(conn, uid, KEY, "x"),
+], ids=["remove", "status", "dup", "undup", "clear-override", "notes"])
 def test_job_mutations_by_a_non_owner_raise_keyerror(pg_conn, two_users, mutate):
     alice, bob = two_users
     _save(pg_conn, alice)
@@ -64,6 +65,44 @@ def test_job_mutations_by_a_non_owner_raise_keyerror(pg_conn, two_users, mutate)
         "SELECT status, removed_at, is_duplicate FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
     ).fetchone()
     assert row == (None, None, False)
+
+
+def test_set_job_notes_by_a_non_owner_raises_and_leaves_notes_unset(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice)
+    with pytest.raises(KeyError):
+        db.set_job_notes(pg_conn, bob, KEY, "x")
+    notes = pg_conn.execute(
+        "SELECT notes FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
+    ).fetchone()[0]
+    assert notes is None
+
+
+def test_bulk_set_status_by_a_non_owner_updates_nothing(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice)
+    count = db.bulk_set_status(pg_conn, bob, [KEY], "applied")
+    assert count == 0
+    row = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
+    ).fetchone()
+    assert row == (None,)
+
+
+def test_bulk_set_status_with_mixed_ownership_only_updates_owned_keys(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice, _job(key="shared", source_id="a"))
+    _save(pg_conn, bob, _job(key="shared", source_id="b"))
+    count = db.bulk_set_status(pg_conn, alice, ["shared"], "applied")
+    assert count == 1
+    alice_status = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = 'shared'", (alice,),
+    ).fetchone()[0]
+    bob_status = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = 'shared'", (bob,),
+    ).fetchone()[0]
+    assert alice_status == "applied"
+    assert bob_status is None
 
 
 def test_clear_jobs_only_deletes_the_callers_jobs(pg_conn, two_users):

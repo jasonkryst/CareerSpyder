@@ -1,7 +1,7 @@
 import json
 
 
-def test_confirming_modal_allows_import_to_proceed(live_server, page):
+def test_confirming_the_import_preview_writes_the_import(live_server, page):
     page.goto(live_server + "/settings/data")
 
     payload = json.dumps({"sources": []}).encode()
@@ -9,12 +9,12 @@ def test_confirming_modal_allows_import_to_proceed(live_server, page):
         "name": "settings.json", "mimeType": "application/json", "buffer": payload,
     })
     page.click('#import-form button[type="submit"]')
-    page.wait_for_selector("#confirm-modal[open]")
-    page.click("#confirm-modal-confirm")
+    page.wait_for_selector('button:has-text("Confirm import")')
+    page.click('button:has-text("Confirm import")')
     page.wait_for_url("**/settings/data?flash=*")
 
 
-def test_dismissing_modal_cancels_import(live_server, page):
+def test_canceling_the_import_preview_does_not_write(live_server, page):
     page.goto(live_server + "/settings/data")
 
     payload = json.dumps({"sources": []}).encode()
@@ -22,9 +22,9 @@ def test_dismissing_modal_cancels_import(live_server, page):
         "name": "settings.json", "mimeType": "application/json", "buffer": payload,
     })
     page.click('#import-form button[type="submit"]')
-    page.wait_for_selector("#confirm-modal[open]")
-    page.click("#confirm-modal-cancel")
+    page.wait_for_selector('button:has-text("Confirm import")')
+    page.click('a:has-text("Cancel")')
 
     page.wait_for_timeout(300)
     assert page.url.endswith("/settings/data")
-    assert "imported" not in page.url
+    assert "flash" not in page.url
