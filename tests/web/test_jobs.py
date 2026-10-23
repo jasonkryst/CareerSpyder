@@ -570,6 +570,49 @@ def test_jobs_page_checkbox_disabled_for_jobs_not_owned_by_viewer(client, member
     assert cb is not None and cb.has_attr("disabled")
 
 
+def test_post_job_notes_saves_and_redirects_with_flash(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.post("/jobs/notes", data={"key": "k1", "notes": "called recruiter"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert db.list_jobs(conn)[0]["notes"] == "called recruiter"
+
+
+def test_post_job_notes_json_path_returns_ok(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.post("/jobs/notes", data={"key": "k1", "notes": "x"}, headers={"Accept": "application/json"})
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+
+def test_post_job_notes_unknown_key_returns_404(client):
+    resp = client.post("/jobs/notes", data={"key": "nope", "notes": "x"})
+
+    assert resp.status_code == 404
+
+
+def test_post_job_notes_missing_key_returns_400(client):
+    resp = client.post("/jobs/notes", data={"notes": "x"})
+
+    assert resp.status_code == 400
+
+
+def test_jobs_page_escapes_html_in_notes(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_notes(conn, owner_id_for(conn), "k1", "<script>alert(1)</script>")
+
+    resp = client.get("/jobs")
+
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
 def test_jobs_page_shows_status_select_with_current_status_selected(client):
     conn = client.app.state.conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))

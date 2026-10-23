@@ -302,6 +302,26 @@ async def update_job_duplicate(
     return flash_redirect("/jobs", message)
 
 
+@router.post("/jobs/notes")
+async def update_job_notes(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+    notes = _form_str(form, "notes")
+    try:
+        with request.app.state.pool.connection() as conn:
+            db.set_job_notes(conn, current_user["id"], key, notes)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if _wants_json(request):
+        return JSONResponse({"ok": True, "message": "Notes saved.", "notes": notes})
+    return flash_redirect("/jobs", "Notes saved.")
+
+
 @router.post("/jobs/location-override")
 async def update_location_override(
     request: Request,
