@@ -90,6 +90,16 @@ def test_source_id_defaults_when_omitted():
     assert source.id
 
 
+def test_source_enabled_defaults_to_true():
+    source = config.GreenhouseSource(name="Acme", type="greenhouse", board_token="acme")
+    assert source.enabled is True
+
+
+def test_source_enabled_can_be_set_false():
+    source = config.GreenhouseSource(name="Acme", type="greenhouse", board_token="acme", enabled=False)
+    assert source.enabled is False
+
+
 def test_load_sources_returns_empty_list_when_file_missing(tmp_path):
     path = tmp_path / "does-not-exist.json"
     assert config.load_sources(str(path)) == []

@@ -5,11 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [2.1.0] — 2026-10-23
+## [2.2.0] — 2026-10-23
 
 ### Added
 
 - **Redesigned filter bar on `/jobs` and `/sources`** ([#254](https://github.com/jasonkryst/CareerSpyder/issues/254)). The jobs filter bar's ~11 fields are now grouped into labeled sections (Search, Location, Status, and an admin-only User section) instead of one flat, unstructured row, and both pages' filter bars stack cleanly to a single column on narrow viewports instead of wrapping raggedly. The whole filter form now collapses behind a toggle by default (native `<details>`/`<summary>`, no JS) and opens automatically whenever a filter is already applied. Active filters render as removable chips above the panel — click a chip's "×" to drop just that one filter (a multi-select filter like State or Job status removes only that one value, leaving the others selected), or reset everything at once; every chip is a plain URL link, no JavaScript required. Pure CSS/markup/route restructuring — existing filter query params, their defaults, and the page's underlying data/pagination behavior are unchanged.
+
+## [2.1.0] — 2026-10-23
+
+### Added
+
+- **Bulk enable/disable on `/sources`** ([#225](https://github.com/jasonkryst/CareerSpyder/issues/225)). Every source config gains an `enabled` flag (default `true`); disabled sources stay configured and keep their already-found jobs, but are skipped entirely on the next run — no adapter call, no entry in the progress bar, no failed-source report even if the site is down. A checkbox column plus a "select all on page" checkbox feed a bulk toolbar with **Enable selected** / **Disable selected** buttons, mirroring the `/jobs` bulk-status toolbar (#222). The source list gained a Status column (Enabled/Disabled badge) and a Status filter (All / Enabled only / Disabled only). The single-source edit form also gained an **Enabled** checkbox, so editing a disabled source doesn't silently re-enable it.
 
 ## [2.0.0] — 2026-10-23
 

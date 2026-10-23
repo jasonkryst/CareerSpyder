@@ -820,6 +820,12 @@ dialog.modal .modal-actions {
   opacity: 0.7;
 }
 
+.badge-disabled {
+  background: var(--fg-muted);
+  color: #fff;
+  opacity: 0.7;
+}
+
 dialog.modal .modal-subtitle {
   color: var(--fg-muted);
   font-size: 0.875rem;

@@ -91,3 +91,25 @@ def test_clicking_sources_name_header_sorts_and_toggles(live_server, page):
 
     names = page.locator('td[data-label="Name"]').all_inner_texts()
     assert names.index("ZZZ Sort Test Acme") < names.index("ZZZ Sort Test Zeta")
+
+
+def test_bulk_disable_sources_shows_toolbar_and_updates_badge(live_server, page):
+    page.goto(live_server + "/sources/new")
+    page.fill('input[name="name"]', "ZZZ Bulk Toggle Co")
+    page.select_option('select[name="type"]', "greenhouse")
+    page.fill('input[name="board_token"]', "bulktoggle")
+    page.click("button.btn-primary")
+    page.wait_for_url("**/sources")
+
+    row = page.locator("tr", has=page.locator('td[data-label="Name"]', has_text="ZZZ Bulk Toggle Co"))
+    assert row.locator("text=Enabled").count() == 1
+
+    toolbar = page.locator("#bulk-toggle-form")
+    assert toolbar.is_hidden()
+    row.locator(".source-select").check()
+    assert toolbar.is_visible()
+    page.click('#bulk-toggle-form button[value="false"]')
+    page.wait_for_url("**/sources*")
+
+    row = page.locator("tr", has=page.locator('td[data-label="Name"]', has_text="ZZZ Bulk Toggle Co"))
+    assert row.locator("text=Disabled").count() == 1

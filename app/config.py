@@ -33,6 +33,7 @@ class BaseSource(BaseModel):
     name: str
     company: str | None = None
     secondary: bool = False
+    enabled: bool = True
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)
 

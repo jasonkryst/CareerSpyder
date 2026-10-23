@@ -312,6 +312,23 @@ def test_sources_filter_panel_opens_and_shows_chip_when_a_filter_is_active(clien
     assert "type=" not in chip["href"]
 
 
+def test_sources_enabled_filter_shows_removable_chip(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a", "enabled": False},
+    ])
+
+    resp = client.get("/sources?enabled=false")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel.has_attr("open") is True
+    chip = soup.select_one(".active-filters .chip:not(.chip-clear)")
+    assert chip is not None
+    assert "Status: Disabled only" in chip.get_text()
+    assert "enabled=" not in chip["href"]
+
+
 def test_pagination_jump_shown_for_sources_when_many_pages(client, admin_user_id):
     sources = [
         {"id": f"s{i}", "name": f"Source {i}", "type": "greenhouse", "board_token": f"tok{i}"}
@@ -323,3 +340,153 @@ def test_pagination_jump_shown_for_sources_when_many_pages(client, admin_user_id
 
     assert resp.status_code == 200
     assert "pagination-jump" in resp.text
+
+
+# --- Bulk enable/disable (issue #225) ---
+
+def test_sources_list_shows_disabled_badge(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Paused Co", "type": "greenhouse", "board_token": "t", "enabled": False},
+    ])
+
+    resp = client.get("/sources")
+
+    assert "badge-disabled" in resp.text
+    assert "Disabled" in resp.text
+
+
+def test_sources_list_enabled_filter_shows_only_disabled(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Active Co", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "Paused Co", "type": "greenhouse", "board_token": "p", "enabled": False},
+    ])
+
+    resp = client.get("/sources?enabled=false")
+
+    assert 'data-label="Name">Paused Co' in resp.text
+    assert 'data-label="Name">Active Co' not in resp.text
+
+
+def test_sources_list_enabled_filter_shows_only_enabled(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Active Co", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "Paused Co", "type": "greenhouse", "board_token": "p", "enabled": False},
+    ])
+
+    resp = client.get("/sources?enabled=true")
+
+    assert 'data-label="Name">Active Co' in resp.text
+    assert 'data-label="Name">Paused Co' not in resp.text
+
+
+def test_sources_list_no_enabled_filter_shows_both(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Active Co", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "Paused Co", "type": "greenhouse", "board_token": "p", "enabled": False},
+    ])
+
+    resp = client.get("/sources")
+
+    assert 'data-label="Name">Active Co' in resp.text
+    assert 'data-label="Name">Paused Co' in resp.text
+
+
+def test_sources_list_shows_bulk_toggle_toolbar_and_select_all_markup(client):
+    resp = client.get("/sources")
+
+    assert 'id="bulk-toggle-form"' in resp.text
+    assert 'id="select-all-sources"' in resp.text
+
+
+def test_post_bulk_toggle_disables_selected_sources_and_flashes_count(client, admin_user_id):
+    from urllib.parse import parse_qs, urlparse
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"},
+        {"id": "s2", "name": "B", "type": "greenhouse", "board_token": "b"},
+    ])
+
+    resp = client.post("/sources/bulk-toggle", data={"ids": ["s1", "s2"], "enabled": "false"},
+                        follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Disabled 2 source(s)."]
+    with client.app.state.pool.connection() as conn:
+        sources = {s.id: s.enabled for s in db.list_sources(conn, admin_user_id)}
+    assert sources == {"s1": False, "s2": False}
+
+
+def test_post_bulk_toggle_enables_selected_sources(client, admin_user_id):
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a", "enabled": False},
+    ])
+
+    resp = client.post("/sources/bulk-toggle", data={"ids": ["s1"], "enabled": "true"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id)[0].enabled is True
+
+
+def test_post_bulk_toggle_rejects_invalid_enabled_value(client, admin_user_id):
+    _add_sources(client, admin_user_id, [{"id": "s1", "name": "A", "type": "greenhouse", "board_token": "a"}])
+
+    resp = client.post("/sources/bulk-toggle", data={"ids": ["s1"], "enabled": "bogus"})
+
+    assert resp.status_code == 400
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id)[0].enabled is True
+
+
+def test_post_bulk_toggle_rejects_more_than_200_ids(client, admin_user_id):
+    ids = [f"s{i}" for i in range(201)]
+
+    resp = client.post("/sources/bulk-toggle", data={"ids": ids, "enabled": "false"})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_toggle_with_no_ids_flashes_zero(client):
+    from urllib.parse import parse_qs, urlparse
+
+    resp = client.post("/sources/bulk-toggle", data={"ids": [], "enabled": "false"}, follow_redirects=False)
+
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Disabled 0 source(s)."]
+
+
+def test_post_bulk_toggle_only_updates_the_callers_own_sources(client, admin_user_id, member_user_id_for_admin):
+    with client.app.state.pool.connection() as conn:
+        from app.config import GreenhouseSource
+        db.add_source(conn, admin_user_id, GreenhouseSource(id="mine", name="Mine", type="greenhouse", board_token="a"))
+        db.add_source(conn, member_user_id_for_admin,
+                      GreenhouseSource(id="theirs", name="Theirs", type="greenhouse", board_token="b"))
+
+    client.post("/sources/bulk-toggle", data={"ids": ["mine", "theirs"], "enabled": "false"})
+
+    with client.app.state.pool.connection() as conn:
+        theirs_enabled = next(s.enabled for s in db.list_sources(conn, member_user_id_for_admin))
+    assert theirs_enabled is True
+
+
+def test_source_form_has_enabled_checkbox_checked_by_default(client):
+    resp = client.get("/sources/new")
+    assert 'name="enabled"' in resp.text
+
+
+def test_editing_a_disabled_source_without_resubmitting_enabled_checkbox_keeps_it_disabled(client, admin_user_id):
+    """Regression guard: a browser omits an unchecked checkbox from the submitted
+    form entirely. If the edit route didn't read `enabled` as a real checkbox
+    (defaulting missing -> False, same as `secondary`), a plain re-save of a
+    disabled source -- with no other change -- would silently re-enable it,
+    since the model's `enabled` field defaults to True."""
+    _add_sources(client, admin_user_id, [
+        {"id": "s1", "name": "Paused Co", "type": "greenhouse", "board_token": "t", "enabled": False},
+    ])
+
+    resp = client.post("/sources/s1/edit", data={
+        "id": "s1", "type": "greenhouse", "name": "Paused Co", "board_token": "t",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        assert db.list_sources(conn, admin_user_id)[0].enabled is False

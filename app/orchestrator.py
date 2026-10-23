@@ -35,7 +35,12 @@ def run_once(
     geocoder: Geocoder | None = None, *, user_id: str,
 ) -> RunSummary:
     with _run_lock:
-        run_progress.start(user_id, total=len(sources))
+        # Disabled sources (issue #225) are skipped entirely -- not attempted,
+        # not counted in progress -- but stay in `sources` for the
+        # configured_source_ids computation below, so reconcile_jobs leaves
+        # their previously-found jobs alone instead of marking them removed.
+        active_sources = [s for s in sources if s.enabled]
+        run_progress.start(user_id, total=len(active_sources))
         try:
             run_id = db.start_run(conn, user_id=user_id)
             all_jobs: list[Job] = []
@@ -43,7 +48,7 @@ def run_once(
             succeeded_source_ids: set[str] = set()
             failed_sources: list[FailedSource] = []
 
-            for i, source in enumerate(sources):
+            for i, source in enumerate(active_sources):
                 run_progress.update(user_id, source.name, done=i)
                 try:
                     adapter = ADAPTERS[source.type]
@@ -80,7 +85,7 @@ def run_once(
                 logger.exception("URL check step failed for run %s", run_id)
                 url_removed_count = 0
 
-            db.finish_run(conn, run_id, len(new_jobs), failed_sources, source_count=len(sources))
+            db.finish_run(conn, run_id, len(new_jobs), failed_sources, source_count=len(active_sources))
             return RunSummary(
                 run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs,
                 failed_sources=failed_sources, url_removed_count=url_removed_count,
