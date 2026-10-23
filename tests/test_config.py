@@ -416,3 +416,43 @@ def test_concurrent_add_and_delete_source_do_not_corrupt(tmp_path):
     ids = {s.id for s in config.load_sources(path)}
     assert "n2" in ids
     assert "e1" not in ids
+
+
+def test_diff_import_new_id_is_added():
+    new = [config.LeverSource(id="n1", name="New", type="lever", board_token="n")]
+
+    result = config.diff_import([], new)
+
+    assert [s.id for s in result["added"]] == ["n1"]
+    assert result["updated"] == []
+    assert result["unchanged"] == []
+
+
+def test_diff_import_same_id_same_content_is_unchanged():
+    s = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+
+    result = config.diff_import([s], [s.model_copy()])
+
+    assert [x.id for x in result["unchanged"]] == ["s1"]
+    assert result["added"] == []
+    assert result["updated"] == []
+
+
+def test_diff_import_same_id_different_content_is_updated():
+    old = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+    new = old.model_copy(update={"name": "Acme Renamed"})
+
+    result = config.diff_import([old], [new])
+
+    assert len(result["updated"]) == 1
+    got_old, got_new = result["updated"][0]
+    assert got_old.name == "Acme"
+    assert got_new.name == "Acme Renamed"
+
+
+def test_diff_import_existing_source_missing_from_file_is_not_reported():
+    old = config.GreenhouseSource(id="s1", name="Acme", type="greenhouse", board_token="acme")
+
+    result = config.diff_import([old], [])
+
+    assert result == {"added": [], "updated": [], "unchanged": []}
