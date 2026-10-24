@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-10-23
+
+### Fixed
+
+- **Jobs Map tiles blank on a CARTO key with website restrictions.** The site-wide `Referrer-Policy: same-origin` header stripped the `Referer` on Leaflet's cross-origin tile requests to `basemaps.cartocdn.com`, which a website-restricted `CARTO_API_KEY` then refused with a 403 (blank map). `/jobs/map` now sets a page-scoped `<meta name="referrer" content="strict-origin-when-cross-origin">`, which overrides the header for that page only and still sends CARTO a matching origin `Referer`; every other page keeps the stricter site-wide default.
+
 ## [2.2.0] — 2026-10-23
 
 ### Added

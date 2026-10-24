@@ -248,6 +248,17 @@ def test_jobs_map_injects_carto_key_attr_when_env_set(client, monkeypatch):
     assert 'data-carto-api-key="test-key-abc"' in resp.text
 
 
+def test_jobs_map_overrides_referrer_policy_for_tile_requests(client):
+    # The site-wide `Referrer-Policy: same-origin` header (security_headers.py)
+    # strips the Referer on Leaflet's cross-origin tile <img> requests, which
+    # CARTO's website-restricted basemap keys then reject with 403 (blank
+    # tiles). A per-document <meta name="referrer"> overrides the HTTP header
+    # for this page only, so tile requests still carry an origin Referer.
+    resp = client.get("/jobs/map")
+    assert resp.status_code == 200
+    assert '<meta name="referrer" content="strict-origin-when-cross-origin">' in resp.text
+
+
 def test_jobs_map_data_groups_jobs_by_location(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
