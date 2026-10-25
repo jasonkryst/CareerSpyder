@@ -1,12 +1,26 @@
 # Roadmap
 
-Known limitations and planned future work for CareerSpyder, past the v1
-release described in [CHANGELOG.md](CHANGELOG.md). Nothing here is
-scheduled — it's a backlog, roughly ordered by impact within each section.
+Known limitations and planned future work for CareerSpyder that aren't
+(yet) tracked as their own GitHub issues. Nothing here is scheduled — it's
+a backlog, roughly ordered by impact within each section. For the ranked
+list of open GitHub issues, see [docs/issue-tiers.md](docs/issue-tiers.md);
+for what's shipped, see [CHANGELOG.md](CHANGELOG.md).
+
 Items marked **(from design spec)** were explicitly deferred at design
-time; items marked **(from review)** were flagged as minor/non-blocking by
-the whole-branch code review that preceded the v1 release and parked for
-later rather than fixed immediately.
+time; **(from review)** were flagged as minor/non-blocking by a code review
+and parked; **(from audit)** come from
+[docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
+
+_Last reviewed 2026-10-22 against v1.15.0. Items verified as already
+shipped (SMTP port 465 / implicit TLS, missed-run catch-up at startup, the
+1 MB import cap, the `/sources/test-preview` concurrency limit, friendly
+validation/preview errors (U2), the "Listing status" vs "Job status"
+filter labels (U4), `role="alert"` on form error banners (A3), the
+local-vs-Docker Python version mismatch, the `get_new_jobs` per-job bind
+parameters, the digest subject line ignoring failures, required-field
+indication on the source form (U5), and the confirm-modal's non-JS
+fallback (U6)) were removed
+in that pass._
 
 ## Security & access
 
@@ -14,47 +28,26 @@ later rather than fixed immediately.
   design, to avoid persisting a credential in plaintext on disk. If this
   becomes painful operationally, revisit with e.g. an encrypted-at-rest
   secret store rather than a plain UI field.
-- **Unbounded settings-import upload and unrate-limited preview fetches
-  (from audit).** `/settings/data`'s import has no upload size cap;
-  `/sources/test-preview`'s Playwright-driven fetches have no concurrency
-  limit (unlike the daily run, which is serialized). See the audit's
-  findings M2 and M3.
 - **Flash messages travel as query-string parameters (from audit, L6).**
-  After a redirect (e.g. "Source saved"), the success/error message is
-  passed in the URL's query string rather than in the session. Moving it
+  `app/web/flash.py::flash_redirect` passes the success/error message in
+  the redirect URL's query string rather than in the session. Moving it
   into the session would be cleaner but is not exploitable (the message is
   HTML-escaped in the template). See SECURITY.md's residual-risks section.
 
-## Reliability & operations
-
-- **SMTP port 465 / implicit TLS isn't supported (from review).** The
-  emailer always does STARTTLS; the settings page accepts port 465 without
-  validating it needs `smtplib.SMTP_SSL` instead. Either branch on the
-  port or restrict/validate to STARTTLS-compatible ports.
-- **Missed daily runs aren't caught up (from review).** APScheduler's
-  default misfire grace time means a restart or a busy process at
-  `RUN_HOUR:00` silently skips that day. Consider a small grace window
-  plus a "haven't run today yet" check at startup.
-- **Very large aggregate job counts could hit SQLite's bound-parameter cap
-  (from review).** `db.get_new_jobs` binds one SQL parameter per job
-  checked; SQLite's default limit is 32,766. A single well-known ATS board
-  can already return 500+ postings, so a config with many large boards
-  should chunk the `IN (...)` query.
-
 ## Features
 
-- **Auto-dedup engine for secondary sources (issue #91; #82 item 4).** Jobs
-  found by secondary sources (Indeed, LinkedIn) could be automatically
-  compared against primary-source listings using title + company similarity
-  scoring (e.g. `difflib.SequenceMatcher`) to produce low/medium/high
-  confidence duplicate candidates. High-confidence matches could be
-  auto-flagged; lower-confidence ones surfaced for manual review in the UI.
-  Manual duplicate marking (added in #82) provides the data model for this.
+- **Auto-dedup engine for secondary sources
+  ([#91](https://github.com/jasonkryst/CareerSpyder/issues/91)).** Compare
+  jobs from secondary sources (Indeed, LinkedIn) against primary-source
+  listings using title + company similarity scoring (e.g.
+  `difflib.SequenceMatcher`) to produce low/medium/high confidence
+  duplicate candidates. Manual duplicate marking (added in #82) provides
+  the data model.
 - **Official LinkedIn/Indeed APIs or RSS feeds (from design spec).** The
   current `linkedin`/`indeed` adapters are explicitly best-effort
   Playwright scraping of public search pages — fragile by nature (layout
-  changes, blocking, CAPTCHAs). Replacing them with an official API or RSS
-  source, where available, would be far lower-maintenance.
+  changes, blocking, CAPTCHAs). Neither currently offers a public
+  job-search API, so this is likely blocked; revisit if that changes.
 - **Job type (full-time/part-time/contract) filtering.** No adapter
   currently extracts employment type. Known availability by platform:
   - **Lever:** `categories.commitment` in the job listing API response
@@ -65,40 +58,21 @@ later rather than fixed immediately.
   - **TalentBrew, Infor, LinkedIn, Indeed:** HTML/Playwright scrapers with no reliable
     structured job-type field; would require regex parsing of unstructured content.
   Implementing requires: a `job_type` field on the `Job` model and DB schema, per-adapter
-  extraction for supported platforms, and a filter UI control.
-- **Digest subject line doesn't mention failures when jobs also exist
-  (from review).** `app/digest.py` currently only reflects the new-job
-  count in the subject when there are new jobs, even if the same run also
-  had source failures — a minor readability gap, not a functional one.
-
-## UI, UX & accessibility
-
-- **Raw pydantic/adapter exceptions shown directly to end users (from
-  audit).** Source add/edit validation errors and `/sources/test-preview`
-  failures both render `str(exc)` verbatim — confusing jargon for a
-  self-hosting home user, and a minor incidental leak of internal model
-  names and library internals. See finding U2.
-- **Ambiguous "Status" filter naming on `/jobs` and `/jobs/map` (from
-  audit).** The filter labeled "Status" filters Active/Removed, while the
-  table's own "Status" column shows the separate Applied/Ignored/
-  Accepted/Rejected/Not Interested job status (filtered by the
-  differently-labeled "Job status" field). See finding U4.
-- **Smaller UX/accessibility polish items (from audit).** No
-  required-field indication on the source form (U5); the confirm-modal
-  has no non-JS fallback, so Delete/Import submit with zero warning if JS
-  is blocked (U6); form validation error banners aren't marked
-  `role="alert"` (A3). See the audit for details on each.
-
-Full write-up, including what's already solid (landmarks, focus
-handling, dark-mode contrast, responsive table collapse, etc.):
-[docs/audits/2026-08-19-app-audit.md](docs/audits/2026-08-19-app-audit.md).
+  extraction for supported platforms, and a filter UI control. A Lever-only first cut
+  would be much smaller.
 
 ## Testing & tooling
 
-- **Local dev environment doesn't match the deploy runtime (from
-  review).** The `Dockerfile` pins `python:3.12-slim`; local development
-  has run against newer interpreters. Pin (or document) a matching local
-  Python version so the test suite exercises the same runtime that ships.
 - **No settings-survives-a-restart test (from review).** `/settings`
   writes are covered unit-wise, but nothing simulates a container restart
   to confirm persisted settings actually reload correctly.
+- **Whole-page substring assertions are fragile now that every page embeds
+  the current release's CHANGELOG.md prose (the "What's New" modal, #241).**
+  `app/web/whats_new.py::whats_new_html` only renders the one version
+  section matching the running `app_version`, so this only bites when a
+  release's own changelog wording happens to contain a string some
+  unrelated test asserts is absent from `resp.text` (hit once already:
+  `test_settings_data_import_form_has_confirm_guard` broke on a v1.15.0
+  entry mentioning `window.confirm()`, fixed by scoping the assertion to
+  the specific form element). Prefer scoping a new "X is absent" assertion
+  to the element/container it's actually about rather than the whole page.

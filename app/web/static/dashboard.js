@@ -5,10 +5,22 @@
   var runForm = document.getElementById("run-now-form");
   var runStatus = document.getElementById("run-now-status");
   var checkUrlsForm = document.getElementById("check-urls-form");
+  var runProgressLabel = document.getElementById("run-progress-label");
   if (!container) return;
 
   var POLL_MS = 10000;
   var pollTimer = null;
+
+  function pollProgress() {
+    if (!runProgressLabel) return;
+    fetch("/run-status")
+      .then(function (resp) { return resp.json(); })
+      .then(function (body) {
+        runProgressLabel.textContent = body.running
+          ? "Scraping " + body.source + "… (" + body.done + "/" + body.total + ")"
+          : "";
+      });
+  }
 
   function hasInProgressRun() {
     var cells = container.querySelectorAll('td[data-label="Finished"]');
@@ -34,6 +46,7 @@
   }
 
   function managePolling() {
+    pollProgress();
     if (hasInProgressRun()) {
       if (!pollTimer) pollTimer = setInterval(refresh, POLL_MS);
     } else if (pollTimer) {

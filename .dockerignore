@@ -4,6 +4,7 @@
 tests
 docs
 *.md
+!CHANGELOG.md
 .venv
 config
 data

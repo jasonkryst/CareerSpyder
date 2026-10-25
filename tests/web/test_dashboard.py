@@ -389,7 +389,7 @@ def test_dashboard_no_failed_sources_cell_is_empty(client):
     resp = client.get("/")
 
     assert resp.status_code == 200
-    assert "<ul" not in resp.text
+    assert "failed-sources-list" not in resp.text
 
 
 # --- URL check run row tests (issue #116) ---
@@ -451,7 +451,7 @@ def test_url_check_row_failed_sources_cell_is_empty(client):
 
     resp = client.get("/")
 
-    assert "<ul" not in resp.text
+    assert "failed-sources-list" not in resp.text
 
 
 def test_mixed_run_types_both_appear_in_dashboard(client):
@@ -684,3 +684,37 @@ def test_pagination_jump_hidden_when_two_pages(client):
     assert resp.status_code == 200
     assert "Page 1 of 2" in resp.text
     assert "pagination-jump" not in resp.text
+
+
+def test_run_status_reports_not_running_by_default(client):
+    resp = client.get("/run-status")
+    assert resp.status_code == 200
+    assert resp.json() == {"running": False}
+
+
+def test_run_status_reports_in_progress_run(client, admin_user_id):
+    from app import run_progress
+
+    run_progress.start(admin_user_id, total=10)
+    run_progress.update(admin_user_id, "Acme Corp", done=3)
+    try:
+        resp = client.get("/run-status")
+        assert resp.json() == {"running": True, "source": "Acme Corp", "done": 3, "total": 10}
+    finally:
+        run_progress.finish(admin_user_id)
+
+
+def test_run_status_does_not_see_another_users_progress(member_client, admin_user_id):
+    from app import run_progress
+
+    run_progress.start(admin_user_id, total=10)
+    try:
+        resp = member_client.get("/run-status")
+        assert resp.json() == {"running": False}
+    finally:
+        run_progress.finish(admin_user_id)
+
+
+def test_dashboard_has_run_progress_label(client):
+    resp = client.get("/")
+    assert 'id="run-progress-label"' in resp.text

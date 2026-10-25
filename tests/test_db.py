@@ -106,6 +106,23 @@ def test_new_job_then_seen_on_second_run(pg_conn):
     assert db.get_new_jobs(conn, owner_id_for(conn), [job]) == []
 
 
+def test_get_new_jobs_filters_a_mix_of_known_and_unknown_keys(pg_conn):
+    """Regression test for the per-job bind-parameter version of this query:
+    exercises more than one key at once so a switch to `key = ANY(%s)` is
+    verified to still separate known from unknown keys correctly."""
+    conn = pg_conn
+    owner = owner_id_for(conn)
+    known = make_job(key="known1")
+    run_id = db.start_run(conn)
+    db.save_jobs(conn, [known], run_id, user_id=owner)
+    db.finish_run(conn, run_id, new_job_count=1, failed_sources=[])
+
+    candidates = [known, make_job(key="new1"), make_job(key="new2")]
+    result = db.get_new_jobs(conn, owner, candidates)
+
+    assert {j.key for j in result} == {"new1", "new2"}
+
+
 def test_clear_jobs_empties_the_table(pg_conn):
     conn = pg_conn
     job = make_job()
@@ -800,6 +817,133 @@ def test_set_job_status_on_unknown_key_raises_key_error(pg_conn):
 
     with pytest.raises(KeyError):
         db.set_job_status(conn, owner_id_for(conn), "does-not-exist", "applied")
+
+
+def test_bulk_set_status_updates_all_given_keys(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    for k in ("k1", "k2", "k3"):
+        db.save_jobs(conn, [make_job(key=k)], db.start_run(conn), user_id=uid)
+
+    count = db.bulk_set_status(conn, uid, ["k1", "k2"], "applied")
+
+    assert count == 2
+    rows = {r["key"]: r["status"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "applied" and rows["k2"] == "applied" and rows["k3"] is None
+
+
+def test_bulk_set_status_can_clear_status(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_status(conn, uid, "k1", "applied")
+
+    count = db.bulk_set_status(conn, uid, ["k1"], None)
+
+    assert count == 1
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_bulk_set_status_records_history_for_each_updated_key(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.bulk_set_status(conn, uid, ["k1"], "ignored")
+
+    history = db.get_job_status_history(conn, [(uid, "k1")])
+    assert history[(uid, "k1")][0]["status"] == "ignored"
+
+
+def test_bulk_set_status_ignores_empty_key_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_status(conn, uid, [], "applied") == 0
+
+
+def test_bulk_set_enabled_disables_all_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1", "s2"], False)
+
+    assert count == 2
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": False}
+
+
+def test_bulk_set_enabled_can_re_enable(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1", enabled=False))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1"], True)
+
+    assert count == 1
+    assert db.list_sources(conn, uid)[0].enabled is True
+
+
+def test_bulk_set_enabled_only_affects_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    db.bulk_set_enabled(conn, uid, ["s1"], False)
+
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": True}
+
+
+def test_bulk_set_enabled_ignores_empty_id_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_enabled(conn, uid, [], False) == 0
+
+
+def test_set_job_notes_stores_text(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.set_job_notes(conn, uid, "k1", "interviewed 2026-10-05")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "interviewed 2026-10-05"
+
+
+def test_set_job_notes_can_clear_to_empty_string(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_notes(conn, uid, "k1", "something")
+
+    db.set_job_notes(conn, uid, "k1", "")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == ""
+
+
+def test_set_job_notes_unknown_key_raises_keyerror(pg_conn):
+    conn = pg_conn
+
+    with pytest.raises(KeyError):
+        db.set_job_notes(conn, owner_id_for(conn), "nope", "x")
+
+
+def test_list_jobs_defaults_notes_to_none(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    assert db.list_jobs(conn)[0]["notes"] is None
 
 
 def test_get_job_status_history_omits_key_with_no_changes(pg_conn):
@@ -1861,6 +2005,111 @@ def test_claim_invite_succeeds_exactly_once(pg_conn):
     token = str(invite["token"])
     assert db.claim_invite(pg_conn, token) is True
     assert db.claim_invite(pg_conn, token) is False
+
+
+# ---------------------------------------------------------------------------
+# list_users -- per-user source/job counts (#216)
+# ---------------------------------------------------------------------------
+
+def test_list_users_includes_source_and_active_job_counts(pg_conn):
+    from app.config import GreenhouseSource
+
+    admin = seed_admin(pg_conn)
+    other = _make_user(pg_conn, "u2")
+
+    db.add_source(pg_conn, admin["id"], GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="s1"))
+    db.add_source(pg_conn, admin["id"], GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="s2"))
+
+    run_id = db.start_run(pg_conn, user_id=admin["id"])
+    db.save_jobs(pg_conn, [make_job("k1"), make_job("k2")], run_id, user_id=admin["id"])
+    db.mark_job_removed(pg_conn, admin["id"], "k2")
+
+    users = {u["id"]: u for u in db.list_users(pg_conn)}
+
+    assert users[admin["id"]]["source_count"] == 2
+    assert users[admin["id"]]["active_job_count"] == 1  # k2 is removed, excluded
+    assert users[other]["source_count"] == 0
+    assert users[other]["active_job_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Invites -- expiry, resend, revoke (#217)
+# ---------------------------------------------------------------------------
+
+def test_list_invites_reports_pending_accepted_and_expired_status(pg_conn):
+    admin = seed_admin(pg_conn)
+    pending = db.create_invite(pg_conn, "pending@test.local", admin["id"])
+    accepted = db.create_invite(pg_conn, "accepted@test.local", admin["id"])
+    db.create_invite(pg_conn, "expired@test.local", admin["id"], expires_in_days=-1)
+
+    db.claim_invite(pg_conn, str(accepted["token"]))
+
+    by_email = {inv["email"]: inv for inv in db.list_invites(pg_conn, admin["id"])}
+
+    assert by_email["pending@test.local"]["status"] == "pending"
+    assert by_email["accepted@test.local"]["status"] == "accepted"
+    assert by_email["expired@test.local"]["status"] == "expired"
+    assert str(pending["token"]) == by_email["pending@test.local"]["token"]
+
+
+def test_revoke_invite_expires_a_pending_invite_and_blocks_registration(pg_conn):
+    admin = seed_admin(pg_conn)
+    invite = db.create_invite(pg_conn, "revoke-me@test.local", admin["id"])
+    token = str(invite["token"])
+
+    assert db.revoke_invite(pg_conn, admin["id"], token) is True
+
+    reloaded = db.get_invite(pg_conn, token)
+    assert reloaded is not None
+    assert datetime.fromisoformat(reloaded["expires_at"]) <= datetime.now(UTC)
+    # claim_invite itself only guards used_at, not expiry (expiry is enforced
+    # by the caller -- see _validate_invite and
+    # test_post_register_with_a_revoked_invite_returns_400 in test_auth.py).
+
+
+def test_revoke_invite_returns_false_for_an_already_accepted_invite(pg_conn):
+    admin = seed_admin(pg_conn)
+    invite = db.create_invite(pg_conn, "already-accepted@test.local", admin["id"])
+    token = str(invite["token"])
+    db.claim_invite(pg_conn, token)
+
+    assert db.revoke_invite(pg_conn, admin["id"], token) is False
+
+
+def test_revoke_invite_returns_false_for_an_unknown_token(pg_conn):
+    admin = seed_admin(pg_conn)
+    assert db.revoke_invite(pg_conn, admin["id"], "not-a-real-token") is False
+
+
+def test_resend_invite_invalidates_old_token_and_issues_a_new_one(pg_conn):
+    admin = seed_admin(pg_conn)
+    original = db.create_invite(pg_conn, "resend-me@test.local", admin["id"])
+    old_token = str(original["token"])
+
+    fresh = db.resend_invite(pg_conn, admin["id"], old_token)
+
+    assert fresh is not None
+    assert fresh["email"] == "resend-me@test.local"
+    assert fresh["token"] != old_token
+
+    old_reloaded = db.get_invite(pg_conn, old_token)
+    assert old_reloaded is not None
+    assert datetime.fromisoformat(old_reloaded["expires_at"]) <= datetime.now(UTC)
+    assert db.claim_invite(pg_conn, str(fresh["token"])) is True
+
+
+def test_resend_invite_returns_none_for_an_already_accepted_invite(pg_conn):
+    admin = seed_admin(pg_conn)
+    invite = db.create_invite(pg_conn, "accepted-resend@test.local", admin["id"])
+    token = str(invite["token"])
+    db.claim_invite(pg_conn, token)
+
+    assert db.resend_invite(pg_conn, admin["id"], token) is None
+
+
+def test_resend_invite_returns_none_for_an_unknown_token(pg_conn):
+    admin = seed_admin(pg_conn)
+    assert db.resend_invite(pg_conn, admin["id"], "not-a-real-token") is None
 
 
 # ---------------------------------------------------------------------------

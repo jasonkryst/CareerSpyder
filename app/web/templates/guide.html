@@ -5,9 +5,12 @@
 <h2>Getting started</h2>
 <ol>
   <li>Open the web UI and go to <a href="/sources">Sources</a>.</li>
-  <li>Click <strong>Add source</strong>, pick a <strong>Type</strong>, and fill in its fields
-    &mdash; see <a href="#source-types">Source types &amp; examples</a> below for example
-    values.</li>
+  <li>Click <strong>Add source</strong> and paste the employer's careers-page URL &mdash;
+    CareerSpyder detects the platform for most supported ATSes and pre-fills the
+    <strong>Type</strong> and its fields. Otherwise pick a <strong>Type</strong> and fill in
+    its fields yourself &mdash; see <a href="#source-types">Source types &amp; examples</a>
+    below for example values. If the platform isn't recognized, <strong>Report as
+    unsupported</strong> files (or pre-fills) a GitHub issue asking for it.</li>
   <li>Click <strong>Test this source</strong> to preview the jobs it currently finds before
     saving.</li>
   <li>Click <strong>Save</strong>.</li>
@@ -16,37 +19,45 @@
   <li>The Dashboard also shows past runs below the Run now button &mdash; check there for the
     result, or wait for the digest email if new jobs were found.</li>
 </ol>
-<p>After that, CareerSpyder scrapes automatically once a day at the configured hour &mdash; no
-  further action needed unless you're adding more sources or changing settings.</p>
+<p>After that, CareerSpyder scrapes automatically on its configured schedule (daily by
+  default) &mdash; no further action needed unless you're adding more sources or changing
+  settings. If the container was down when a run was due, it catches up on the next start.</p>
 
 <h2>Web UI tour</h2>
 <div class="table-scroll">
 <table>
   <tr><th scope="col">Page</th><th scope="col">Purpose</th></tr>
-  <tr><td><a href="/">Dashboard</a></td><td>A <strong>Run now</strong> button (always
-    triggers an immediate scrape) at the top, plus a paginated, auto-refreshing, sortable
-    table of past runs &mdash; start/finish time, new job count, failed source names
+  <tr><td><a href="/">Dashboard</a></td><td>Stat cards (total jobs, new this week, sources,
+    runs) and a <strong>Run now</strong> button (always triggers an immediate scrape) at the
+    top, plus a paginated, auto-refreshing, sortable table of past runs &mdash; start/finish
+    time, new job count, &ldquo;N / M sources failed&rdquo; with links to each failed source
     &mdash; filterable by whether a run had failed sources.</td></tr>
   <tr><td><a href="/jobs">Jobs</a></td><td>Every job CareerSpyder has ever found &mdash;
-    sortable by company, title, date found, or age; filterable by company, source,
-    location, removed/emailed status, and status. <strong>Defaults to Active jobs
-    only</strong> on first load; select &ldquo;All&rdquo; in the Status filter to include
-    removed jobs. Job titles open in a new tab. Mark a job as
-    Applied/Ignored/Accepted/Rejected/Not Interested and view its change history. A
-    <a href="/jobs/map">Map view</a> shows the same filtered jobs (also Active by default)
-    as clustered pins with a per-location job list popup and a fixed home marker; Not
-    Interested jobs are hidden from the map by default (toggle in Settings &rarr;
-    Preferences).</td></tr>
+    sortable by company, title, date found, or age; filterable by free-text search (title +
+    company), company, source, location, state, zip/radius, listing status, emailed, job
+    status, and duplicates. <strong>Defaults to Active jobs only</strong> on first load;
+    select &ldquo;All&rdquo; in the <strong>Listing status</strong> filter to include removed
+    jobs. Job titles open in a new tab. Mark a job as
+    Applied/Ignored/Accepted/Rejected/Not Interested (saves immediately, no page reload) and
+    view its change history. A <a href="/jobs/map">Map view</a> shows the same filtered jobs
+    (also Active by default) as clustered pins with a per-location job list popup and a fixed
+    home marker; Not Interested jobs are hidden from the map by default (toggle in Settings
+    &rarr; Preferences).</td></tr>
   <tr><td><a href="/sources">Sources</a></td><td>Sortable (name/type/company) and
-    type-filterable table of configured sources with Edit/Delete actions and an
-    <strong>Add source</strong> button.</td></tr>
+    type-filterable table of configured sources, each with a last-run health badge
+    (ok/failed/never), with Edit/Delete actions and an <strong>Add source</strong>
+    button.</td></tr>
   <tr><td><a href="/settings/email">Settings &rarr; Email</a></td><td>SMTP host/port/from
-    address (the password is a container env var, not editable here).</td></tr>
-  <tr><td><a href="/settings/data">Settings &rarr; Data</a></td><td>Clear the job dedup cache,
-    and export/import <code>sources.json</code>.</td></tr>
+    address (the password is a container env var, not editable here), plus a <strong>Send
+    test email</strong> button.</td></tr>
+  <tr><td><a href="/settings/data">Settings &rarr; Data</a></td><td>Clear the job dedup
+    cache, and export/import a <code>settings.json</code> containing your sources and
+    preferences (import adds/updates sources by id; it never deletes any).</td></tr>
   <tr><td><a href="/settings/preferences">Settings &rarr; Preferences</a></td><td>Theme, which
     days to check for jobs, resend behavior, digest recipients, and whether Not Interested
     jobs are hidden from the map.</td></tr>
+  <tr><td><a href="/settings/account">Settings &rarr; Account</a></td><td>Change your
+    password. Your other signed-in sessions are signed out.</td></tr>
 </table>
 </div>
 
@@ -168,5 +179,6 @@
 </div>
 
 <p><code>include_keywords</code> / <code>exclude_keywords</code> are optional on every type
-  &mdash; case-insensitive title filters, matched against the job title only.</p>
+  &mdash; case-insensitive filters, matched against the job's title, company, and
+  location.</p>
 {% endblock %}

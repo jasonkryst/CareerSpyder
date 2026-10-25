@@ -15,6 +15,9 @@ COPY pyproject.toml .
 COPY app app
 COPY alembic.ini .
 COPY alembic alembic
+# Read at runtime by app/web/whats_new.py for the in-app "What's New" modal
+# (relative to WORKDIR, the same convention already used for alembic.ini).
+COPY CHANGELOG.md .
 # Uninstalling pip after use drops its vendored copies of msgpack/setuptools
 # from the image -- pip itself isn't needed once deps are installed, and its
 # bundled versions of those two lag behind upstream security fixes (Trivy

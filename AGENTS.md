@@ -2,14 +2,18 @@
 
 Instructions for AI coding agents working in this repository. See
 [README.md](README.md) for user-facing docs, [ROADMAP.md](ROADMAP.md) for
-known gaps, and [CHANGELOG.md](CHANGELOG.md) for what's shipped.
+known gaps, [docs/issue-tiers.md](docs/issue-tiers.md) for the ranked list
+of open GitHub issues, and [CHANGELOG.md](CHANGELOG.md) for what's shipped.
 
 ## What this is
 
 CareerSpyder: a single-process FastAPI + APScheduler app that scrapes
 configured job sources on a schedule, dedupes against PostgreSQL 17, emails
 a digest of new postings, and serves a server-rendered web UI for managing
-sources and settings. Python 3.12, no frontend build step.
+sources and settings. Invite-only multi-user: every user has their own
+sources, jobs, runs, and settings. Python 3.14 (Docker image and CI;
+`requires-python` is `>=3.12`), schema managed by Alembic, no frontend
+build step.
 
 Two documents in `docs/superpowers/` are the authoritative origin of this
 codebase and should be read before making non-trivial changes:
@@ -27,13 +31,20 @@ codebase and should be read before making non-trivial changes:
 
 ```bash
 pip install -e ".[dev]"      # install package + dev deps (pytest, httpx)
-pytest                        # run the full suite (no network, no browser)
+pytest                        # run the full suite (e2e tests launch Chromium; see below)
 pytest tests/test_db.py -v    # run one file
 pytest --cov=app --cov-report=term-missing   # with coverage (CI runs this)
+pytest -m integration -v      # live-site tests; skipped unless their env vars are set
 ruff check app tests          # includes flake8-bandit ("S") security rules
+mypy                          # type check (CI's `typecheck` job)
+pip-audit                     # dependency CVE scan (CI's `dependency-audit` job)
+alembic revision -m "..."     # new migration in alembic/versions/ (applied at container start)
 uvicorn app.web.main:app --reload --port 8080   # run the app locally
 # Local dev requires a running PostgreSQL instance and DATABASE_URL set in .env
 # On Windows: install libpq (via PostgreSQL installer) for psycopg3 to connect
+# Tests use pytest-postgresql: it starts a throwaway server from local
+# PostgreSQL binaries, or set PGTEST_HOST/PGTEST_PORT/PGTEST_USER/
+# PGTEST_PASSWORD to use an existing server (CI uses a postgres:17 service)
 
 docker build -t careerspyder:latest .
 docker compose up -d          # requires .env with POSTGRES_PASSWORD + SMTP_PASSWORD
@@ -57,19 +68,42 @@ existing tests — don't casually relax them:
 - **Tests must not make live network calls or launch a real browser.**
   Every adapter's `fetch()` signature is `fetch(source, **injectable_io)`
   — tests always pass fake `http_get`/`html_renderer` callables. If you
-  add a new adapter or change an existing one, keep this shape.
+  add a new adapter or change an existing one, keep this shape. The only
+  exceptions are `tests/web/e2e/` (real Chromium against a local server,
+  see below) and `tests/integration/` (`@pytest.mark.integration`, live
+  sites, auto-skipped unless their env vars are set).
 - **The digest email is sent only if a run has ≥1 new job or ≥1 failed
-  source.** A clean run (nothing new, nothing failed) must stay silent —
-  `app/digest.py::build_digest` returns `None` in that case, and
-  `app/scheduler.py::run_and_notify` short-circuits on `None`.
-- **`sources.json` is the single source of truth for sources**, re-read on
-  every run and every `/sources` request — no rebuild or restart needed
-  after an edit. Writes go through `app/config.py::save_sources`, which
-  writes atomically (temp file + `os.replace`) — don't reintroduce a
-  direct `open(path, "w")`. `/settings/data`'s import feature
-  (`app/config.py::import_sources_json`) is the one other write path;
-  it validates against the same `SourcesFile` model before calling
-  `save_sources`, so an invalid upload can't partially overwrite the file.
+  source.** A clean run (nothing new, nothing failed) must stay silent by
+  default — `app/digest.py::build_digest` returns `None` in that case, and
+  `app/scheduler.py::run_and_notify` short-circuits on `None`. The one
+  exception is the opt-in `send_weekly_checkin` preference (off by
+  default): when a user has turned it on, `build_digest`'s `force_checkin`
+  returns a minimal "all clear" digest instead of `None`, but only on the
+  weekly check-in day (Sunday, per `app/scheduler.py::_run_user`) — every
+  other day, and every user who hasn't opted in, stays silent exactly as
+  before.
+- **Sources live in the per-user `sources` table** (config stored as
+  JSONB), read fresh on every run and every `/sources` request — no
+  restart needed after an edit. All reads/writes go through `app/db.py`
+  (`list_sources`, `add_source`, `update_source`, `delete_source`,
+  `import_sources`). `/settings/data`'s import
+  (`app/web/routes_settings.py::import_settings`) validates the whole
+  upload against `app/config.py::SourcesFile` *before* calling
+  `db.import_sources`, so an invalid file can't partially apply; the
+  import upserts by source id and gives a fresh id to any id owned by
+  another user. The `sources.json` file helpers still in `app/config.py`
+  (`load_sources`/`save_sources`/...) predate the PostgreSQL migration and
+  aren't used by the running app — don't build new features on them.
+- **Every query is scoped by `user_id`.** Jobs, sources, runs, and
+  settings belong to one user; every `app/db.py` function that touches
+  them takes `user_id` and filters on it (admins get read-only cross-user
+  views of jobs only). `tests/test_tenant_isolation_db.py` enforces this —
+  add a case there for any new per-user query.
+- **User-supplied URLs go through the SSRF guard.** Any outbound request
+  to a URL that came from a user (source URLs, previews, the URL checker)
+  must use `app/security/ssrf_guard.py` — `safe_get`/`safe_post`/
+  `safe_head`, or `install_ssrf_guard(page)` for Playwright — never a bare
+  `requests.get(url)`. See SECURITY.md's "SSRF guard" section.
 - **One source failing must never abort the others.** The per-source
   `try/except` in `app/orchestrator.py::run_once` (including the
   `ADAPTERS[source.type]` lookup itself) is what guarantees this — keep
@@ -92,12 +126,28 @@ existing tests — don't casually relax them:
   (`tests/web/e2e/conftest.py`) passes `bypass_csp=True` because
   Playwright's own `wait_for_function`/`expect` helpers use `eval()`
   internally — that's test-tooling only, not a CSP relaxation for users.
+- **`app/web/static/confirm-modal.js` falls back to `window.confirm()`
+  when `<dialog>`/`showModal` isn't supported** (audit U6), so a
+  destructive action (Delete source, Clear job cache) still warns on an
+  older browser. Settings import (`/settings/data/import`) no longer uses
+  this guard at all — uploading a file now renders a diff preview (added/
+  updated/unchanged sources, changed preference keys) and nothing is
+  written until a second "Confirm import" submit, which replaces the old
+  blind confirm-modal dialog with an informed one; the one-step behavior
+  survives as a `force=1` escape hatch for scripted imports. If JavaScript
+  is blocked or fails to load entirely,
+  there is no fallback — the form submits immediately with no warning.
+  That full-no-JS case is an accepted trade-off (the `.type-fields`
+  show/hide in `source_form.html` already depends on JS the same way),
+  not an oversight; a real fix would need a server-side confirmation
+  step, which is out of scope for this low-priority gap.
 - **The Dockerfile's image-level user is root; the server process isn't.**
   `docker-entrypoint.sh` needs to run as root on every container start (to
-  `chown` the bind-mounted `./config`/`./data` regardless of host
-  ownership), then drops to uid 1000 via `setpriv` before exec'ing
-  uvicorn — so there's deliberately no `USER` instruction in the
-  Dockerfile. `docker exec`/`docker compose exec` therefore still default
+  `chown` `/app/config` regardless of host ownership), then drops to uid
+  1000 via `setpriv` to run `alembic upgrade head` and exec uvicorn — so
+  there's deliberately no `USER` instruction in the Dockerfile. (The
+  database itself is a separate `postgres` container with its own data
+  volume.) `docker exec`/`docker compose exec` therefore still default
   to root; that's expected and doesn't mean the app is running as root —
   check the real process with `docker compose top`, as `docker.yml` does.
 
@@ -126,10 +176,11 @@ existing tests — don't casually relax them:
   submitted values purely so the template can redisplay what the user
   typed after a validation error — it is not a source of truth for
   anything.
-- **Routes catch `KeyError` → `HTTPException(404)`** wherever a
-  `source_id` might not exist (`app/config.py`'s `get_source`/
-  `update_source`/`delete_source` all raise `KeyError` on a miss). Follow
-  this pattern for any new lookup-by-id route.
+- **Missing ids → `HTTPException(404)`.** `app/db.py`'s
+  `update_source`/`delete_source` raise `KeyError` on a miss (including a
+  source owned by another user) and routes catch it; `db.get_source`
+  returns `None` instead, and routes check for it. Follow one of these
+  patterns for any new lookup-by-id route.
 - **Templates**: one shared `Jinja2Templates` instance in
   `app/web/templating.py`, built from `Path(__file__).parent /
   "templates"` — absolute, not CWD-relative. Import that instance; don't
@@ -144,14 +195,18 @@ existing tests — don't casually relax them:
   automatically) or explicitly `await
   run_in_threadpool(...)`. See `/sources/test-preview` in
   `app/web/routes_sources.py` for the pattern.
-- **Shared mutable state needs a lock.** The database connection pool and
-  `sources.json` are both touched from request threads, `BackgroundTasks`
-  threads, and the APScheduler worker thread concurrently.
+- **Shared mutable state needs a lock.** The database connection pool is
+  used from request threads, `BackgroundTasks` threads, and the
+  APScheduler worker thread concurrently.
   `app/orchestrator.py::_run_lock` serializes the read-new/write-new
-  sequence for runs — if you add another cross-thread read-then-write
-  sequence, it needs the same treatment (see ROADMAP.md's
-  `sources.json` write-locking gap for a known example that hasn't been
-  addressed yet).
+  sequence for runs (and the URL checker, which runs under it) — if you
+  add another cross-thread read-then-write sequence, it needs the same
+  treatment. In-memory state such as `app/web/ratelimit.py`'s buckets is
+  per-process, which is fine only because this is a single-process app.
+- **Schema changes are Alembic migrations.** Add a revision under
+  `alembic/versions/`; the container applies it on start
+  (`docker-entrypoint.sh`). `tests/test_migrations.py` covers upgrade
+  paths.
 
 ## Testing approach
 
@@ -167,6 +222,8 @@ tests/
   adapters/test_<type>.py                              # one per adapter
   web/test_<page>.py                                    # one per route group, using FastAPI's TestClient
   web/e2e/test_<feature>.py                             # real Playwright browser against a live uvicorn server
+  security/test_<guard>.py                              # SSRF / browser-guard tests (no live network)
+  integration/test_<type>_live.py                       # @pytest.mark.integration, live sites, opt-in via env vars
 ```
 
 `tests/web/e2e/` is the one deliberate exception to "no real browser" above:
@@ -176,9 +233,10 @@ the app, for behavior that can only be observed client-side (JS-driven
 polling, keyboard nav, theme persistence). Everything outside that
 directory still must not touch the network or a real browser.
 
-Run `pytest -q` before committing. The non-e2e suite stays fast (a couple
-seconds); the full suite including `web/e2e/` takes roughly a minute
-because it launches real Chromium instances.
+Run `pytest -q`, `ruff check app tests`, and `mypy` before committing —
+they're required checks on `master`. The non-e2e suite stays fast; the full
+suite including `web/e2e/` takes noticeably longer because it launches
+real Chromium instances.
 
 ## Git workflow
 
@@ -187,4 +245,7 @@ This repo uses the Superpowers `subagent-driven-development` and
 worktree/branch per unit of work, fresh implementer subagents per task,
 task-level review, and a final whole-branch review before merging. If
 you're an agent picking up follow-on work from the roadmap, that workflow
-is a reasonable default rather than committing directly to `master`.
+is a reasonable default. `master` is protected by a ruleset (required CI +
+CodeQL checks, no force-push), so all changes land via PR. Bump
+`pyproject.toml`'s `version` and add a CHANGELOG entry for release-worthy
+changes — the Docker image is tagged from that version.
