@@ -47,6 +47,15 @@ def _render_job_list(
     return parts
 
 
+def _checkin_digest(source_count: int, searched_at: datetime | None) -> Digest:
+    when = escape(searched_at.strftime("%b %d, %Y %I:%M %p %Z")) if searched_at else "unknown"
+    body = (
+        f"<p>No new jobs this week. {source_count} source(s) configured, all healthy.</p>"
+        f"<p>Last run: {when}</p>"
+    )
+    return Digest(subject="CareerSpyder: weekly check-in", html_body=body)
+
+
 def build_digest(
     new_jobs: list[Job], failed_sources: list[FailedSource], job_label: str = "new job", *,
     statuses: dict[str, str | None] | None = None,
@@ -55,6 +64,8 @@ def build_digest(
     secondary_source_ids: set[str] | None = None,
     emailed_keys: set[str] | None = None,
     max_per_company: int = 0,
+    force_checkin: bool = False,
+    source_count: int = 0,
 ) -> Digest | None:
     """Build an email digest.
 
@@ -62,17 +73,26 @@ def build_digest(
     into "Newly identified" (never been in a digest before) and "Already
     identified" (emailed at least once in a prior run). Each subsection shows a
     placeholder when empty. When `emailed_keys` is None the flat layout is used.
+
+    `force_checkin` is the opt-in weekly check-in (#226): when a run would
+    otherwise stay silent (no new jobs, no failures), this returns a minimal
+    "all clear" digest instead of None. It has no effect when there's actual
+    content to report -- the normal digest wins either way.
     """
     if not new_jobs and not failed_sources:
+        if force_checkin:
+            return _checkin_digest(source_count, searched_at)
         return None
 
     statuses = statuses or {}
     secondary_source_ids = secondary_source_ids or set()
 
-    subject = (
-        f"CareerSpyder: {len(new_jobs)} {job_label}(s)" if new_jobs
-        else "CareerSpyder: run had failed sources"
-    )
+    subject_bits = []
+    if new_jobs:
+        subject_bits.append(f"{len(new_jobs)} {job_label}(s)")
+    if failed_sources:
+        subject_bits.append(f"{len(failed_sources)} source(s) failed")
+    subject = "CareerSpyder: " + ", ".join(subject_bits)
 
     parts: list[str] = []
     if searched_at is not None:

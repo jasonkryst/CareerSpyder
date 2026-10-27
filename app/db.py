@@ -19,10 +19,9 @@ def init_db(dsn: str) -> ConnectionPool:
 def get_new_jobs(conn: psycopg.Connection, user_id: str, jobs: list[Job]) -> list[Job]:
     if not jobs:
         return []
-    placeholders = ",".join(["%s"] * len(jobs))
     keys = [j.key for j in jobs]
     rows = conn.execute(
-        f"SELECT key FROM jobs WHERE user_id = %s AND key IN ({placeholders})", [user_id, *keys],
+        "SELECT key FROM jobs WHERE user_id = %s AND key = ANY(%s)", [user_id, keys],
     ).fetchall()
     known = {r[0] for r in rows}
     return [j for j in jobs if j.key not in known]
@@ -186,7 +185,8 @@ def count_runs(conn: psycopg.Connection, *, failures: str | None = None, user_id
 def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
     row = conn.execute(
         "SELECT smtp_host, smtp_port, smtp_user, email_from, email_to, email_days, resend_jobs, "
-        "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses "
+        "hide_not_interested_on_map, digest_max_per_company, digest_exclude_statuses, "
+        "send_weekly_checkin "
         "FROM settings WHERE user_id = %s",
         (user_id,),
     ).fetchone()
@@ -199,6 +199,7 @@ def get_settings(conn: psycopg.Connection, user_id: str) -> dict | None:
         "hide_not_interested_on_map": row[7],
         "digest_max_per_company": row[8] or 0,
         "digest_exclude_statuses": row[9] or "",
+        "send_weekly_checkin": row[10],
     }
 
 
@@ -231,20 +232,22 @@ def save_preferences(
     hide_not_interested_on_map: bool = True,
     digest_max_per_company: int = 0,
     digest_exclude_statuses: str = "",
+    send_weekly_checkin: bool = False,
 ) -> None:
     conn.execute(
         "INSERT INTO settings "
         "(user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map, "
-        "digest_max_per_company, digest_exclude_statuses) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "digest_max_per_company, digest_exclude_statuses, send_weekly_checkin) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
         "ON CONFLICT(user_id) DO UPDATE SET "
         "email_days=excluded.email_days, resend_jobs=excluded.resend_jobs, "
         "email_to=excluded.email_to, "
         "hide_not_interested_on_map=excluded.hide_not_interested_on_map, "
         "digest_max_per_company=excluded.digest_max_per_company, "
-        "digest_exclude_statuses=excluded.digest_exclude_statuses",
+        "digest_exclude_statuses=excluded.digest_exclude_statuses, "
+        "send_weekly_checkin=excluded.send_weekly_checkin",
         (user_id, email_days, resend_jobs, email_to, hide_not_interested_on_map,
-         digest_max_per_company, digest_exclude_statuses),
+         digest_max_per_company, digest_exclude_statuses, send_weekly_checkin),
     )
     conn.commit()
 
@@ -365,7 +368,7 @@ def list_jobs(
         "jobs.location_override, gl_ov.display_name, "
         "jobs.url, jobs.posted_date, jobs.source_name, jobs.source_id, jobs.summary, "
         "jobs.first_seen_at, jobs.removed_at, jobs.emailed_at, jobs.status, "
-        "jobs.is_duplicate, jobs.duplicate_of, users.username, jobs.user_id::text "
+        "jobs.is_duplicate, jobs.duplicate_of, users.username, jobs.user_id::text, jobs.notes "
         "FROM jobs "
         "LEFT JOIN geocoded_locations ON jobs.location = geocoded_locations.location "
         "LEFT JOIN geocoded_locations gl_ov ON jobs.location_override = gl_ov.location "
@@ -384,7 +387,7 @@ def list_jobs(
             "posted_date": r[8], "source_name": r[9], "source_id": r[10], "summary": r[11],
             "first_seen_at": r[12], "removed_at": r[13], "emailed_at": r[14], "status": r[15],
             "is_duplicate": bool(r[16]), "duplicate_of": r[17], "username": r[18],
-            "user_id": r[19],
+            "user_id": r[19], "notes": r[20],
         }
         for r in rows
     ]
@@ -594,6 +597,29 @@ def set_job_status(conn: psycopg.Connection, user_id: str, key: str, status: str
     conn.commit()
 
 
+def bulk_set_status(conn: psycopg.Connection, user_id: str, keys: list[str], status: str | None) -> int:
+    """Set `status` on every key in `keys` owned by `user_id`; keys owned by
+    another user (or not found) are silently excluded, not errored -- bulk
+    updates are scoped via this WHERE clause rather than trusting the caller
+    to only submit keys it owns. Returns the number of rows actually updated."""
+    if not keys:
+        return 0
+    now = _now()
+    cur = conn.execute(
+        "UPDATE jobs SET status = %s WHERE user_id = %s AND key = ANY(%s) RETURNING key",
+        (status, user_id, keys),
+    )
+    updated_keys = [row[0] for row in cur.fetchall()]
+    if updated_keys:
+        with conn.cursor() as c:
+            c.executemany(
+                "INSERT INTO job_status_history (user_id, job_key, status, changed_at) VALUES (%s, %s, %s, %s)",
+                [(user_id, key, status, now) for key in updated_keys],
+            )
+    conn.commit()
+    return len(updated_keys)
+
+
 def get_geocoded_location(conn: psycopg.Connection, location: str) -> dict | None:
     row = conn.execute(
         "SELECT display_name, city, region, country, lat, lng, provider FROM geocoded_locations "
@@ -684,6 +710,15 @@ def clear_job_duplicate(conn: psycopg.Connection, user_id: str, key: str) -> Non
     cur = conn.execute(
         "UPDATE jobs SET is_duplicate = FALSE, duplicate_of = NULL WHERE user_id = %s AND key = %s",
         (user_id, key),
+    )
+    if cur.rowcount == 0:
+        raise KeyError(key)
+    conn.commit()
+
+
+def set_job_notes(conn: psycopg.Connection, user_id: str, key: str, notes: str) -> None:
+    cur = conn.execute(
+        "UPDATE jobs SET notes = %s WHERE user_id = %s AND key = %s", (notes, user_id, key),
     )
     if cur.rowcount == 0:
         raise KeyError(key)
@@ -785,10 +820,15 @@ def get_user_by_email(conn: psycopg.Connection, email: str) -> dict | None:
 
 def list_users(conn: psycopg.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, username, email, role, is_active, created_at FROM users ORDER BY created_at"
+        "SELECT u.id, u.username, u.email, u.role, u.is_active, u.created_at, "
+        "(SELECT COUNT(*) FROM sources WHERE sources.user_id = u.id) AS source_count, "
+        "(SELECT COUNT(*) FROM jobs WHERE jobs.user_id = u.id AND jobs.removed_at IS NULL) "
+        "AS active_job_count "
+        "FROM users u ORDER BY u.created_at"
     ).fetchall()
     return [{"id": str(r[0]), "username": r[1], "email": r[2],
-             "role": r[3], "is_active": r[4], "created_at": str(r[5])} for r in rows]
+             "role": r[3], "is_active": r[4], "created_at": str(r[5]),
+             "source_count": r[6], "active_job_count": r[7]} for r in rows]
 
 
 def deactivate_user(conn: psycopg.Connection, user_id: str) -> None:
@@ -858,13 +898,65 @@ def release_invite(conn: psycopg.Connection, token: str) -> None:
 
 
 def list_invites(conn: psycopg.Connection, created_by: str) -> list[dict]:
+    """Every invite created by this admin, newest first, with a computed
+    `status` of 'pending', 'accepted', or 'expired' (expiry is also how a
+    revoked invite is represented -- see revoke_invite)."""
     rows = conn.execute(
-        "SELECT token, email, expires_at, used_at FROM invite_tokens "
-        "WHERE created_by = %s ORDER BY expires_at DESC",
+        "SELECT token, email, created_at, expires_at, used_at FROM invite_tokens "
+        "WHERE created_by = %s ORDER BY created_at DESC",
         (created_by,),
     ).fetchall()
-    return [{"token": str(r[0]), "email": r[1], "expires_at": str(r[2]),
-             "used_at": str(r[3]) if r[3] else None} for r in rows]
+    now = datetime.now(UTC)
+    result = []
+    for token, email, created_at, expires_at, used_at in rows:
+        if used_at is not None:
+            status = "accepted"
+        elif expires_at is not None and expires_at < now:
+            status = "expired"
+        else:
+            status = "pending"
+        result.append({
+            "token": str(token), "email": email, "created_at": str(created_at),
+            "expires_at": str(expires_at), "used_at": str(used_at) if used_at else None,
+            "status": status,
+        })
+    return result
+
+
+def revoke_invite(conn: psycopg.Connection, created_by: str, token: str) -> bool:
+    """Immediately expire a pending invite owned by created_by so it can no
+    longer be used to register. Returns False if the token doesn't exist,
+    isn't owned by created_by, or has already been accepted."""
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        return False
+    cur = conn.execute(
+        "UPDATE invite_tokens SET expires_at = NOW() "
+        "WHERE token = %s AND created_by = %s AND used_at IS NULL",
+        (token, created_by),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def resend_invite(conn: psycopg.Connection, created_by: str, token: str) -> dict | None:
+    """Invalidate an existing, not-yet-accepted invite owned by created_by and
+    issue a fresh one for the same email. Returns the new invite dict, or
+    None if the token doesn't exist, isn't owned by created_by, or has
+    already been accepted."""
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        return None
+    row = conn.execute(
+        "SELECT email FROM invite_tokens WHERE token = %s AND created_by = %s AND used_at IS NULL",
+        (token, created_by),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE invite_tokens SET expires_at = NOW() WHERE token = %s", (token,))
+    return create_invite(conn, row[0], created_by)
 
 
 # ---------------------------------------------------------------------------
@@ -953,6 +1045,22 @@ def delete_source(conn: psycopg.Connection, user_id: str, source_id: str) -> Non
     if cur.rowcount == 0:
         raise KeyError(source_id)
     conn.commit()
+
+
+def bulk_set_enabled(conn: psycopg.Connection, user_id: str, source_ids: list[str], enabled: bool) -> int:
+    """Set `enabled` on every id in `source_ids` owned by `user_id`; ids owned
+    by another user (or not found) are silently excluded, not errored -- same
+    scoping approach as bulk_set_status. Returns the number of rows updated."""
+    if not source_ids:
+        return 0
+    cur = conn.execute(
+        "UPDATE sources SET config = jsonb_set(config, '{enabled}', %s::jsonb), "
+        "updated_at = NOW() WHERE user_id = %s AND id = ANY(%s)",
+        (json.dumps(enabled), user_id, source_ids),
+    )
+    count = cur.rowcount
+    conn.commit()
+    return count
 
 
 def source_last_run_status(

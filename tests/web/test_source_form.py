@@ -46,6 +46,22 @@ def test_post_new_source_saves_and_redirects(client, admin_user_id):
     assert saved[0].board_token == "acme"
 
 
+def test_post_new_lever_source_saves_and_redirects(client, admin_user_id):
+    """No prior test exercised creating a Lever source -- the gap that let
+    the board_token field end up invisible for Lever in the UI (see
+    test_board_token_field_shown_for_greenhouse_and_lever) go unnoticed."""
+    resp = client.post("/sources/new", data={
+        "type": "lever", "name": "Beta", "company": "Beta Corp", "board_token": "beta",
+        "include_keywords": "", "exclude_keywords": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    with client.app.state.pool.connection() as conn:
+        saved = db.list_sources(conn, admin_user_id)
+    assert saved[0].name == "Beta"
+    assert saved[0].board_token == "beta"
+
+
 def test_post_new_source_redirect_carries_added_flash_message(client):
     from urllib.parse import parse_qs, urlparse
 
@@ -437,6 +453,47 @@ def test_edit_form_prefills_url_for_indeed_source(client, admin_user_id):
 
     url_input = soup.find("input", {"name": "url"})
     assert url_input["value"] == "https://www.indeed.com/jobs?q=eng"
+
+
+def test_board_token_field_appears_exactly_once_in_source_form(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    assert len(soup.find_all("input", {"name": "board_token"})) == 1
+
+
+def test_board_token_field_shown_for_greenhouse_and_lever(client):
+    """Regression: the board_token input must live in a container that's
+    revealed for both greenhouse AND lever, not just greenhouse -- otherwise
+    there is no way to enter a board token when lever is selected. Same
+    class of bug as #35's url field (see
+    test_url_field_shown_for_generic_html_linkedin_and_indeed above)."""
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    board_token_input = soup.find("input", {"name": "board_token"})
+    container = board_token_input.find_parent(attrs={"data-types": True})
+    assert container is not None
+    assert set(container["data-types"].split()) == {"greenhouse", "lever"}
+
+
+def test_required_field_markers_shown_for_name_and_board_token(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    name_label = soup.find("input", {"name": "name"}).find_parent("label")
+    assert name_label.find("span", {"class": "required-mark"}) is not None
+
+    board_token_label = soup.find("input", {"name": "board_token"}).find_parent("label")
+    assert board_token_label.find("span", {"class": "required-mark"}) is not None
+
+
+def test_optional_fields_have_no_required_marker(client):
+    resp = client.get("/sources/new")
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    company_label = soup.find("input", {"name": "company"}).find_parent("label")
+    assert company_label.find("span", {"class": "required-mark"}) is None
 
 
 def test_max_pages_field_appears_exactly_once_in_source_form(client):

@@ -5,6 +5,16 @@
   <h1>Sources</h1>
   <a href="/sources/new" class="btn">Add source</a>
 </div>
+{% if active_filters %}
+<div class="active-filters">
+  {% for f in active_filters %}
+  <a class="chip" href="{{ f.remove_url }}">{{ f.label }} <span aria-hidden="true">&times;</span></a>
+  {% endfor %}
+  <a class="chip chip-clear" href="/sources">Clear filters</a>
+</div>
+{% endif %}
+<details class="filter-panel" {% if active_filters %}open{% endif %}>
+  <summary>Filters{% if active_filters %} <span class="filter-count">{{ active_filters | length }}</span>{% endif %}</summary>
 <form method="get" action="/sources" class="filter-bar">
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
@@ -16,16 +26,32 @@
       {% endfor %}
     </select>
   </label>
-  <button type="submit">Filter</button>
-  {% if filters.type %}<a href="/sources">Clear filters</a>{% endif %}
+  <label>Status
+    <select name="enabled">
+      <option value="">All</option>
+      <option value="true" {% if filters.enabled == "true" %}selected{% endif %}>Enabled only</option>
+      <option value="false" {% if filters.enabled == "false" %}selected{% endif %}>Disabled only</option>
+    </select>
+  </label>
+  <div class="filter-actions">
+    <button type="submit">Filter</button>
+  </div>
+</form>
+</details>
+<form method="post" action="/sources/bulk-toggle" id="bulk-toggle-form" class="bulk-toggle-toolbar" hidden>
+  <span id="bulk-selected-count">0 selected</span>
+  <button type="submit" name="enabled" value="true">Enable selected</button>
+  <button type="submit" name="enabled" value="false">Disable selected</button>
 </form>
 <div class="table-scroll">
 <table>
   <thead>
   <tr>
+    <th scope="col"><input type="checkbox" id="select-all-sources" aria-label="Select all sources on this page"></th>
     {{ sort_th(request, '/sources', 'name', 'Name') }}
     {{ sort_th(request, '/sources', 'type', 'Type') }}
     {{ sort_th(request, '/sources', 'company', 'Company') }}
+    <th scope="col">Status</th>
     <th scope="col">Last run</th>
     <th scope="col">Edit</th>
     <th scope="col">Delete</th>
@@ -34,9 +60,17 @@
   <tbody>
   {% for s in sources %}
   <tr>
+    <td data-label="Select">
+      <input type="checkbox" name="ids" value="{{ s.id }}" form="bulk-toggle-form" class="source-select"
+             aria-label="Select {{ s.name }}">
+    </td>
     <td data-label="Name">{{ s.name }}</td>
     <td data-label="Type">{{ s.type }}</td>
     <td data-label="Company">{{ s.company or "" }}</td>
+    <td data-label="Status">
+      {% if s.enabled %}<span class="badge badge-ok">Enabled</span>
+      {% else %}<span class="badge badge-disabled">Disabled</span>{% endif %}
+    </td>
     <td data-label="Last run">
       {% set status = health.get(s.name, 'never') %}
       {% if status == 'ok' %}
@@ -60,6 +94,32 @@
   </tbody>
 </table>
 </div>
+<script>
+(function () {
+  var toggleForm = document.getElementById("bulk-toggle-form");
+  var selectAll = document.getElementById("select-all-sources");
+  var count = document.getElementById("bulk-selected-count");
+  var checkboxes = Array.prototype.slice.call(document.querySelectorAll(".source-select"));
+
+  function update() {
+    if (!toggleForm) return;
+    var checked = checkboxes.filter(function (cb) { return cb.checked; });
+    if (count) count.textContent = checked.length + " selected";
+    toggleForm.hidden = checked.length === 0;
+  }
+
+  checkboxes.forEach(function (cb) {
+    cb.addEventListener("change", update);
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      checkboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+      update();
+    });
+  }
+})();
+</script>
 <nav aria-label="Pagination">
   {% if pagination.has_prev %}<a href="{{ query_url(request, '/sources', page=pagination.page - 1) }}">Previous</a>{% endif %}
   <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>

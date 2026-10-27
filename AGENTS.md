@@ -73,9 +73,15 @@ existing tests — don't casually relax them:
   see below) and `tests/integration/` (`@pytest.mark.integration`, live
   sites, auto-skipped unless their env vars are set).
 - **The digest email is sent only if a run has ≥1 new job or ≥1 failed
-  source.** A clean run (nothing new, nothing failed) must stay silent —
-  `app/digest.py::build_digest` returns `None` in that case, and
-  `app/scheduler.py::run_and_notify` short-circuits on `None`.
+  source.** A clean run (nothing new, nothing failed) must stay silent by
+  default — `app/digest.py::build_digest` returns `None` in that case, and
+  `app/scheduler.py::run_and_notify` short-circuits on `None`. The one
+  exception is the opt-in `send_weekly_checkin` preference (off by
+  default): when a user has turned it on, `build_digest`'s `force_checkin`
+  returns a minimal "all clear" digest instead of `None`, but only on the
+  weekly check-in day (Sunday, per `app/scheduler.py::_run_user`) — every
+  other day, and every user who hasn't opted in, stays silent exactly as
+  before.
 - **Sources live in the per-user `sources` table** (config stored as
   JSONB), read fresh on every run and every `/sources` request — no
   restart needed after an edit. All reads/writes go through `app/db.py`
@@ -120,6 +126,21 @@ existing tests — don't casually relax them:
   (`tests/web/e2e/conftest.py`) passes `bypass_csp=True` because
   Playwright's own `wait_for_function`/`expect` helpers use `eval()`
   internally — that's test-tooling only, not a CSP relaxation for users.
+- **`app/web/static/confirm-modal.js` falls back to `window.confirm()`
+  when `<dialog>`/`showModal` isn't supported** (audit U6), so a
+  destructive action (Delete source, Clear job cache) still warns on an
+  older browser. Settings import (`/settings/data/import`) no longer uses
+  this guard at all — uploading a file now renders a diff preview (added/
+  updated/unchanged sources, changed preference keys) and nothing is
+  written until a second "Confirm import" submit, which replaces the old
+  blind confirm-modal dialog with an informed one; the one-step behavior
+  survives as a `force=1` escape hatch for scripted imports. If JavaScript
+  is blocked or fails to load entirely,
+  there is no fallback — the form submits immediately with no warning.
+  That full-no-JS case is an accepted trade-off (the `.type-fields`
+  show/hide in `source_form.html` already depends on JS the same way),
+  not an oversight; a real fix would need a server-side confirmation
+  step, which is out of scope for this low-priority gap.
 - **The Dockerfile's image-level user is root; the server process isn't.**
   `docker-entrypoint.sh` needs to run as root on every container start (to
   `chown` `/app/config` regardless of host ownership), then drops to uid

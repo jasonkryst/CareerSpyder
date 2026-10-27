@@ -12,6 +12,32 @@ def test_no_horizontal_overflow_at_narrow_viewport(live_server, page):
     assert scroll_width <= inner_width
 
 
+def test_no_horizontal_overflow_at_narrow_viewport_jobs(live_server, page):
+    """The jobs filter bar (issue #254) is the densest in the app -- the one
+    most likely to overflow a phone-width viewport if the grouping/stacking
+    CSS regresses."""
+    page.set_viewport_size({"width": 375, "height": 800})
+    page.goto(live_server + "/jobs")
+
+    scroll_width = page.evaluate("document.documentElement.scrollWidth")
+    inner_width = page.evaluate("window.innerWidth")
+
+    assert scroll_width <= inner_width
+
+
+def test_jobs_filter_groups_stack_full_width_at_narrow_viewport(live_server, page):
+    page.set_viewport_size({"width": 375, "height": 800})
+    page.goto(live_server + "/jobs")
+
+    bar_width = page.evaluate("document.querySelector('.filter-bar').getBoundingClientRect().width")
+    group_widths = page.evaluate(
+        "Array.from(document.querySelectorAll('.filter-group')).map(g => g.getBoundingClientRect().width)"
+    )
+    assert group_widths, "expected at least one .filter-group on the jobs filter bar"
+    for width in group_widths:
+        assert width >= bar_width - 1  # each group spans the full bar width when stacked
+
+
 def test_content_expands_on_wide_viewport(live_server, page):
     """main should exceed 60rem width when the viewport is at least 80rem wide."""
     page.set_viewport_size({"width": 1400, "height": 900})

@@ -5,6 +5,64 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-10-23
+
+### Fixed
+
+- **Jobs Map tiles blank on a CARTO key with website restrictions.** The site-wide `Referrer-Policy: same-origin` header stripped the `Referer` on Leaflet's cross-origin tile requests to `basemaps.cartocdn.com`, which a website-restricted `CARTO_API_KEY` then refused with a 403 (blank map). `/jobs/map` now sets a page-scoped `<meta name="referrer" content="strict-origin-when-cross-origin">`, which overrides the header for that page only and still sends CARTO a matching origin `Referer`; every other page keeps the stricter site-wide default.
+
+## [2.2.0] — 2026-10-23
+
+### Added
+
+- **Redesigned filter bar on `/jobs` and `/sources`** ([#254](https://github.com/jasonkryst/CareerSpyder/issues/254)). The jobs filter bar's ~11 fields are now grouped into labeled sections (Search, Location, Status, and an admin-only User section) instead of one flat, unstructured row, and both pages' filter bars stack cleanly to a single column on narrow viewports instead of wrapping raggedly. The whole filter form now collapses behind a toggle by default (native `<details>`/`<summary>`, no JS) and opens automatically whenever a filter is already applied. Active filters render as removable chips above the panel — click a chip's "×" to drop just that one filter (a multi-select filter like State or Job status removes only that one value, leaving the others selected), or reset everything at once; every chip is a plain URL link, no JavaScript required. Pure CSS/markup/route restructuring — existing filter query params, their defaults, and the page's underlying data/pagination behavior are unchanged.
+
+## [2.1.0] — 2026-10-23
+
+### Added
+
+- **Bulk enable/disable on `/sources`** ([#225](https://github.com/jasonkryst/CareerSpyder/issues/225)). Every source config gains an `enabled` flag (default `true`); disabled sources stay configured and keep their already-found jobs, but are skipped entirely on the next run — no adapter call, no entry in the progress bar, no failed-source report even if the site is down. A checkbox column plus a "select all on page" checkbox feed a bulk toolbar with **Enable selected** / **Disable selected** buttons, mirroring the `/jobs` bulk-status toolbar (#222). The source list gained a Status column (Enabled/Disabled badge) and a Status filter (All / Enabled only / Disabled only). The single-source edit form also gained an **Enabled** checkbox, so editing a disabled source doesn't silently re-enable it.
+
+## [2.0.0] — 2026-10-23
+
+### Added
+
+- **Live run-progress feedback on "Run now"** ([#213](https://github.com/jasonkryst/CareerSpyder/issues/213)). The dashboard now polls a new `GET /run-status` endpoint while a scrape is in progress and shows which source is currently being scraped and how many of the configured sources have finished (e.g. "Scraping Acme Corp… (3/28)"). Progress is tracked in an in-memory, per-user store (`app/run_progress.py`) — no schema change, and it resets harmlessly on a container restart.
+- **Bulk job status update on `/jobs`** ([#222](https://github.com/jasonkryst/CareerSpyder/issues/222)). A checkbox per row (plus a "select all on page" checkbox) feeds a bulk toolbar that applies one status to every selected job in a single request, instead of one page reload per job. Server-side ownership is enforced via the same `user_id` scoping as every other per-user mutation — a key belonging to another user is silently skipped, not trusted from the form. Capped at 200 keys per request.
+- **Per-job notes field** ([#220](https://github.com/jasonkryst/CareerSpyder/issues/220)). A new nullable `jobs.notes` column lets a user record free-text context ("interviewed 2026-10-05", "applied via recruiter Jane") against a job, editable via a modal matching the existing duplicate-marking modal pattern. Notes are user-supplied text and render through Jinja2's normal autoescaping, same as every other job field.
+- **Settings-import preview before committing** ([#221](https://github.com/jasonkryst/CareerSpyder/issues/221)). Uploading a `settings.json` file to `/settings/data/import` now shows a diff (added / updated / unchanged sources, plus changed preference keys) and requires a separate "Confirm import" before anything is written — replacing the old silent immediate overwrite. There's deliberately no "removed" section: `db.import_sources` only ever upserts, so nothing is ever deleted by an import, with or without the preview.
+
+### Changed
+
+- **`POST /settings/data/import` without `force=1` or `confirmed=1` now returns the diff preview (200) instead of committing (303).** A script or integration that previously POSTed a file and expected an immediate commit must add `force=1` (as a query parameter or form field) to keep that one-step behavior — see #221 above.
+
+## [1.15.0] — 2026-10-22
+
+### Fixed
+
+- **Source form gave no indication of which fields were required for the selected source type (audit U5).** Each required field now shows a `*` marker, and the `required` attribute is toggled per-type in `showFieldsFor()` rather than left static — a static `required` on a field hidden by `display: none` silently blocks the whole form from submitting with no visible feedback, so it has to track the current selection exactly.
+- **Found while fixing U5: selecting "Lever" in the source form hid the Board token field entirely.** It lived only inside the Greenhouse-only `.type-fields` container; Lever's own container had no input at all, making it impossible to set a board token for a Lever source through the UI. No prior test created a Lever source through the form, so this went unnoticed. Same class of bug as issue #35's `url` field, which was already fixed correctly.
+- **Destructive-action confirmations (Delete source, Import settings) had no fallback if `<dialog>`/`showModal` wasn't supported (audit U6).** `confirm-modal.js` now falls back to `window.confirm()` in that case, instead of the form submitting immediately with no warning at all.
+
+## [1.14.0] — 2026-10-22
+
+### Added
+
+- **Opt-in weekly check-in email** ([#226](https://github.com/jasonkryst/CareerSpyder/issues/226)). A new `/settings/preferences` checkbox ("Send a brief check-in email on Sunday even when there's nothing new") lets a user get a minimal "No new jobs this week. N source(s) configured, all healthy." email on quiet weeks. Off by default — the "clean run stays silent" behavior is unchanged unless a user explicitly opts in, and even then only fires on Sunday.
+
+## [1.13.0] — 2026-10-22
+
+### Added
+
+- **"What's New" modal** ([#241](https://github.com/jasonkryst/CareerSpyder/issues/241)). Clicking the version number in the footer (any page) opens a dialog showing the current release's `CHANGELOG.md` entry. The content is read from `CHANGELOG.md` once at process startup and rendered server-side (`app/web/whats_new.py`) — no runtime fetch, so no CSP relaxation is needed for it.
+- **Admin users page shows per-user source and job counts** ([#216](https://github.com/jasonkryst/CareerSpyder/issues/216)). `db.list_users` now returns `source_count` and `active_job_count` for each user, rendered as two new columns on `/users`.
+- **Invite management: status, resend, and revoke** ([#217](https://github.com/jasonkryst/CareerSpyder/issues/217)). `/users` now lists every invite the admin has sent with a Pending/Accepted/Expired badge. A pending invite can be revoked (immediately expired, blocking registration) or resent (the old link is invalidated and a fresh one is issued inline), both scoped to the admin who created the invite.
+
+### Fixed
+
+- **`db.get_new_jobs` bound one SQL parameter per scraped job.** A single large source returning 65,535+ postings in one run would have exceeded PostgreSQL's per-statement parameter limit. Switched to `key = ANY(%s)` with a single array parameter.
+- **Digest subject line ignored source failures when new jobs were also found.** It now mentions both, e.g. "CareerSpyder: 5 new job(s), 2 source(s) failed", instead of only the job count.
+
 ## [1.12.0] — 2026-10-22
 
 ### Changed

@@ -6,95 +6,133 @@
   <h1>Jobs</h1>
   <a href="{{ query_url(request, '/jobs/map') }}" class="btn">Map view</a>
 </div>
+{% if active_filters %}
+<div class="active-filters">
+  {% for f in active_filters %}
+  <a class="chip" href="{{ f.remove_url }}">{{ f.label }} <span aria-hidden="true">&times;</span></a>
+  {% endfor %}
+  <a class="chip chip-clear" href="/jobs">Clear filters</a>
+</div>
+{% endif %}
+<details class="filter-panel" {% if active_filters %}open{% endif %}>
+  <summary>Filters{% if active_filters %} <span class="filter-count">{{ active_filters | length }}</span>{% endif %}</summary>
 <form method="get" action="/jobs" class="filter-bar">
   <input type="hidden" name="sort" value="{{ request.query_params.get('sort', '') }}">
   <input type="hidden" name="dir" value="{{ request.query_params.get('dir', '') }}">
-  <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
-  <label>Search
-    <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
-  </label>
-  <label>Search name
-    <select name="source" multiple>
-      {% for name in source_names %}
-      <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Location
-    <select name="location">
-      <option value="">All locations</option>
-      <option value="__unresolved__" {% if filters.location == "__unresolved__" %}selected{% endif %}>Other / Unresolved</option>
-      {% for name in locations %}
-      <option value="{{ name }}" {% if filters.location == name %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>State
-    <select name="state" multiple>
-      {% for s in states %}
-      <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Near zip/city
-    <input type="text" name="zip" value="{{ filters.zip }}" placeholder="e.g. 60148">
-  </label>
-  <label>Radius
-    <select name="radius">
-      {% for mi in [10, 25, 50, 100] %}
-      <option value="{{ mi }}" {% if (filters.radius | int) == mi %}selected{% endif %}>{{ mi }} mi</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% if filters.zip_error %}
-  <p class="error" role="alert">Could not resolve that location — radius filter not applied.</p>
-  {% endif %}
-  <label>Listing status
-    <select name="removed">
-      <option value="">All</option>
-      <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
-      <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
-    </select>
-  </label>
-  <label>Emailed
-    <select name="emailed">
-      <option value="">All</option>
-      <option value="sent" {% if filters.emailed == "sent" %}selected{% endif %}>Emailed</option>
-      <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
-    </select>
-  </label>
-  <label>Job status
-    <select name="status" multiple>
-      <option value="none" {% if "none" in filters.status %}selected{% endif %}>No status</option>
-      {% for value, label in statuses.items() %}
-      <option value="{{ value }}" {% if value in filters.status %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Duplicates
-    <select name="duplicates">
-      <option value="" {% if not filters.duplicates %}selected{% endif %}>Hidden</option>
-      <option value="include" {% if filters.duplicates == "include" %}selected{% endif %}>Include</option>
-      <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
-    </select>
-  </label>
+  <fieldset class="filter-group">
+    <legend>Search</legend>
+    <label>Company <input type="text" name="company" value="{{ filters.company }}" placeholder="Any company"></label>
+    <label>Search
+      <input type="search" name="search" value="{{ filters.search }}" placeholder="title or company">
+    </label>
+    <label>Search name
+      <select name="source" multiple>
+        {% for name in source_names %}
+        <option value="{{ name }}" {% if name in filters.source %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+  <fieldset class="filter-group">
+    <legend>Location</legend>
+    <label>Location
+      <select name="location">
+        <option value="">All locations</option>
+        <option value="__unresolved__" {% if filters.location == "__unresolved__" %}selected{% endif %}>Other / Unresolved</option>
+        {% for name in locations %}
+        <option value="{{ name }}" {% if filters.location == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>State
+      <select name="state" multiple>
+        {% for s in states %}
+        <option value="{{ s }}" {% if s in filters.state %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Near zip/city
+      <input type="text" name="zip" value="{{ filters.zip }}" placeholder="e.g. 60148">
+    </label>
+    <label>Radius
+      <select name="radius">
+        {% for mi in [10, 25, 50, 100] %}
+        <option value="{{ mi }}" {% if (filters.radius | int) == mi %}selected{% endif %}>{{ mi }} mi</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if filters.zip_error %}
+    <p class="error" role="alert">Could not resolve that location — radius filter not applied.</p>
+    {% endif %}
+  </fieldset>
+  <fieldset class="filter-group">
+    <legend>Status</legend>
+    <label>Listing status
+      <select name="removed">
+        <option value="">All</option>
+        <option value="active" {% if filters.removed == "active" %}selected{% endif %}>Active</option>
+        <option value="removed" {% if filters.removed == "removed" %}selected{% endif %}>Removed</option>
+      </select>
+    </label>
+    <label>Emailed
+      <select name="emailed">
+        <option value="">All</option>
+        <option value="sent" {% if filters.emailed == "sent" %}selected{% endif %}>Emailed</option>
+        <option value="not_sent" {% if filters.emailed == "not_sent" %}selected{% endif %}>Not sent</option>
+      </select>
+    </label>
+    <label>Job status
+      <select name="status" multiple>
+        <option value="none" {% if "none" in filters.status %}selected{% endif %}>No status</option>
+        {% for value, label in statuses.items() %}
+        <option value="{{ value }}" {% if value in filters.status %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Duplicates
+      <select name="duplicates">
+        <option value="" {% if not filters.duplicates %}selected{% endif %}>Hidden</option>
+        <option value="include" {% if filters.duplicates == "include" %}selected{% endif %}>Include</option>
+        <option value="only" {% if filters.duplicates == "only" %}selected{% endif %}>Only duplicates</option>
+      </select>
+    </label>
+  </fieldset>
   {% if is_admin %}
-  <label>User
-    <select name="user">
-      <option value="">All users</option>
-      {% for u in users %}
-      <option value="{{ u.id }}" {% if filters.user == u.id %}selected{% endif %}>{{ u.username }}</option>
+  <fieldset class="filter-group">
+    <legend>Admin</legend>
+    <label>User
+      <select name="user">
+        <option value="">All users</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if filters.user == u.id %}selected{% endif %}>{{ u.username }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+  {% endif %}
+  <div class="filter-actions">
+    <button type="submit">Filter</button>
+  </div>
+</form>
+</details>
+<form method="post" action="/jobs/bulk-status" id="bulk-status-form" class="bulk-status-toolbar" hidden>
+  <span id="bulk-selected-count">0 selected</span>
+  <label>Set status
+    <select name="status" required>
+      <option value="" disabled selected>Choose status&hellip;</option>
+      <option value="none">Clear status</option>
+      {% for value, label in statuses.items() %}
+      <option value="{{ value }}">{{ label }}</option>
       {% endfor %}
     </select>
   </label>
-  {% endif %}
-  <button type="submit">Filter</button>
-  {% if filters.company or filters.search or filters.source or filters.location or filters.removed != "active" or filters.emailed or filters.status or filters.duplicates or filters.state or filters.zip or filters.user %}<a href="/jobs">Clear filters</a>{% endif %}
+  <button type="submit">Apply to selected</button>
 </form>
 <div class="table-scroll">
 <table>
   <thead>
   <tr>
+    <th scope="col"><input type="checkbox" id="select-all-jobs" aria-label="Select all jobs on this page"></th>
     {{ sort_th(request, '/jobs', 'company', 'Company') }}
     <th scope="col">Search name</th>
     {{ sort_th(request, '/jobs', 'title', 'Title') }}
@@ -105,12 +143,18 @@
     <th scope="col">Emailed</th>
     <th scope="col">Status</th>
     <th scope="col">Summary</th>
+    <th scope="col">Notes</th>
     {% if is_admin %}<th scope="col">User</th>{% endif %}
   </tr>
   </thead>
   <tbody>
   {% for job in jobs %}
   <tr class="{{ "removed" if job.removed_at else "" }}">
+    <td data-label="Select">
+      <input type="checkbox" name="keys" value="{{ job.key }}" form="bulk-status-form" class="job-select"
+             {% if job.user_id != current_user_id %}disabled{% endif %}
+             aria-label="Select {{ job.title | e }}">
+    </td>
     <td data-label="Company">{{ job.company or "—" }}</td>
     <td data-label="Search name">
       {{ job.source_name }}
@@ -180,6 +224,16 @@
       {% endif %}
     </td>
     <td data-label="Summary">{{ job.summary or "—" }}</td>
+    <td data-label="Notes">
+      <span class="notes-text">{{ (job.notes[:60] ~ "…") if job.notes and job.notes|length > 60 else (job.notes or "—") }}</span>
+      {% if job.user_id == current_user_id %}
+      <button type="button" class="notes-btn icon-btn"
+              data-key="{{ job.key }}"
+              data-title="{{ job.title | e }}"
+              data-notes="{{ job.notes or '' }}"
+              aria-label="Edit notes for {{ job.title | e }}">&#128221;</button>
+      {% endif %}
+    </td>
     {% if is_admin %}<td data-label="User">{{ job.username or "" }}</td>{% endif %}
   </tr>
   {% endfor %}
@@ -244,6 +298,23 @@
   </form>
 </dialog>
 
+<dialog id="notes-modal" class="modal" aria-labelledby="notes-modal-title">
+  <h2 id="notes-modal-title">Job Notes</h2>
+  <p id="notes-modal-job" class="modal-subtitle"></p>
+  <form id="notes-form">
+    <input type="hidden" id="notes-key" name="key">
+    <label for="notes-input">
+      Notes
+      <textarea id="notes-input" name="notes" rows="4"
+                placeholder="e.g. interviewed 2026-10-05, applied via recruiter Jane"></textarea>
+    </label>
+    <div class="modal-actions">
+      <button type="submit" class="btn-primary" id="notes-save-btn">Save</button>
+      <button type="button" id="notes-cancel-btn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 /* ── Shared helpers ─────────────────────────────────────────────────────── */
 (function () {
@@ -270,6 +341,30 @@
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  /* ── Bulk status toolbar ──────────────────────────────────────────────── */
+  var bulkForm = document.getElementById("bulk-status-form");
+  var selectAll = document.getElementById("select-all-jobs");
+  var bulkCount = document.getElementById("bulk-selected-count");
+  var jobCheckboxes = Array.prototype.slice.call(document.querySelectorAll(".job-select:not([disabled])"));
+
+  function updateBulkToolbar() {
+    if (!bulkForm) return;
+    var checked = jobCheckboxes.filter(function (cb) { return cb.checked; });
+    if (bulkCount) bulkCount.textContent = checked.length + " selected";
+    bulkForm.hidden = checked.length === 0;
+  }
+
+  jobCheckboxes.forEach(function (cb) {
+    cb.addEventListener("change", updateBulkToolbar);
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      jobCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+      updateBulkToolbar();
+    });
   }
 
   /* ── Status dropdown ──────────────────────────────────────────────────── */
@@ -517,6 +612,51 @@
     });
 
     locClear.addEventListener("click", function () { postOverride(""); });
+  }
+
+  /* ── Notes modal ───────────────────────────────────────────────────────── */
+  var notesModal = document.getElementById("notes-modal");
+  if (notesModal && typeof notesModal.showModal === "function") {
+    var notesForm = document.getElementById("notes-form");
+    var notesKey = document.getElementById("notes-key");
+    var notesInput = document.getElementById("notes-input");
+    var notesJobEl = document.getElementById("notes-modal-job");
+    var notesCancelBtn = document.getElementById("notes-cancel-btn");
+    var activeNotesBtn = null;
+
+    document.querySelectorAll(".notes-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        activeNotesBtn = btn;
+        notesKey.value = btn.dataset.key;
+        notesInput.value = btn.dataset.notes || "";
+        notesJobEl.textContent = btn.dataset.title;
+        notesModal.showModal();
+        notesInput.focus();
+      });
+    });
+
+    notesCancelBtn.addEventListener("click", function () { notesModal.close(); });
+
+    notesForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var data = new FormData(notesForm);
+      var result = await postJson("/jobs/notes", data);
+      if (result.ok) {
+        notesModal.close();
+        toast(result.body.message);
+        if (activeNotesBtn) {
+          var row = activeNotesBtn.closest("tr");
+          var notes = result.body.notes || "";
+          activeNotesBtn.dataset.notes = notes;
+          var notesCell = row.querySelector('td[data-label="Notes"] .notes-text');
+          if (notesCell) {
+            notesCell.textContent = notes.length > 60 ? notes.slice(0, 60) + "…" : (notes || "—");
+          }
+        }
+      } else {
+        toast(result.body.detail || "Failed to save notes.");
+      }
+    });
   }
 })();
 </script>

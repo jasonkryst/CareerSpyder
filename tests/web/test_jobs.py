@@ -248,6 +248,17 @@ def test_jobs_map_injects_carto_key_attr_when_env_set(client, monkeypatch):
     assert 'data-carto-api-key="test-key-abc"' in resp.text
 
 
+def test_jobs_map_overrides_referrer_policy_for_tile_requests(client):
+    # The site-wide `Referrer-Policy: same-origin` header (security_headers.py)
+    # strips the Referer on Leaflet's cross-origin tile <img> requests, which
+    # CARTO's website-restricted basemap keys then reject with 403 (blank
+    # tiles). A per-document <meta name="referrer"> overrides the HTTP header
+    # for this page only, so tile requests still carry an origin Referer.
+    resp = client.get("/jobs/map")
+    assert resp.status_code == 200
+    assert '<meta name="referrer" content="strict-origin-when-cross-origin">' in resp.text
+
+
 def test_jobs_map_data_groups_jobs_by_location(client):
     conn = client.app.state.conn
     run_id = db.start_run(conn)
@@ -502,6 +513,289 @@ def test_post_job_status_unknown_key_returns_404(client):
     resp = client.post("/jobs/status", data={"key": "does-not-exist", "status": "applied"})
 
     assert resp.status_code == 404
+
+
+def test_post_bulk_status_updates_selected_jobs_and_flashes_count(client):
+    conn = client.app.state.conn
+    uid = owner_id_for(conn)
+    for k in ("k1", "k2"):
+        db.save_jobs(conn, [make_job(key=k)], db.start_run(conn), user_id=uid)
+
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1", "k2"], "status": "applied"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/jobs"
+    assert parse_qs(location.query)["flash"] == ["Updated 2 job(s)."]
+    rows = {r["key"]: r["status"] for r in db.list_jobs(conn)}
+    assert rows == {"k1": "applied", "k2": "applied"}
+
+
+def test_post_bulk_status_rejects_invalid_status(client):
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": "bogus"})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_status_rejects_empty_status(client):
+    # The toolbar's status <select> has no selectable blank option (a disabled
+    # placeholder occupies value=""), so an empty submission means something
+    # bypassed the form -- treat it as a 400, never a silent status-clear.
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": ""})
+
+    assert resp.status_code == 400
+
+
+def test_post_bulk_status_none_sentinel_clears_status(client):
+    conn = client.app.state.conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_status(conn, uid, "k1", "applied")
+
+    resp = client.post("/jobs/bulk-status", data={"keys": ["k1"], "status": "none"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_jobs_page_bulk_status_select_has_no_default_destructive_option(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    select = soup.select_one('#bulk-status-form select[name="status"]')
+    assert select is not None
+    assert select.has_attr("required")
+    placeholder = select.find("option", attrs={"value": ""})
+    assert placeholder is not None
+    assert placeholder.has_attr("disabled")
+    assert placeholder.has_attr("selected")
+    clear_option = select.find("option", attrs={"value": "none"})
+    assert clear_option is not None
+
+
+def test_post_bulk_status_rejects_more_than_200_keys(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="real1")], db.start_run(conn), user_id=owner_id_for(conn))
+    keys = ["real1", *[f"k{i}" for i in range(200)]]  # 201 total, one real key
+
+    resp = client.post("/jobs/bulk-status", data={"keys": keys, "status": "applied"})
+
+    assert resp.status_code == 400
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_post_bulk_status_with_no_keys_flashes_zero(client):
+    resp = client.post("/jobs/bulk-status", data={"keys": [], "status": "applied"}, follow_redirects=False)
+
+    assert parse_qs(urlparse(resp.headers["location"]).query)["flash"] == ["Updated 0 job(s)."]
+
+
+def test_post_bulk_status_only_updates_the_callers_own_jobs(client, member_user_id_for_admin):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="mine")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.save_jobs(conn, [make_job(key="theirs", source_id="s2")], db.start_run(conn), user_id=member_user_id_for_admin)
+
+    client.post("/jobs/bulk-status", data={"keys": ["mine", "theirs"], "status": "applied"})
+
+    theirs_status = next(r["status"] for r in db.list_jobs(conn) if r["key"] == "theirs")
+    assert theirs_status is None
+
+
+def test_jobs_page_shows_bulk_status_toolbar_markup(client):
+    resp = client.get("/jobs")
+
+    assert 'id="bulk-status-form"' in resp.text
+    assert 'id="select-all-jobs"' in resp.text
+
+
+# --- Filter bar layout (issue #254) ---
+
+def test_jobs_filter_bar_groups_fields_into_fieldsets(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    filter_bar = soup.select_one("form.filter-bar")
+    assert filter_bar is not None
+    groups = filter_bar.select("fieldset.filter-group")
+    legends = [g.find("legend").get_text(strip=True) for g in groups]
+    # `client` is logged in as admin, so an "Admin" group also appears.
+    assert legends == ["Search", "Location", "Status", "Admin"]
+    # Fields stay inside their group -- e.g. "state" (location-related) must
+    # not end up in the "Status" group (job status/removed/emailed/duplicates).
+    location_group = next(g for g in groups if g.find("legend").get_text(strip=True) == "Location")
+    assert location_group.select_one('select[name="state"]') is not None
+    status_group = next(g for g in groups if g.find("legend").get_text(strip=True) == "Status")
+    assert status_group.select_one('select[name="state"]') is None
+    assert status_group.select_one('select[name="removed"]') is not None
+
+
+def test_jobs_filter_bar_admin_group_only_shown_to_admin(client, member_client):
+    admin_resp = client.get("/jobs")
+    member_resp = member_client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    admin_soup = BeautifulSoup(admin_resp.text, "html.parser")
+    member_soup = BeautifulSoup(member_resp.text, "html.parser")
+    admin_legends = [g.find("legend").get_text(strip=True) for g in admin_soup.select("fieldset.filter-group")]
+    member_legends = [g.find("legend").get_text(strip=True) for g in member_soup.select("fieldset.filter-group")]
+    assert "Admin" in admin_legends
+    assert "Admin" not in member_legends
+
+
+def test_jobs_filter_bar_submit_button_in_actions_wrapper(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    actions = soup.select_one("form.filter-bar .filter-actions")
+    assert actions is not None
+    assert actions.select_one('button[type="submit"]') is not None
+
+
+def test_jobs_filter_panel_closed_by_default_with_no_active_filters(client):
+    resp = client.get("/jobs")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel is not None
+    assert panel.has_attr("open") is False
+    assert soup.select_one(".active-filters") is None
+
+
+def test_jobs_filter_panel_opens_automatically_when_a_filter_is_active(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    panel = soup.select_one("details.filter-panel")
+    assert panel.has_attr("open") is True
+
+
+def test_jobs_active_filter_chip_renders_label_and_removes_only_that_filter(client):
+    resp = client.get("/jobs?company=Acme&search=engineer")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    labels = [c.get_text(" ", strip=True) for c in chips]
+    assert any("Company: Acme" in label for label in labels)
+    assert any('Search: "engineer"' in label for label in labels)
+    company_chip = next(c for c in chips if "Company" in c.get_text())
+    assert "company=" not in company_chip["href"]
+    assert "search=engineer" in company_chip["href"]
+
+
+def test_jobs_multi_value_filter_chip_removes_only_that_one_value(client):
+    resp = client.get("/jobs?state=IL&state=NY")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    il_chip = next(c for c in chips if c.get_text(strip=True).startswith("State: IL"))
+    assert "state=IL" not in il_chip["href"]
+    assert "state=NY" in il_chip["href"]
+
+
+def test_jobs_zip_and_radius_collapse_into_one_chip(client):
+    from unittest.mock import patch
+    with patch("app.geocoding.nominatim.requests.get", return_value=_fake_geocode_response()):
+        resp = client.get("/jobs?zip=60148&radius=50")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    chips = soup.select(".active-filters .chip:not(.chip-clear)")
+    zip_chips = [c for c in chips if "60148" in c.get_text()]
+    assert len(zip_chips) == 1
+    assert "50 mi" in zip_chips[0].get_text()
+    assert "zip=" not in zip_chips[0]["href"]
+    assert "radius=" not in zip_chips[0]["href"]
+
+
+def test_jobs_active_filter_chip_escapes_html_in_user_supplied_filter_value(client):
+    """company/search/location flow straight from the query string into a
+    chip label -- same escaping expectation as test_jobs_page_escapes_html_in_notes."""
+    resp = client.get("/jobs?company=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
+def test_jobs_active_filters_clear_all_chip_links_to_bare_jobs_path(client):
+    resp = client.get("/jobs?company=Acme")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    clear = soup.select_one(".active-filters .chip-clear")
+    assert clear is not None
+    assert clear["href"] == "/jobs"
+
+
+def test_jobs_page_checkbox_disabled_for_jobs_not_owned_by_viewer(client, member_user_id_for_admin):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="theirs", source_id="s2")], db.start_run(conn), user_id=member_user_id_for_admin)
+
+    resp = client.get("/jobs?user=" + member_user_id_for_admin)
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cb = soup.select_one('input.job-select[value="theirs"]')
+    assert cb is not None and cb.has_attr("disabled")
+
+
+def test_post_job_notes_saves_and_redirects_with_flash(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.post("/jobs/notes", data={"key": "k1", "notes": "called recruiter"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert db.list_jobs(conn)[0]["notes"] == "called recruiter"
+
+
+def test_post_job_notes_json_path_returns_ok(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.post("/jobs/notes", data={"key": "k1", "notes": "x"}, headers={"Accept": "application/json"})
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+
+def test_post_job_notes_unknown_key_returns_404(client):
+    resp = client.post("/jobs/notes", data={"key": "nope", "notes": "x"})
+
+    assert resp.status_code == 404
+
+
+def test_post_job_notes_missing_key_returns_400(client):
+    resp = client.post("/jobs/notes", data={"notes": "x"})
+
+    assert resp.status_code == 400
+
+
+def test_jobs_page_escapes_html_in_notes(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+    db.set_job_notes(conn, owner_id_for(conn), "k1", "<script>alert(1)</script>")
+
+    resp = client.get("/jobs")
+
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
+def test_jobs_page_shows_notes_column_and_edit_button(client):
+    conn = client.app.state.conn
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))
+
+    resp = client.get("/jobs")
+
+    assert 'id="notes-modal"' in resp.text
+    assert 'class="notes-btn icon-btn"' in resp.text
 
 
 def test_jobs_page_shows_status_select_with_current_status_selected(client):

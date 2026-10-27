@@ -18,7 +18,7 @@
 {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 <form method="post" action="{{ action }}">
   {% if source %}<input type="hidden" name="id" value="{{ source.id }}">{% endif %}
-  <label>Name <input type="text" name="name" value="{{ source.name if source else '' }}"></label>
+  <label>Name <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="name" required value="{{ source.name if source else '' }}"></label>
   <label>Company <input type="text" name="company" value="{{ source.company or '' }}"></label>
   <label>Type
     <select name="type" onchange="showFieldsFor(this.value)">
@@ -28,22 +28,24 @@
     </select>
   </label>
 
+  <div class="type-fields" data-types="greenhouse lever">
+    <label>Board token <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="board_token" value="{{ source.board_token if source and source.type in ['greenhouse', 'lever'] else '' }}"></label>
+  </div>
   <div class="type-fields" data-types="greenhouse">
     <div class="hint"><strong>Example:</strong> <code>board_token: "acme"</code> &mdash; <a href="/guide#type-greenhouse">full reference</a></div>
-    <label>Board token <input type="text" name="board_token" value="{{ source.board_token if source and source.type in ['greenhouse', 'lever'] else '' }}"></label>
   </div>
   <div class="type-fields" data-types="lever">
     <div class="hint"><strong>Example:</strong> <code>board_token: "beta"</code> &mdash; <a href="/guide#type-lever">full reference</a></div>
   </div>
   <div class="type-fields" data-types="generic_html linkedin indeed">
-    <label>URL <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label>
+    <label>URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="url" value="{{ source.url if source and source.type in ['generic_html', 'linkedin', 'indeed'] else '' }}"></label>
   </div>
   <div class="type-fields" data-types="generic_html">
     <div class="hint"><strong>Example:</strong> <code>url: "https://customco.com/careers?q=backend+engineer"</code>, <code>selectors.job_card: ".job-listing"</code> &mdash; <a href="/guide#type-generic_html">full reference</a></div>
     <label>Render JS <input type="checkbox" name="render_js" {% if source and source.type == 'generic_html' and source.render_js %}checked{% endif %}></label>
-    <label>Job card selector <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label>
-    <label>Title selector <input type="text" name="selector_title" value="{{ source.selectors.title if source and source.type == 'generic_html' else '' }}"></label>
-    <label>Link selector <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label>
+    <label>Job card selector <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="selector_job_card" value="{{ source.selectors.job_card if source and source.type == 'generic_html' else '' }}"></label>
+    <label>Title selector <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="selector_title" value="{{ source.selectors.title if source and source.type == 'generic_html' else '' }}"></label>
+    <label>Link selector <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="selector_link" value="{{ source.selectors.link if source and source.type == 'generic_html' else '' }}"></label>
     <label>Location selector <input type="text" name="selector_location" value="{{ source.selectors.location if source and source.type == 'generic_html' and source.selectors.location else '' }}"></label>
   </div>
   <div class="type-fields" data-types="linkedin">
@@ -57,32 +59,34 @@
   </div>
   <div class="type-fields" data-types="infor">
     <div class="hint"><strong>Example:</strong> <code>url: "https://careers.example.com/go/All-Jobs/12345/"</code>, <code>max_pages: 3</code> &mdash; <a href="/guide#type-infor">full reference</a></div>
-    <label>URL <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label>
+    <label>URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="infor_url" value="{{ source.url if source and source.type == 'infor' else '' }}"></label>
   </div>
   <div class="type-fields" data-types="healthcaresource">
     <div class="hint"><strong>Example:</strong> <code>site_id: "rcmc"</code> &mdash; <a href="/guide#type-healthcaresource">full reference</a></div>
-    <label>Site ID <input type="text" name="site_id" value="{{ source.site_id if source and source.type == 'healthcaresource' else '' }}"></label>
+    <label>Site ID <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="site_id" value="{{ source.site_id if source and source.type == 'healthcaresource' else '' }}"></label>
   </div>
   <div class="type-fields" data-types="talentbrew">
     <div class="hint"><strong>Example:</strong> <code>base_url: "https://jobs.nm.org"</code> &mdash; <a href="/guide#type-talentbrew">full reference</a></div>
-    <label>Base URL <input type="text" name="base_url" value="{{ source.base_url if source and source.type == 'talentbrew' else '' }}"></label>
+    <label>Base URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="base_url" value="{{ source.base_url if source and source.type == 'talentbrew' else '' }}"></label>
   </div>
   <div class="type-fields" data-types="workday">
     <div class="hint"><strong>Example:</strong> <code>career_site_url: "https://dulyhealthandcare.wd1.myworkdayjobs.com/Duly"</code> &mdash; <a href="/guide#type-workday">full reference</a></div>
-    <label>Career site URL <input type="text" name="career_site_url" value="{{ source.career_site_url if source and source.type == 'workday' else '' }}"></label>
+    <label>Career site URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="career_site_url" value="{{ source.career_site_url if source and source.type == 'workday' else '' }}"></label>
   </div>
   <div class="type-fields" data-types="phenompeople">
     <div class="hint"><strong>Example:</strong> <code>career_site_url: "https://jobs.ascension.org"</code>, <code>state: "Illinois"</code> &mdash; <a href="/guide#type-phenompeople">full reference</a></div>
-    <label>Career site URL <input type="text" name="phenompeople_career_site_url" value="{{ source.career_site_url if source and source.type == 'phenompeople' else '' }}"></label>
+    <label>Career site URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="phenompeople_career_site_url" value="{{ source.career_site_url if source and source.type == 'phenompeople' else '' }}"></label>
     <label>State <input type="text" name="state" value="{{ source.state if source and source.type == 'phenompeople' and source.state else '' }}"></label>
   </div>
   <div class="type-fields" data-types="findly">
     <div class="hint"><strong>Example:</strong> <code>org_id: "2297"</code>, <code>career_site_url: "https://careers.aah.org"</code> &mdash; <a href="/guide#type-findly">full reference</a></div>
-    <label>Org ID <input type="text" name="org_id" value="{{ source.org_id if source and source.type == 'findly' else '' }}"></label>
-    <label>Career site URL <input type="text" name="findly_career_site_url" value="{{ source.career_site_url if source and source.type == 'findly' else '' }}"></label>
+    <label>Org ID <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="org_id" value="{{ source.org_id if source and source.type == 'findly' else '' }}"></label>
+    <label>Career site URL <span class="required-mark" aria-hidden="true">*</span> <input type="text" name="findly_career_site_url" value="{{ source.career_site_url if source and source.type == 'findly' else '' }}"></label>
   </div>
 
   <div class="card">
+  <label>Enabled <input type="checkbox" name="enabled" {% if not source or source.enabled %}checked{% endif %}></label>
+  <p class="field-hint">Disabled sources are skipped when runs happen, but stay configured so you can re-enable them later.</p>
   <label>Secondary source <input type="checkbox" name="secondary" {% if source and source.secondary %}checked{% endif %}></label>
   <p class="field-hint">Secondary sources (e.g. Indeed, LinkedIn) may surface duplicate listings. Jobs from secondary sources are marked in the UI and email digest.</p>
   <label>Include keywords (comma separated) <input type="text" name="include_keywords" value="{{ source.include_keywords | join(', ') if source else '' }}"></label>
@@ -108,10 +112,35 @@
 </form>
 
 <script>
+// U5: a field required for one source type is often inside a `.type-fields`
+// div hidden for another -- a hidden element's `required` attribute still
+// blocks form submission with no visible feedback (the browser has nowhere
+// to anchor the validation bubble), so `required` must track which type is
+// currently selected, not just live statically in the markup.
+const REQUIRED_FIELDS_BY_TYPE = {
+  greenhouse: ["board_token"],
+  lever: ["board_token"],
+  generic_html: ["url", "selector_job_card", "selector_title", "selector_link"],
+  linkedin: ["url"],
+  indeed: ["url"],
+  infor: ["infor_url"],
+  healthcaresource: ["site_id"],
+  talentbrew: ["base_url"],
+  workday: ["career_site_url"],
+  phenompeople: ["phenompeople_career_site_url"],
+  findly: ["org_id", "findly_career_site_url"],
+};
+const CONDITIONALLY_REQUIRED_FIELD_NAMES = [...new Set(Object.values(REQUIRED_FIELDS_BY_TYPE).flat())];
+
 function showFieldsFor(type) {
   document.querySelectorAll(".type-fields").forEach(el => {
     const types = el.dataset.types.split(" ");
     el.style.display = types.includes(type) ? "block" : "none";
+  });
+  const requiredNow = new Set(REQUIRED_FIELDS_BY_TYPE[type] || []);
+  CONDITIONALLY_REQUIRED_FIELD_NAMES.forEach(name => {
+    const el = document.querySelector(`[name="${name}"]`);
+    if (el) el.required = requiredNow.has(name);
   });
 }
 showFieldsFor(document.querySelector('select[name="type"]').value);

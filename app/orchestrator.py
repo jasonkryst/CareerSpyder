@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app import checker, db
+from app import checker, db, run_progress
 from app.adapters import ADAPTERS
 from app.config import SourceConfig, get_source_url
 from app.filters import apply_keyword_filters
@@ -35,50 +35,60 @@ def run_once(
     geocoder: Geocoder | None = None, *, user_id: str,
 ) -> RunSummary:
     with _run_lock:
-        run_id = db.start_run(conn, user_id=user_id)
-        all_jobs: list[Job] = []
-        all_raw_jobs: list[Job] = []
-        succeeded_source_ids: set[str] = set()
-        failed_sources: list[FailedSource] = []
+        # Disabled sources (issue #225) are skipped entirely -- not attempted,
+        # not counted in progress -- but stay in `sources` for the
+        # configured_source_ids computation below, so reconcile_jobs leaves
+        # their previously-found jobs alone instead of marking them removed.
+        active_sources = [s for s in sources if s.enabled]
+        run_progress.start(user_id, total=len(active_sources))
+        try:
+            run_id = db.start_run(conn, user_id=user_id)
+            all_jobs: list[Job] = []
+            all_raw_jobs: list[Job] = []
+            succeeded_source_ids: set[str] = set()
+            failed_sources: list[FailedSource] = []
 
-        for source in sources:
+            for i, source in enumerate(active_sources):
+                run_progress.update(user_id, source.name, done=i)
+                try:
+                    adapter = ADAPTERS[source.type]
+                    found = adapter(source)
+                except Exception:
+                    logger.exception("Source %r failed", source.name)
+                    failed_sources.append(FailedSource(name=source.name, url=get_source_url(source), source_id=source.id))
+                    continue
+                succeeded_source_ids.add(source.id)
+                all_raw_jobs.extend(found)
+                all_jobs.extend(apply_keyword_filters(found, source.include_keywords, source.exclude_keywords))
+
+            deduped_jobs = list({j.key: j for j in all_jobs}.values())
+            deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
+
+            new_jobs = db.get_new_jobs(conn, user_id, deduped_jobs)
+            db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
+            # Heal URLs of already-known jobs (e.g. after an adapter URL fix) before
+            # the checker below HEADs them -- a stale broken URL would 404 and get
+            # the job marked removed.
+            db.refresh_job_urls(conn, user_id, deduped_raw_jobs)
+
+            configured_source_ids = {s.id for s in sources}
+            db.reconcile_jobs(conn, user_id, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
+
             try:
-                adapter = ADAPTERS[source.type]
-                found = adapter(source)
+                geocode_pending(conn, geocoder or get_geocoder())
             except Exception:
-                logger.exception("Source %r failed", source.name)
-                failed_sources.append(FailedSource(name=source.name, url=get_source_url(source), source_id=source.id))
-                continue
-            succeeded_source_ids.add(source.id)
-            all_raw_jobs.extend(found)
-            all_jobs.extend(apply_keyword_filters(found, source.include_keywords, source.exclude_keywords))
+                logger.exception("Geocoding step failed for run %s", run_id)
 
-        deduped_jobs = list({j.key: j for j in all_jobs}.values())
-        deduped_raw_jobs = list({j.key: j for j in all_raw_jobs}.values())
+            try:
+                url_removed_count = checker.check_job_urls(conn, user_id=user_id)
+            except Exception:
+                logger.exception("URL check step failed for run %s", run_id)
+                url_removed_count = 0
 
-        new_jobs = db.get_new_jobs(conn, user_id, deduped_jobs)
-        db.save_jobs(conn, new_jobs, run_id, user_id=user_id)
-        # Heal URLs of already-known jobs (e.g. after an adapter URL fix) before
-        # the checker below HEADs them -- a stale broken URL would 404 and get
-        # the job marked removed.
-        db.refresh_job_urls(conn, user_id, deduped_raw_jobs)
-
-        configured_source_ids = {s.id for s in sources}
-        db.reconcile_jobs(conn, user_id, configured_source_ids, succeeded_source_ids, deduped_raw_jobs)
-
-        try:
-            geocode_pending(conn, geocoder or get_geocoder())
-        except Exception:
-            logger.exception("Geocoding step failed for run %s", run_id)
-
-        try:
-            url_removed_count = checker.check_job_urls(conn, user_id=user_id)
-        except Exception:
-            logger.exception("URL check step failed for run %s", run_id)
-            url_removed_count = 0
-
-        db.finish_run(conn, run_id, len(new_jobs), failed_sources, source_count=len(sources))
-        return RunSummary(
-            run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs,
-            failed_sources=failed_sources, url_removed_count=url_removed_count,
-        )
+            db.finish_run(conn, run_id, len(new_jobs), failed_sources, source_count=len(active_sources))
+            return RunSummary(
+                run_id=run_id, new_jobs=new_jobs, found_jobs=deduped_jobs,
+                failed_sources=failed_sources, url_removed_count=url_removed_count,
+            )
+        finally:
+            run_progress.finish(user_id)

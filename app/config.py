@@ -33,6 +33,7 @@ class BaseSource(BaseModel):
     name: str
     company: str | None = None
     secondary: bool = False
+    enabled: bool = True
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)
 
@@ -116,6 +117,24 @@ SourceConfig = Annotated[
 
 class SourcesFile(BaseModel):
     sources: list[SourceConfig]
+
+
+def diff_import(existing: list, new: list) -> dict:
+    """Classify an import file's sources against a user's current sources,
+    matched by id. There is no "removed" bucket: db.import_sources only
+    ever upserts, it never deletes a source missing from the file, so a
+    removed-section would promise a deletion that will not happen."""
+    existing_by_id = {s.id: s for s in existing}
+    added, updated, unchanged = [], [], []
+    for source in new:
+        old = existing_by_id.get(source.id)
+        if old is None:
+            added.append(source)
+        elif old.model_dump() == source.model_dump():
+            unchanged.append(source)
+        else:
+            updated.append((old, source))
+    return {"added": added, "updated": updated, "unchanged": unchanged}
 
 
 def get_source_url(source: SourceConfig) -> str | None:

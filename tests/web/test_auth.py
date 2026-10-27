@@ -213,6 +213,25 @@ def test_post_register_with_expired_invite_returns_400(unauthed_client):
     assert "expired" in resp.text.lower()
 
 
+def test_post_register_with_a_revoked_invite_returns_400(unauthed_client):
+    """revoke_invite (#217) works by expiring the token -- this confirms that
+    actually blocks registration end-to-end, not just that the DB row changed."""
+    conn = unauthed_client.app.state.conn
+    admin_user = db.get_user_by_username(conn, "admin")
+    invite = db.create_invite(conn, "revoked@x.test", admin_user["id"])
+    assert db.revoke_invite(conn, admin_user["id"], invite["token"]) is True
+
+    resp = unauthed_client.post("/register", data={
+        "token": invite["token"],
+        "username": "revokeduser",
+        "password": "securepass1",
+        "password_confirm": "securepass1",
+    })
+
+    assert resp.status_code == 400
+    assert "expired" in resp.text.lower()
+
+
 def test_post_register_with_mismatched_passwords_returns_400(unauthed_client):
     conn = unauthed_client.app.state.conn
     admin_user = db.get_user_by_username(conn, "admin")
