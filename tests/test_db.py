@@ -819,6 +819,133 @@ def test_set_job_status_on_unknown_key_raises_key_error(pg_conn):
         db.set_job_status(conn, owner_id_for(conn), "does-not-exist", "applied")
 
 
+def test_bulk_set_status_updates_all_given_keys(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    for k in ("k1", "k2", "k3"):
+        db.save_jobs(conn, [make_job(key=k)], db.start_run(conn), user_id=uid)
+
+    count = db.bulk_set_status(conn, uid, ["k1", "k2"], "applied")
+
+    assert count == 2
+    rows = {r["key"]: r["status"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "applied" and rows["k2"] == "applied" and rows["k3"] is None
+
+
+def test_bulk_set_status_can_clear_status(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_status(conn, uid, "k1", "applied")
+
+    count = db.bulk_set_status(conn, uid, ["k1"], None)
+
+    assert count == 1
+    assert db.list_jobs(conn)[0]["status"] is None
+
+
+def test_bulk_set_status_records_history_for_each_updated_key(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.bulk_set_status(conn, uid, ["k1"], "ignored")
+
+    history = db.get_job_status_history(conn, [(uid, "k1")])
+    assert history[(uid, "k1")][0]["status"] == "ignored"
+
+
+def test_bulk_set_status_ignores_empty_key_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_status(conn, uid, [], "applied") == 0
+
+
+def test_bulk_set_enabled_disables_all_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1", "s2"], False)
+
+    assert count == 2
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": False}
+
+
+def test_bulk_set_enabled_can_re_enable(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1", enabled=False))
+
+    count = db.bulk_set_enabled(conn, uid, ["s1"], True)
+
+    assert count == 1
+    assert db.list_sources(conn, uid)[0].enabled is True
+
+
+def test_bulk_set_enabled_only_affects_given_ids(pg_conn):
+    from app.config import GreenhouseSource
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.add_source(conn, uid, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(conn, uid, GreenhouseSource(id="s2", name="S2", type="greenhouse", board_token="t2"))
+
+    db.bulk_set_enabled(conn, uid, ["s1"], False)
+
+    sources = {s.id: s.enabled for s in db.list_sources(conn, uid)}
+    assert sources == {"s1": False, "s2": True}
+
+
+def test_bulk_set_enabled_ignores_empty_id_list(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+
+    assert db.bulk_set_enabled(conn, uid, [], False) == 0
+
+
+def test_set_job_notes_stores_text(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    db.set_job_notes(conn, uid, "k1", "interviewed 2026-10-05")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == "interviewed 2026-10-05"
+
+
+def test_set_job_notes_can_clear_to_empty_string(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+    db.set_job_notes(conn, uid, "k1", "something")
+
+    db.set_job_notes(conn, uid, "k1", "")
+
+    rows = {r["key"]: r["notes"] for r in db.list_jobs(conn)}
+    assert rows["k1"] == ""
+
+
+def test_set_job_notes_unknown_key_raises_keyerror(pg_conn):
+    conn = pg_conn
+
+    with pytest.raises(KeyError):
+        db.set_job_notes(conn, owner_id_for(conn), "nope", "x")
+
+
+def test_list_jobs_defaults_notes_to_none(pg_conn):
+    conn = pg_conn
+    uid = owner_id_for(conn)
+    db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=uid)
+
+    assert db.list_jobs(conn)[0]["notes"] is None
+
+
 def test_get_job_status_history_omits_key_with_no_changes(pg_conn):
     conn = pg_conn
     db.save_jobs(conn, [make_job(key="k1")], db.start_run(conn), user_id=owner_id_for(conn))

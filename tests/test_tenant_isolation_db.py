@@ -54,7 +54,8 @@ def test_run_once_for_one_user_leaves_other_users_jobs_active(pg_conn, two_users
     lambda conn, uid: db.set_job_duplicate(conn, uid, KEY),
     lambda conn, uid: db.clear_job_duplicate(conn, uid, KEY),
     lambda conn, uid: db.clear_location_override(conn, uid, KEY),
-], ids=["remove", "status", "dup", "undup", "clear-override"])
+    lambda conn, uid: db.set_job_notes(conn, uid, KEY, "x"),
+], ids=["remove", "status", "dup", "undup", "clear-override", "notes"])
 def test_job_mutations_by_a_non_owner_raise_keyerror(pg_conn, two_users, mutate):
     alice, bob = two_users
     _save(pg_conn, alice)
@@ -64,6 +65,64 @@ def test_job_mutations_by_a_non_owner_raise_keyerror(pg_conn, two_users, mutate)
         "SELECT status, removed_at, is_duplicate FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
     ).fetchone()
     assert row == (None, None, False)
+
+
+def test_set_job_notes_by_a_non_owner_raises_and_leaves_notes_unset(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice)
+    with pytest.raises(KeyError):
+        db.set_job_notes(pg_conn, bob, KEY, "x")
+    notes = pg_conn.execute(
+        "SELECT notes FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
+    ).fetchone()[0]
+    assert notes is None
+
+
+def test_bulk_set_status_by_a_non_owner_updates_nothing(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice)
+    count = db.bulk_set_status(pg_conn, bob, [KEY], "applied")
+    assert count == 0
+    row = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = %s", (alice, KEY),
+    ).fetchone()
+    assert row == (None,)
+
+
+def test_bulk_set_status_with_mixed_ownership_only_updates_owned_keys(pg_conn, two_users):
+    alice, bob = two_users
+    _save(pg_conn, alice, _job(key="shared", source_id="a"))
+    _save(pg_conn, bob, _job(key="shared", source_id="b"))
+    count = db.bulk_set_status(pg_conn, alice, ["shared"], "applied")
+    assert count == 1
+    alice_status = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = 'shared'", (alice,),
+    ).fetchone()[0]
+    bob_status = pg_conn.execute(
+        "SELECT status FROM jobs WHERE user_id = %s AND key = 'shared'", (bob,),
+    ).fetchone()[0]
+    assert alice_status == "applied"
+    assert bob_status is None
+
+
+def test_bulk_set_enabled_by_a_non_owner_updates_nothing(pg_conn, two_users):
+    from app.config import GreenhouseSource
+    alice, bob = two_users
+    db.add_source(pg_conn, alice, GreenhouseSource(id="s1", name="S1", type="greenhouse", board_token="t1"))
+    count = db.bulk_set_enabled(pg_conn, bob, ["s1"], False)
+    assert count == 0
+    assert db.list_sources(pg_conn, alice)[0].enabled is True
+
+
+def test_bulk_set_enabled_with_mixed_ownership_only_updates_owned_ids(pg_conn, two_users):
+    from app.config import GreenhouseSource
+    alice, bob = two_users
+    db.add_source(pg_conn, alice, GreenhouseSource(id="shared", name="S1", type="greenhouse", board_token="t1"))
+    db.add_source(pg_conn, bob, GreenhouseSource(id="shared2", name="S2", type="greenhouse", board_token="t2"))
+    count = db.bulk_set_enabled(pg_conn, alice, ["shared", "shared2"], False)
+    assert count == 1
+    assert db.list_sources(pg_conn, alice)[0].enabled is False
+    assert db.list_sources(pg_conn, bob)[0].enabled is True
 
 
 def test_clear_jobs_only_deletes_the_callers_jobs(pg_conn, two_users):

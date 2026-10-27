@@ -15,6 +15,7 @@ from app.textutils import safe_url_scheme
 from app.web.auth import require_user
 from app.web.flash import flash_redirect
 from app.web.pagination import paginate
+from app.web.query_params import remove_filter_url, remove_filter_value_url
 from app.web.templating import templates
 
 router = APIRouter()
@@ -51,6 +52,56 @@ def _geocode_zip(zip_code: str) -> tuple[float, float] | None:
     except Exception:  # noqa: BLE001
         return None
     return (result.lat, result.lng) if result else None
+
+
+def _active_job_filters(
+    request: Request, *, company: str, search: str, source: list[str], removed: str,
+    emailed: str, status: list[str], location: str, duplicates: str, state: list[str],
+    zip_code: str, radius: str, user: str, users: list[dict],
+) -> list[dict]:
+    """Build the removable active-filter chips shown above the (collapsible)
+    jobs filter panel -- issue #254. One chip per selected value for a
+    multi-select filter (source/state/status), one chip for every other
+    active field; zip+radius collapse into a single chip since they're one
+    combined concept. `removed` only gets a chip when it differs from the
+    page's default ("active"), matching the existing "Clear filters" link's
+    own condition."""
+    chips = []
+    if company:
+        chips.append({"label": f"Company: {company}", "remove_url": remove_filter_url(request, "/jobs", "company")})
+    if search:
+        chips.append({"label": f'Search: "{search}"', "remove_url": remove_filter_url(request, "/jobs", "search")})
+    for name in source:
+        chips.append({
+            "label": f"Search name: {name}",
+            "remove_url": remove_filter_value_url(request, "/jobs", "source", name),
+        })
+    if location:
+        label = "Other / Unresolved" if location == "__unresolved__" else location
+        chips.append({"label": f"Location: {label}", "remove_url": remove_filter_url(request, "/jobs", "location")})
+    for s in state:
+        chips.append({"label": f"State: {s}", "remove_url": remove_filter_value_url(request, "/jobs", "state", s)})
+    if zip_code:
+        chips.append({
+            "label": f"Near {zip_code} ({radius} mi)",
+            "remove_url": remove_filter_url(request, "/jobs", "zip", "radius"),
+        })
+    if removed != "active":
+        label = "All" if removed == "" else "Removed"
+        chips.append({"label": f"Listing status: {label}", "remove_url": remove_filter_url(request, "/jobs", "removed")})
+    if emailed:
+        label = "Emailed" if emailed == "sent" else "Not sent"
+        chips.append({"label": f"Emailed: {label}", "remove_url": remove_filter_url(request, "/jobs", "emailed")})
+    for code in status:
+        label = "No status" if code == "none" else STATUSES.get(code, code)
+        chips.append({"label": f"Status: {label}", "remove_url": remove_filter_value_url(request, "/jobs", "status", code)})
+    if duplicates:
+        label = "Include" if duplicates == "include" else "Only duplicates"
+        chips.append({"label": f"Duplicates: {label}", "remove_url": remove_filter_url(request, "/jobs", "duplicates")})
+    if user:
+        username = next((u["username"] for u in users if u["id"] == user), user)
+        chips.append({"label": f"User: {username}", "remove_url": remove_filter_url(request, "/jobs", "user")})
+    return chips
 
 
 @router.get("/jobs", response_class=HTMLResponse)
@@ -119,11 +170,17 @@ def jobs(
         locations = db.list_job_locations(conn, filter_user_id)
         states = db.list_job_states(conn, filter_user_id)
         users = db.list_users(conn) if is_admin else []
+    active_filters = _active_job_filters(
+        request, company=company, search=search, source=source, removed=removed,
+        emailed=emailed, status=status, location=location, duplicates=duplicates,
+        state=state, zip_code=zip_code, radius=radius, user=user, users=users,
+    )
     return templates.TemplateResponse(request, "jobs.html", {
         "jobs": rows, "pagination": pagination, "source_names": source_names,
         "locations": locations, "states": states,
         "statuses": STATUSES, "is_admin": is_admin, "users": users,
         "current_user_id": current_user["id"],
+        "active_filters": active_filters,
         "filters": {
             "company": company, "search": search, "source": source, "removed": removed,
             "emailed": emailed, "status": status, "location": location, "duplicates": duplicates,
@@ -229,6 +286,26 @@ async def update_job_status(
     return flash_redirect("/jobs", message)
 
 
+@router.post("/jobs/bulk-status")
+async def bulk_update_job_status(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = await request.form()
+    keys = [k for k in form.getlist("keys") if isinstance(k, str)]
+    raw_status = _form_str(dict(form.items()), "status")
+    if raw_status == "":
+        raise HTTPException(status_code=400, detail="Choose a status")
+    status = None if raw_status == "none" else raw_status
+    if status is not None and status not in STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if len(keys) > 200:
+        raise HTTPException(status_code=400, detail="Too many jobs selected (max 200).")
+    with request.app.state.pool.connection() as conn:
+        count = db.bulk_set_status(conn, current_user["id"], keys, status)
+    return flash_redirect("/jobs", f"Updated {count} job(s).")
+
+
 @router.post("/jobs/remove")
 async def remove_job(
     request: Request,
@@ -283,6 +360,26 @@ async def update_job_duplicate(
             "duplicate_of": duplicate_of if action != "clear" else None,
         })
     return flash_redirect("/jobs", message)
+
+
+@router.post("/jobs/notes")
+async def update_job_notes(
+    request: Request,
+    current_user: dict = Depends(require_user),
+):
+    form = dict((await request.form()).items())
+    key = _form_str(form, "key")
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing job key")
+    notes = _form_str(form, "notes")
+    try:
+        with request.app.state.pool.connection() as conn:
+            db.set_job_notes(conn, current_user["id"], key, notes)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if _wants_json(request):
+        return JSONResponse({"ok": True, "message": "Notes saved.", "notes": notes})
+    return flash_redirect("/jobs", "Notes saved.")
 
 
 @router.post("/jobs/location-override")
