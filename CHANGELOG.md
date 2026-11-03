@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-11-03
+
+### Added
+
+- **Password policy, breached-password check, and strength meter** ([#269](https://github.com/jasonkryst/CareerSpyder/issues/269)). Registration, password reset, and change password now share one NIST SP 800-63B-style check (`app/security/password_policy.py`): a configurable minimum length (`PASSWORD_MIN_LENGTH`, default and floor 8), no composition rules, and rejection of repeated/sequential strings, the 10,000 most common passwords (bundled SecLists list, MIT), and passwords containing the site name, your username, or your email name. Setting `CHECK_BREACHED_PASSWORDS=true` also rejects passwords found in the Have I Been Pwned breach corpus using its k-anonymity range API — only the first 5 characters of the password's SHA-1 hash are sent — and fails open (accepts, logs a warning) if the API can't be reached; it's off by default for installs without outbound internet. Each rejection explains why and what to do instead. The three new-password forms gain a length hint and an advisory strength meter that announces its rating as text (a polite live region), not only colour, and never blocks submission. The login page is unchanged.
+
+### Changed
+
+- **New passwords that were previously accepted may now be rejected** if they're very common (e.g. `iloveyou`, `qwerty123`), a simple sequence, or contain your username/email name. Existing passwords are unaffected and still sign in.
+
 ## [2.2.1] — 2026-10-23
 
 ### Fixed

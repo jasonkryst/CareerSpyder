@@ -159,11 +159,14 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 | `CARTO_API_KEY` | No | A CARTO basemaps API key, appended to `/jobs/map` tile requests as `?key=`. When unset, the map uses CARTO's free public basemaps endpoint. |
 | `GEOCODER_PROVIDER` | No (default `nominatim`) | Which geocoding provider resolves job locations for the map and radius filter. |
 | `TRUSTED_PROXIES` | No | Comma-separated IPs of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers the rate limiter should trust (e.g. `172.18.0.1`). When unset, the direct peer IP is always used — correct when nothing sits in front of the app, but behind a proxy every client then shares one rate-limit bucket. |
+| `CHECK_BREACHED_PASSWORDS` | No (default off) | Set to `true` to reject new passwords (registration, reset, change password) that appear in the [Have I Been Pwned](https://haveibeenpwned.com/Passwords) breach corpus. Uses the k-anonymity range API: only the first 5 hex characters of the password's SHA-1 leave the server. **Requires outbound HTTPS to `api.pwnedpasswords.com`** — leave unset on air-gapped installs. If the API is unreachable the check fails open (the password is accepted on the local rules) and a warning is logged. Login is never affected. See [SECURITY.md](SECURITY.md#password-policy). |
+| `PASSWORD_MIN_LENGTH` | No (default `8`) | Minimum length for new passwords, in characters. Values below 8 (the NIST SP 800-63B floor) are raised to 8, values above 64 lowered to 64. NIST recommends 15 when the password is the only factor. Existing passwords keep working at login regardless. |
 | `GITHUB_TOKEN` | No | A fine-grained PAT with `issues: write` on this repo. When set, the source form's "Report as unsupported" button files a GitHub issue directly; otherwise it opens a pre-filled new-issue page. |
 
 `docker-compose.yml` and `docker-compose.prod.yml` only pass through the
 variables they list under `environment:` — add any optional variable above
-that you set in `.env` (e.g. `CARTO_API_KEY`, `TRUSTED_PROXIES`) to your
+that you set in `.env` (e.g. `CARTO_API_KEY`, `TRUSTED_PROXIES`,
+`CHECK_BREACHED_PASSWORDS`) to your
 compose file's `environment:` block too, or the container won't see it.
 
 ### Sources
@@ -371,6 +374,8 @@ docs/
   by impact and effort.
 - [SECURITY.md](SECURITY.md) — security model, vulnerability reporting,
   and accepted residual risks.
+- [docs/third-party-notices.md](docs/third-party-notices.md) — licences
+  for bundled data (the common-password list) and external services.
 - [docs/audits/](docs/audits/) — dated security, accessibility,
   performance, and feature audits; still-open findings are tracked in
   ROADMAP.md or as GitHub issues.

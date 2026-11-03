@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block head %}{{ super() }}<script src="/static/password-strength.js?v={{ app_version }}" defer></script>{% endblock %}
 {% block content %}
 {% include "settings_tabs.html" %}
 <h1>Account</h1>
@@ -17,11 +18,13 @@
     </div>
     <div class="form-group">
       <label for="new_password">New password</label>
-      <input id="new_password" name="new_password" type="password" autocomplete="new-password" required minlength="8">
+      <input id="new_password" name="new_password" type="password" autocomplete="new-password" required
+             minlength="{{ password_min_length() }}" aria-describedby="new_password-hint new_password-strength-text">
+      {% with field="new_password" %}{% include "_password_strength.html" %}{% endwith %}
     </div>
     <div class="form-group">
       <label for="new_password_confirm">Confirm new password</label>
-      <input id="new_password_confirm" name="new_password_confirm" type="password" autocomplete="new-password" required minlength="8">
+      <input id="new_password_confirm" name="new_password_confirm" type="password" autocomplete="new-password" required minlength="{{ password_min_length() }}">
     </div>
   </fieldset>
 </div>
