@@ -12,6 +12,23 @@ def _clear_rate_limits():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_hibp(monkeypatch):
+    """The breach check (#269) is off unless a test opts in, and even then the
+    real Have I Been Pwned API is unreachable: a test that enables the check
+    must patch ``password_policy._http_get`` with a fake."""
+    from app.security import password_policy
+
+    monkeypatch.delenv("CHECK_BREACHED_PASSWORDS", raising=False)
+    monkeypatch.delenv("PASSWORD_MIN_LENGTH", raising=False)
+
+    def _refuse(*_a, **_k):
+        raise AssertionError("test tried to reach the real HIBP API")
+
+    monkeypatch.setattr(password_policy, "_http_get", _refuse)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _clear_geocode_zip_cache():
     """The _geocode_zip lru_cache persists across tests; clear it so each test
     gets a fresh geocode call rather than a stale cached result."""

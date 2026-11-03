@@ -30,6 +30,40 @@ It is **not** designed for open-internet self-registration.
 - Password changes and role changes revoke all of the affected user's
   sessions immediately.
 
+### Password policy
+
+New passwords — on invite registration, password reset, and change
+password — go through one shared check, `app/security/password_policy.py`,
+modelled on NIST SP 800-63B §3.1.1.2 (#269). **Login is never subject to
+it**, so existing passwords keep working.
+
+- **Length:** at least `PASSWORD_MIN_LENGTH` characters (default and floor
+  8, capped at 64), counted in Unicode characters; at most 72 bytes
+  (bcrypt's limit). No composition rules — spaces and passphrases welcome.
+- **Blocklist:** repeated characters and simple sequences (`aaaaaaaa`,
+  `87654321`), the bundled SecLists top-10,000 common passwords
+  (case-insensitive; see [docs/third-party-notices.md](docs/third-party-notices.md)),
+  and context words — the site name, the user's username, and the local
+  part of their email (containment for words of 3+ characters; an exact
+  match always).
+- **Breached passwords (opt-in):** with `CHECK_BREACHED_PASSWORDS=true`
+  the server queries `https://api.pwnedpasswords.com/range/<first 5 hex of
+  SHA-1>` with `Add-Padding: true` and a 3 s timeout, and matches the
+  returned suffixes locally (k-anonymity) — neither the password nor its
+  full hash leaves the server. A timeout, network error, or non-2xx
+  response **fails open**: the password is accepted on the local rules and
+  a warning (with no password data) is logged, so an HIBP outage can't lock
+  anyone out of a reset. Off by default so installs without outbound
+  internet never attempt the call. The URL is a fixed constant, not
+  user-supplied, so it isn't routed through the SSRF guard.
+- **Strength meter:** `app/web/static/password-strength.js` shows an
+  advisory rating on the three new-password forms (never on login). It's
+  announced as text in a polite live region — the coloured bar is
+  `aria-hidden` decoration — and never blocks submission; the server-side
+  policy is the rule.
+- Rejection messages are specific (why, and what to do instead) and live
+  in one `MESSAGES` dict, ready for a future i18n layer.
+
 ### Per-user data isolation
 
 - Each user's jobs, sources, run history, and settings are scoped by

@@ -848,3 +848,16 @@ dialog.modal .field-hint {
   font-size: 0.8125rem;
   margin: var(--space-1) 0 0;
 }
+
+/* Password strength meter (#269). The text is the accessible signal; the bar
+   (aria-hidden) is decoration, so level is never conveyed by colour alone. */
+.pw-strength { margin-top: .375rem; }
+.pw-strength-bar { height: .375rem; border-radius: 999px; background: var(--border); overflow: hidden; }
+.pw-strength-fill { display: block; height: 100%; width: 0; background: var(--fg-muted); transition: width .2s ease; }
+.pw-strength[data-level="0"] .pw-strength-fill { width: 10%; background: #b3261e; }
+.pw-strength[data-level="1"] .pw-strength-fill { width: 30%; background: #c2410c; }
+.pw-strength[data-level="2"] .pw-strength-fill { width: 55%; background: #a16207; }
+.pw-strength[data-level="3"] .pw-strength-fill { width: 80%; background: #15803d; }
+.pw-strength[data-level="4"] .pw-strength-fill { width: 100%; background: #166534; }
+.pw-strength-text { margin: .25rem 0 0; font-size: .8125rem; color: var(--fg-muted); min-height: 1.2em; }
+@media (prefers-reduced-motion: reduce) { .pw-strength-fill { transition: none; } }

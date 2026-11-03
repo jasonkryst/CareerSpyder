@@ -11,12 +11,13 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app import db
+from app.security.password_policy import MAX_PASSWORD_BYTES
 
 logger = logging.getLogger(__name__)
 
 
-# bcrypt only hashes the first 72 bytes and bcrypt>=5 raises beyond that.
-MAX_PASSWORD_BYTES = 72
+# bcrypt only hashes the first 72 bytes and bcrypt>=5 raises beyond that;
+# MAX_PASSWORD_BYTES (72) lives in password_policy as the single source.
 
 
 def password_too_long(plaintext: str) -> bool:

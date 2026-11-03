@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from app.security import password_policy as _password_policy
 from app.web.query_params import query_url, sort_url
 from app.web.timeago import timeago as _timeago_fn
 from app.web.whats_new import whats_new_html as _whats_new_html
@@ -29,3 +30,7 @@ templates.env.globals["whats_new_html"] = _whats_new_html(_app_version)
 # A callable, not a value set once at import: os.environ.get() runs at
 # render time so tests can toggle GA_MEASUREMENT_ID per-test via monkeypatch.
 templates.env.globals["ga_measurement_id"] = lambda: os.environ.get("GA_MEASUREMENT_ID", "")
+# Password policy (#269): callables for the same reason -- the env vars are
+# read at render time, so the forms' hints and minlength track the server rule.
+templates.env.globals["password_min_length"] = _password_policy.min_length
+templates.env.globals["breach_check_enabled"] = _password_policy.breach_check_enabled

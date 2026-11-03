@@ -11,10 +11,10 @@ from starlette.datastructures import UploadFile
 from app import db, emailer
 from app.config import SourcesFile, diff_import
 from app.models import JOB_STATUSES
+from app.security import password_policy
 from app.web import ratelimit
 from app.web.auth import (
     hash_password,
-    password_too_long,
     require_admin,
     require_user,
     start_session,
@@ -477,12 +477,12 @@ async def change_password(
     )
     if not current_ok:
         return _error("Current password is incorrect.")
-    if len(new_password) < 8:
-        return _error("New password must be at least 8 characters.")
-    if password_too_long(new_password):
-        return _error("New password must be at most 72 bytes.")
-    if new_password != new_password_confirm:
-        return _error("New passwords do not match.")
+    policy_error = await run_in_threadpool(
+        password_policy.check_new_password, new_password, new_password_confirm,
+        username=current_user["username"], email=current_user.get("email") or "",
+    )
+    if policy_error:
+        return _error(policy_error)
 
     new_hash = await run_in_threadpool(hash_password, new_password)
     with request.app.state.pool.connection() as conn:

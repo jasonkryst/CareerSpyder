@@ -11,10 +11,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db, emailer
+from app.security import password_policy
 from app.web.auth import (
     generate_reset_token,
     hash_password,
-    password_too_long,
     start_session,
     verify_password,
     verify_reset_token,
@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_TOO_LONG = "Password must be at most 72 bytes."
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 # Verified against for unknown usernames so a miss costs the same bcrypt time
 # as a hit -- response timing must not reveal which usernames exist.
@@ -201,12 +200,15 @@ async def reset_password(request: Request):
         user = verify_reset_token(request.app.state.secret_key, token, conn)
         if user is None:
             return _token_error()
-        if len(password) < 8:
-            return _form_error("Password must be at least 8 characters.")
-        if password_too_long(password):
-            return _form_error(_TOO_LONG)
-        if password != password_confirm:
-            return _form_error("Passwords do not match.")
+
+    # Off the event loop: with CHECK_BREACHED_PASSWORDS on this makes an
+    # outbound HIBP request.
+    policy_error = await run_in_threadpool(
+        password_policy.check_new_password, password, password_confirm,
+        username=user["username"], email=user["email"],
+    )
+    if policy_error:
+        return _form_error(policy_error)
 
     new_hash = await run_in_threadpool(hash_password, password)
 
@@ -274,14 +276,12 @@ async def register(request: Request):
 
     if not _USERNAME_RE.match(username):
         return _error("Username must be 3–32 characters: letters, digits, '.', '_' or '-'.")
-    if not password:
-        return _error("Password is required.")
-    if len(password) < 8:
-        return _error("Password must be at least 8 characters.")
-    if password_too_long(password):
-        return _error(_TOO_LONG)
-    if password != password_confirm:
-        return _error("Passwords do not match.")
+    policy_error = await run_in_threadpool(
+        password_policy.check_new_password, password, password_confirm,
+        username=username, email=invite["email"],  # type: ignore[index]
+    )
+    if policy_error:
+        return _error(policy_error)
 
     pw_hash = await run_in_threadpool(hash_password, password)
 
