@@ -95,7 +95,9 @@ def min_length() -> int:
     try:
         value = int(raw)
     except ValueError:
-        logger.warning("PASSWORD_MIN_LENGTH=%r is not an integer; using %d.", raw, NIST_MIN_LENGTH)
+        # Don't echo the raw value: it's config, but scanners (rightly) treat
+        # anything named PASSWORD_* as possibly secret.
+        logger.warning("PASSWORD_MIN_LENGTH is not an integer; using %d.", NIST_MIN_LENGTH)
         return NIST_MIN_LENGTH
     clamped = max(NIST_MIN_LENGTH, min(value, MAX_CONFIGURABLE_MIN_LENGTH))
     if clamped != value:
@@ -121,7 +123,9 @@ _http_get: Callable[..., Any] = _default_http_get
 def pwned_count(password: str, *, http_get: Callable[..., Any] | None = None) -> int | None:
     """How many times HIBP has seen ``password`` in a breach (0 = never), or
     ``None`` if the lookup failed. Only the 5-char SHA-1 prefix is sent."""
-    digest = hashlib.sha1(password.encode()).hexdigest().upper()  # noqa: S324 -- HIBP's format
+    # SHA-1 is the HIBP range API's bucketing key, not password storage (that's
+    # bcrypt, in app/web/auth.py); the digest is never persisted or logged.
+    digest = hashlib.sha1(password.encode(), usedforsecurity=False).hexdigest().upper()
     prefix, suffix = digest[:5], digest[5:]
     get = http_get or _http_get
     try:

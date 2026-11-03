@@ -299,3 +299,15 @@ def test_bundled_common_list_matches_pinned_hash():
     assert hashlib.sha256(data).hexdigest() == (
         "68782d6a4a19a4768d5f15dd66bd534e7a33055cc755411e33f16d18c50fdcce"
     )
+
+
+def test_invalid_min_length_warning_does_not_echo_the_value(monkeypatch, caplog):
+    # CodeQL py/clear-text-logging-sensitive-data: PASSWORD_* env values stay
+    # out of logs even though this one is only a length.
+    monkeypatch.setattr(pp.logger, "disabled", False)
+    monkeypatch.setattr(pp.logger, "propagate", True)
+    monkeypatch.setenv("PASSWORD_MIN_LENGTH", "s3cr3t-looking")
+    with caplog.at_level("WARNING", logger="app.security.password_policy"):
+        assert pp.min_length() == 8
+    assert "not an integer" in caplog.text
+    assert "s3cr3t-looking" not in caplog.text
