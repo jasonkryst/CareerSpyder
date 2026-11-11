@@ -52,11 +52,18 @@ def _split_emails(raw: str | None) -> list[str]:
     return [addr.strip() for addr in (raw or "").split(",") if addr.strip()]
 
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# RFC 5321 caps a forward path at 254 characters.
+MAX_EMAIL_LENGTH = 254
+# Domain labels exclude ".", so the domain can only split at its literal dots,
+# which keeps matching linear. The previous pattern,
+# `[^@\s]+@[^@\s]+\.[^@\s]+`, let both domain groups match dots and
+# backtracked quadratically on input like "!@!." + "!." * n (CodeQL #15).
+# The tighter shape also rejects empty labels ("a@b..c", "a@.b.c", "a@b.c.").
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$")
 
 
 def _is_valid_email(addr: str) -> bool:
-    return bool(EMAIL_RE.match(addr))
+    return len(addr) <= MAX_EMAIL_LENGTH and bool(EMAIL_RE.match(addr))
 
 
 @router.get("/settings", response_class=HTMLResponse)

@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.3] — 2026-11-11
+
+### Security
+
+- **Digest recipient validation can no longer be used to tie up the server.** A specially crafted "email address" on the Preferences page, or in an imported settings file, made the address check take seconds to minutes per request. Validation now runs in linear time and caps addresses at 254 characters. As a side effect, addresses with an empty domain part (`a@b..com`, `a@.b.com`, `a@b.com.`) are now rejected, as they should have been. *(CodeQL alert #15)*
+- **Stricter post-login redirect.** After sign-in, the `next` link is followed only if it's a plain path on this site. Links containing backslashes or control characters, and full URLs to any host, now go to the home page. This wasn't exploitable before, because the web framework encoded the backslash, but the check no longer relies on that. *(CodeQL alert #4)*
+
 ## [2.3.2] — 2026-11-11
 
 ### Changed

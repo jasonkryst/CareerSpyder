@@ -34,6 +34,32 @@ _USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 _DUMMY_HASH = hash_password("not-a-real-password")
 
 
+def _safe_next(next_url: str) -> str:
+    """Return ``next_url``'s path if it's a same-site, rooted path, else ``"/"``.
+
+    Guards the post-login redirect against open redirects (CodeQL #4):
+
+    * absolute (``https://evil/x``) and scheme-only (``javascript:``,
+      ``http:/x``) targets are rejected outright, never trimmed to their path;
+    * protocol-relative ``//evil`` is rejected;
+    * backslashes and control characters are rejected: browsers treat
+      ``\\`` as ``/`` and strip tab/CR/LF, so ``/\\evil`` or ``/<TAB>/evil``
+      would become ``//evil``. (Starlette currently percent-encodes ``\\`` in
+      ``Location``, but the check must not depend on that.)
+
+    The query string and fragment are dropped, as before.
+    """
+    if any(ch == "\\" or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in next_url):
+        return "/"
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    path = parsed.path
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    return path
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if getattr(request.state, "user", None):
@@ -77,12 +103,7 @@ async def login(request: Request):
 
     start_session(request, user)
 
-    # Reject unsafe redirects: extract only the path component via urlparse,
-    # discarding scheme and netloc entirely. Blocks //evil.com, ///evil.com, etc.
-    _parsed = urlparse(next_url)
-    _path = _parsed.path
-    safe_next = _path if (_path.startswith("/") and not _path.startswith("//")) else "/"
-    return RedirectResponse(url=safe_next, status_code=303)
+    return RedirectResponse(url=_safe_next(next_url), status_code=303)
 
 
 @router.post("/logout")
