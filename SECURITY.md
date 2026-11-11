@@ -29,6 +29,10 @@ It is **not** designed for open-internet self-registration.
   with `https://`.
 - Password changes and role changes revoke all of the affected user's
   sessions immediately.
+- The post-login `next` redirect (`app/web/routes_auth.py::_safe_next`)
+  only follows a rooted same-site path. Absolute and scheme-only URLs,
+  protocol-relative `//host`, backslashes (which browsers read as `/`), and
+  control characters (which browsers strip) all fall back to `/`.
 
 ### Password policy
 
@@ -171,6 +175,13 @@ alerts, and rejects force-pushes and branch deletion.
 
 ## Audit history
 
+- **2026-11-11:** Resolved the two open CodeQL alerts. #15
+  (`py/polynomial-redos`): the digest-recipient email regex backtracked
+  quadratically and could be reached by any signed-in user through
+  preferences or a settings import. It now uses a linear pattern plus a
+  254-character cap. #4 (`py/url-redirection`): the login `next` check
+  accepted `/\evil.example.com`. That wasn't exploitable, because Starlette
+  percent-encodes the backslash, but the check now rejects it itself (v2.3.3).
 - **2026-09-27:** Comprehensive security audit covering auth, CSRF, SSRF,
   SQLi, rate limiting, session management, and CVE scanning. Remediated
   across three phases (v1.5.0 tenant isolation, v1.6.0 auth hardening,

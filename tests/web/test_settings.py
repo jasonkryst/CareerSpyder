@@ -1147,3 +1147,17 @@ def test_post_import_invalid_json_still_errors_at_preview_time(client):
     )
 
     assert resp.status_code == 400
+
+
+def test_post_preferences_rejects_redos_shaped_email_quickly(client, admin_user_id):
+    # CodeQL #15: this input made the old EMAIL_RE backtrack quadratically.
+    import time
+
+    hostile = "!@!." + "!." * 50_000 + " "
+    start = time.perf_counter()
+    resp = client.post("/settings/preferences", data={
+        "email_days": ["mon"], "email_to": [hostile],
+    })
+    assert time.perf_counter() - start < 2
+    assert resp.status_code == 400
+    assert "Invalid email address" in resp.text

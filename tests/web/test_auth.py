@@ -710,3 +710,57 @@ def test_register_releases_invite_when_create_user_loses_unique_race(unauthed_cl
         "password": "goodpass1", "password_confirm": "goodpass1",
     }, follow_redirects=False)
     assert resp2.status_code == 303
+
+
+# --- login `next` redirect hardening (CodeQL #4) ------------------------------
+
+@pytest.mark.parametrize(
+    "next_url",
+    [
+        r"/\evil.example.com",  # browsers read "\" as "/" -> //evil.example.com
+        r"/\/evil.example.com",
+        r"\\evil.example.com",
+        "/\t/evil.example.com",  # browsers strip tab/CR/LF from URLs
+        "/\n/evil.example.com",
+        "/\r/evil.example.com",
+        "/sources\x00",
+        "/sources\x7f",
+        "https://evil.example.com/sources",  # absolute URL: never keep its path
+        "http:/sources",
+        "javascript:alert(1)",
+        "//evil.example.com/sources",
+        "sources",  # relative, not rooted
+        "",
+    ],
+)
+def test_safe_next_rejects_unsafe_targets(next_url):
+    from app.web.routes_auth import _safe_next
+
+    assert _safe_next(next_url) == "/"
+
+
+@pytest.mark.parametrize(
+    ("next_url", "expected"),
+    [
+        ("/", "/"),
+        ("/sources", "/sources"),
+        ("/jobs/map", "/jobs/map"),
+        ("/jobs?status=new", "/jobs"),  # query dropped, as before
+        ("/settings/preferences#top", "/settings/preferences"),
+    ],
+)
+def test_safe_next_keeps_on_site_paths(next_url, expected):
+    from app.web.routes_auth import _safe_next
+
+    assert _safe_next(next_url) == expected
+
+
+def test_login_ignores_backslash_trick_in_next(unauthed_client):
+    resp = unauthed_client.post(
+        "/login",
+        data={"username": "admin", "password": "password123",
+              "next": r"/\evil.example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
