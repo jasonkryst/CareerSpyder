@@ -253,3 +253,49 @@ def test_script_recovers_from_one_download_failure(tmp_path):
     result, calls = _run_script(tmp_path, playwright_install="1 0")
     assert result.returncode == 0, result.stderr
     assert calls == ["playwright install chromium"] * 2 + ["python -"]
+
+
+# --- Docker base image vs CI Python version ------------------------------------
+
+_FROM_PYTHON = re.compile(r"^FROM\s+python:(\d+\.\d+)[^\s]*", re.MULTILINE)
+
+
+def dockerfile_python(text: str) -> str | None:
+    """The ``X.Y`` of the Dockerfile's ``python:`` base image, if any."""
+    m = _FROM_PYTHON.search(text)
+    return m.group(1) if m else None
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("FROM python:3.14-slim@sha256:" + "a" * 64, "3.14"),
+        ("FROM python:3.15-slim", "3.15"),
+        ("FROM python:3.14.2-slim-trixie", "3.14"),
+        ("FROM debian:trixie-slim", None),
+        ("# FROM python:3.15-slim", None),
+    ],
+)
+def test_dockerfile_python_parser(line, expected):
+    assert dockerfile_python(line) == expected
+
+
+def test_ci_tests_the_python_the_docker_image_ships():
+    # A base-image bump (e.g. Dependabot's python 3.14 -> 3.15, #277) must
+    # move CI's python-version with it, or CI stops testing what ships.
+    image = dockerfile_python((ROOT / "Dockerfile").read_text(encoding="utf-8"))
+    assert image, "Dockerfile should build FROM a python: base image"
+    ci_versions = set()
+    for wf in WORKFLOWS.glob("*.yml"):
+        for job in _jobs(wf).values():
+            for step in job.get("steps", []):
+                if step.get("uses", "").startswith("actions/setup-python@"):
+                    ci_versions.add(str(step["with"]["python-version"]))
+    assert ci_versions == {image}
+
+
+def test_dependabot_holds_python_base_image_below_315():
+    cfg = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    docker = next(u for u in cfg["updates"] if u["package-ecosystem"] == "docker")
+    ignored = {i["dependency-name"]: i.get("versions") for i in docker.get("ignore", [])}
+    assert ignored.get("python") == [">=3.15"]
