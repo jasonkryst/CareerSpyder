@@ -56,6 +56,11 @@ docker compose down
 exercising `linkedin`, `indeed`, or a `generic_html` source with
 `render_js: true` outside Docker (the image installs it at build time).
 
+In CI, don't add `playwright install --with-deps` to a workflow: both
+Playwright jobs use `.github/actions/install-playwright` (cache, then
+launch check, apt only as a fallback — #286), and
+`tests/test_ci_workflows.py` fails if a job that runs pytest skips it.
+
 ## Non-negotiable constraints
 
 These come from the design spec's Global Constraints and are enforced by

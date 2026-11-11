@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-11-11
+
+### Fixed
+
+- **CI no longer fails when Ubuntu's package mirror is down** ([#286](https://github.com/jasonkryst/CareerSpyder/issues/286)). The `test` and `integration-test` jobs used to run apt on every run to install Chromium's libraries, so a mirror outage failed every Playwright job before any test ran. Both jobs now share one install step that restores Chromium from a cache and only uses apt if Chromium can't start, with a timeout, one retry, and a clear error if it still can't. The Docker image build now also retries flaky package and browser downloads. No change to the app itself.
+
 ## [2.3.0] — 2026-11-03
 
 ### Added

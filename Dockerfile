@@ -5,6 +5,12 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 # `apt-get upgrade` is needed on top of it to actually pick up Debian
 # security patches released since. Trivy's scan in docker.yml is what
 # would catch a future regression here.
+#
+# Retry transient mirror failures (and time out stalled fetches) instead of
+# failing the build on the first one (#286). Written as an apt config file so
+# it also covers the apt-get calls `playwright install --with-deps` makes below.
+RUN printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "30";' \
+        'Acquire::https::Timeout "30";' > /etc/apt/apt.conf.d/80-retries
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     wget gnupg ca-certificates libpq5 \
     && rm -rf /var/lib/apt/lists/*
@@ -28,7 +34,16 @@ RUN pip install --no-cache-dir . \
 # Keep Chromium's download inside /app (not the default $HOME/.cache) so a
 # single chown below covers it too, once the process drops to a non-root user.
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers
-RUN playwright install --with-deps chromium
+# Unlike CI (.github/actions/install-playwright), the slim base image has none
+# of Chromium's shared libraries, so apt (--with-deps) is genuinely required
+# here. Retry the whole step a few times so one bad mirror or CDN moment
+# doesn't fail the image build (#286).
+RUN for attempt in 1 2 3; do \
+        playwright install --with-deps chromium && exit 0; \
+        echo "playwright install attempt $attempt/3 failed; retrying" >&2; \
+        sleep 15; \
+    done; \
+    exit 1
 
 # Fixed UID/GID (not auto-assigned): docker-entrypoint.sh chowns the
 # bind-mounted ./config and ./data to this uid/gid on every start (so

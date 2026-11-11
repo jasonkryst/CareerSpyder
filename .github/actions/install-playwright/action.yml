@@ -1,0 +1,28 @@
+name: Install Playwright Chromium
+description: >-
+  Installs Playwright's Chromium, restoring it from the Actions cache when
+  possible, and only falls back to apt (playwright install-deps) if Chromium
+  can't launch with the runner's preinstalled libraries (#286). Requires
+  Python with the playwright package already installed.
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Playwright version
+      id: pw
+      shell: bash
+      run: |
+        version="$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    # The browser build is tied to the playwright package version, so that's
+    # the cache key; a Playwright bump downloads (and caches) a fresh build.
+    - name: Cache Playwright browsers
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+    - name: Install Chromium (apt only as a fallback)
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/install.sh"
