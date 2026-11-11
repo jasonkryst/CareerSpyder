@@ -53,7 +53,8 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install -e ".[dev]"
-      - run: playwright install --with-deps chromium
+      # Browser from cache/CDN; apt only if Chromium can't launch (#286).
+      - uses: ./.github/actions/install-playwright
       - run: pytest -q --cov=app --cov-report=term-missing
 
   integration-test:
@@ -77,7 +78,8 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install -e ".[dev]"
-      - run: playwright install --with-deps chromium
+      # Browser from cache/CDN; apt only if Chromium can't launch (#286).
+      - uses: ./.github/actions/install-playwright
       - run: pytest -m integration -v
 
   dependency-audit:

@@ -5,7 +5,11 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # "/" only covers .github/workflows; the glob also keeps action pins
+    # inside local composite actions (.github/actions/*) up to date.
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker"
