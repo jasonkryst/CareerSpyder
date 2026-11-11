@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.2] — 2026-11-11
+
+### Changed
+
+- **Dependency updates.** Minimum versions raised for FastAPI (0.162.2), pydantic (2.14.3), and psycopg (3.3.8), and for the dev tools ruff (0.17.4) and pytest-postgresql (10.0.0); CI's CodeQL actions move to 4.39.3 and `docker/login-action` to 4.8.0. The Docker image stays on Python 3.14: Python 3.15 is held back until all dependencies publish 3.15 builds, and a test now makes sure CI always tests the same Python version the image ships.
+
 ## [2.3.1] — 2026-11-11
 
 ### Fixed

@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerspyder"
-version = "2.3.1"
+version = "2.3.2"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.162.0",
+    "fastapi>=0.162.2",
     "uvicorn[standard]>=0.54.0",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.33",
-    "pydantic>=2.14.2",
-    "psycopg[pool]>=3.3.6",
+    "pydantic>=2.14.3",
+    "psycopg[pool]>=3.3.8",
     "alembic>=1.20.1",
     "apscheduler>=3.11.3",
     "requests>=2.34.2",
@@ -27,10 +27,10 @@ dev = [
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
     "httpx>=0.28.1",
-    "ruff>=0.17.3",
+    "ruff>=0.17.4",
     "mypy>=2.4.1",
     "pip-audit>=2.10.1",
-    "pytest-postgresql>=9.1.1",
+    "pytest-postgresql>=10.0.0",
     "pyyaml>=6.0.3",  # tests/test_ci_workflows.py parses .github YAML
 ]
 
