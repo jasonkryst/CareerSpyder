@@ -132,6 +132,15 @@ def test_dockerfile_apt_retries_before_first_apt_call():
     assert text.index("Acquire::Retries") < text.index("apt-get update")
 
 
+def test_dockerfile_installs_libatomic_before_playwright():
+    # Playwright >= 1.65's bundled Node needs libatomic.so.1; without it
+    # `playwright install` exits 127 before --with-deps can install anything.
+    text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    apt = re.search(r"apt-get install[^\n]*\n[^\n]*\blibatomic1\b", text)
+    assert apt, "libatomic1 must be in the base apt-get install"
+    assert apt.end() < text.index("playwright install --with-deps chromium &&")
+
+
 # --- install.sh behaviour, against fake playwright/python ---------------------
 
 _BASH = shutil.which("bash")

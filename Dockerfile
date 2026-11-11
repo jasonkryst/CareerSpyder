@@ -11,8 +11,13 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 # it also covers the apt-get calls `playwright install --with-deps` makes below.
 RUN printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "30";' \
         'Acquire::https::Timeout "30";' > /etc/apt/apt.conf.d/80-retries
+#
+# libatomic1: Playwright >= 1.65 bundles a Node driver linked against
+# libatomic.so.1, which the slim image doesn't ship -- without it even
+# `playwright install` can't start (exit 127), so it must be present before
+# the Playwright step below rather than left to --with-deps.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    wget gnupg ca-certificates libpq5 \
+    wget gnupg ca-certificates libpq5 libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
