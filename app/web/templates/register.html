@@ -107,6 +107,7 @@
         <div class="form-group">
           <label for="username">Username</label>
           <input id="username" name="username" type="text" autocomplete="username"
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
                  autofocus required minlength="3" value="{{ username or '' }}">
           <p class="form-hint">At least 3 characters.</p>
         </div>

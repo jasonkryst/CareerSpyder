@@ -3,7 +3,7 @@
 Open GitHub issues ranked by **impact × complexity**. Work top-down; re-tier
 when issues are opened/closed (see "Maintaining this list" at the bottom).
 
-**Last reviewed:** 2026-11-03 (branch `feat/269-password-security`, v2.3.0)
+**Last reviewed:** 2026-11-16 (branch `fix/291-signin-proxy-recovery`, v2.4.0)
 
 ## Rubric
 
@@ -67,6 +67,7 @@ scoring function can be built and unit-tested standalone first.
 | #225 | Sources list — bulk enable/disable | Every source gains an `enabled` flag (default `true`); `app/orchestrator.py::run_once` skips disabled sources entirely while leaving their already-found jobs untouched. Checkbox column + bulk toolbar (Enable/Disable selected) on `/sources`, backed by `db.bulk_set_enabled` (ownership-scoped, capped at 200 ids/request); Status column and filter; single-source edit form gained an Enabled checkbox. `v2.1.0`. |
 | #269 | Password security — breached-password check + strength meter | `app/security/password_policy.py` shared by register/reset/change-password: NIST-style length (`PASSWORD_MIN_LENGTH`, default 8), SecLists top-10k + sequence + context-word blocklist, opt-in fail-open HIBP k-anonymity check (`CHECK_BREACHED_PASSWORDS`). Advisory text-first strength meter (`password-strength.js`) on those three forms, not login. `v2.3.0`. |
 | #254 | Jobs/sources filter bar layout unstructured and not responsive | `/jobs`'s ~11 filter fields grouped into labeled `<fieldset>` sections (Search/Location/Status/Admin), responsive single-column stacking under 40rem, and the whole panel collapsed behind a `<details>`/`<summary>` toggle by default (native, no JS) that auto-opens when a filter is active. Active filters render as removable chips (`app/web/query_params.py::remove_filter_url`/`remove_filter_value_url`, multi-value-safe unlike `query_url`). `v2.2.0`. |
+| #291 | Sign-in behind Nginx Proxy Manager: shared lockout, case-sensitive username, no wait time, no admin reset | `TRUSTED_PROXIES` takes CIDRs and the limiter walks `X-Forwarded-For` right-to-left past trusted hops (one-time warning for an untrusted peer that sends one); `db.get_user_by_username`/`get_user_by_email` match case-insensitively, emails stored normalized (migration `0007`); 429s carry `Retry-After` + minutes; `python -m app.cli reset-password`. `v2.4.0`. |
 
 ## Resolved in v1.10.0 (`feat/quick-wins-phase2`)
 
