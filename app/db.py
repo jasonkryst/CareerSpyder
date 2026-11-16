@@ -748,10 +748,19 @@ def get_job_status_history(
 # Users
 # ---------------------------------------------------------------------------
 
+def normalize_email(email: str) -> str:
+    """Trim and lowercase an email address: the stored and the compared form
+    (#291). Phone keyboards capitalize the first letter, and people type the
+    same address in different cases."""
+    return email.strip().lower()
+
+
 def create_user(
     conn: psycopg.Connection, username: str, email: str,
     password_hash: str, role: str = "member",
 ) -> dict:
+    username = username.strip()
+    email = normalize_email(email)
     row = conn.execute(
         "INSERT INTO users (username, email, password_hash, role) "
         "VALUES (%s, %s, %s, %s) RETURNING id, username, email, role, is_active, created_at",
@@ -796,10 +805,15 @@ def update_password(conn: psycopg.Connection, user_id: str, new_hash: str) -> No
 
 
 def get_user_by_username(conn: psycopg.Connection, username: str) -> dict | None:
+    """Case- and whitespace-insensitive lookup (#291). Usernames keep their
+    display case. Rows created before #291 can differ only by case, so the
+    exact-case row wins, then the oldest."""
+    username = username.strip()
     row = conn.execute(
         "SELECT id, username, email, password_hash, role, is_active FROM users "
-        "WHERE username = %s",
-        (username,),
+        "WHERE lower(username) = lower(%s) "
+        "ORDER BY (username = %s) DESC, created_at LIMIT 1",
+        (username, username),
     ).fetchone()
     if row is None:
         return None
@@ -809,8 +823,9 @@ def get_user_by_username(conn: psycopg.Connection, username: str) -> dict | None
 
 def get_user_by_email(conn: psycopg.Connection, email: str) -> dict | None:
     row = conn.execute(
-        "SELECT id, username, email, role, is_active FROM users WHERE email = %s",
-        (email,),
+        "SELECT id, username, email, role, is_active FROM users "
+        "WHERE lower(btrim(email)) = %s ORDER BY created_at LIMIT 1",
+        (normalize_email(email),),
     ).fetchone()
     if row is None:
         return None
@@ -845,6 +860,7 @@ def create_invite(
 ) -> dict:
     from datetime import UTC, datetime, timedelta
     expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+    email = normalize_email(email)
     row = conn.execute(
         "INSERT INTO invite_tokens (email, created_by, expires_at) "
         "VALUES (%s, %s, %s) "

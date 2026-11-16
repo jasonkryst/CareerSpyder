@@ -158,7 +158,7 @@ scheduler will otherwise run once a day on the `RUN_CRON` schedule in `TZ`.
 | `GA_MEASUREMENT_ID` | No | A GA4 Measurement ID (format `G-XXXXXXXXXX`) to enable Google Analytics page-view tracking. Without it, no `gtag.js` script is loaded and the CSP stays locked down to just this site. |
 | `CARTO_API_KEY` | No | A CARTO basemaps API key, appended to `/jobs/map` tile requests as `?key=`. When unset, the map uses CARTO's free public basemaps endpoint. |
 | `GEOCODER_PROVIDER` | No (default `nominatim`) | Which geocoding provider resolves job locations for the map and radius filter. |
-| `TRUSTED_PROXIES` | No | Comma-separated IPs of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers the rate limiter should trust (e.g. `172.18.0.1`). When unset, the direct peer IP is always used — correct when nothing sits in front of the app, but behind a proxy every client then shares one rate-limit bucket. |
+| `TRUSTED_PROXIES` | Yes, behind a reverse proxy | Comma-separated IPs **or CIDR ranges** of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers the rate limiter should trust. Behind Nginx Proxy Manager or another proxy in a Docker network, use `172.16.0.0/12` (covers every Docker bridge gateway, which can change between restarts). With a chain such as Cloudflare → NPM, list both (add Cloudflare's published ranges). When unset, the direct peer IP is always used. That's correct when nothing sits in front of the app, but behind a proxy every visitor then shares one sign-in limit, and a warning is logged the first time a forwarded header is ignored. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 | `CHECK_BREACHED_PASSWORDS` | No (default off) | Set to `true` to reject new passwords (registration, reset, change password) that appear in the [Have I Been Pwned](https://haveibeenpwned.com/Passwords) breach corpus. Uses the k-anonymity range API: only the first 5 hex characters of the password's SHA-1 leave the server. **Requires outbound HTTPS to `api.pwnedpasswords.com`** — leave unset on air-gapped installs. If the API is unreachable the check fails open (the password is accepted on the local rules) and a warning is logged. Login is never affected. See [SECURITY.md](SECURITY.md#password-policy). |
 | `PASSWORD_MIN_LENGTH` | No (default `8`) | Minimum length for new passwords, in characters. Values below 8 (the NIST SP 800-63B floor) are raised to 8, values above 64 lowered to 64. NIST recommends 15 when the password is the only factor. Existing passwords keep working at login regardless. |
 | `GITHUB_TOKEN` | No | A fine-grained PAT with `issues: write` on this repo. When set, the source form's "Report as unsupported" button files a GitHub issue directly; otherwise it opens a pre-filled new-issue page. |
@@ -313,6 +313,43 @@ docker exec -t careerspyder-postgres-1 \
 ```
 
 Exposed port: `32600` (mapped to the container's internal port 8080).
+
+### Behind a reverse proxy
+
+With Nginx Proxy Manager (or any proxy) in front, the app sees every request
+coming from the proxy. Tell the rate limiter which peers are proxies so it
+rate-limits each visitor separately instead of one shared bucket:
+
+```dotenv
+# .env: any Docker bridge gateway (NPM on the same host)
+TRUSTED_PROXIES=172.16.0.0/12
+# Cloudflare → NPM → app: also list Cloudflare's ranges
+# TRUSTED_PROXIES=172.16.0.0/12,173.245.48.0/20,103.21.244.0/22,...
+```
+
+The limiter reads `X-Forwarded-For` from the right and skips every trusted
+proxy. The first address it reaches that isn't trusted is the visitor, so one
+proxy or a chain both work, provided every proxy in the chain is listed.
+Anything a visitor writes into the header themselves sits to the left of that
+address and is never used. If the app logs `X-Forwarded-For received from
+<ip>, which is not in TRUSTED_PROXIES`, add that `<ip>` (or its network).
+`TRUSTED_PROXIES` must also be listed under `environment:` in your compose
+file (both shipped compose files already pass it through).
+
+### Resetting a password without email
+
+Account recovery needs SMTP. Without it, an admin can set a password from the
+Docker host:
+
+```bash
+docker compose exec careerspyder python -m app.cli reset-password <username>
+# or, for scripts: echo "$NEW_PASSWORD" | docker compose exec -T careerspyder #   python -m app.cli reset-password <username> --password-stdin
+```
+
+The username is case-insensitive. The new password must pass the same policy
+as sign-up. The reset signs the account out everywhere and voids any reset
+links already emailed. Exit codes: `0` done, `1` no such user, `2` password
+rejected, `3` no password entered.
 
 The server itself runs as a fixed non-root user (uid/gid `1000:1000`), not
 root. No manual host setup is required for this: `docker-entrypoint.sh`

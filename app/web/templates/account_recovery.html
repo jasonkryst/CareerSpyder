@@ -93,7 +93,8 @@
       <form method="post" action="/account-recovery">
         <div class="form-group">
           <label for="email">Email address</label>
-          <input id="email" name="email" type="email" autocomplete="email" autofocus required>
+          <input id="email" name="email" type="email" autocomplete="email"
+                 autocapitalize="none" autocorrect="off" spellcheck="false" autofocus required>
         </div>
         <button type="submit" class="btn btn-primary">Send recovery email</button>
       </form>

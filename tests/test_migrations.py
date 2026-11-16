@@ -81,3 +81,43 @@ def test_migration_0003_without_an_admin_holds_ownerless_jobs_instead_of_deletin
             assert remaining_history == 0
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0007_lowercases_emails_and_skips_collisions(pg_dsn):
+    cfg = _cfg(pg_dsn)
+    command.downgrade(cfg, "0006")
+    try:
+        with psycopg.connect(pg_dsn) as conn:
+            for name, email in [
+                ("mixed", " Mixed@Example.COM "),
+                ("clash_a", "Clash@x.test"),
+                ("clash_b", "clash@x.test"),
+                ("plain", "plain@x.test"),
+            ]:
+                conn.execute(
+                    "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, 'x')",
+                    (name, email),
+                )
+            admin_id = conn.execute("SELECT id FROM users WHERE username = 'plain'").fetchone()[0]
+            conn.execute(
+                "INSERT INTO invite_tokens (email, created_by, expires_at) "
+                "VALUES ('Invitee@X.test', %s, NOW() + interval '1 day')",
+                (admin_id,),
+            )
+            conn.commit()
+
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, "0006")  # no-op downgrade...
+        command.upgrade(cfg, "head")    # ...and re-running is idempotent
+
+        with psycopg.connect(pg_dsn) as conn:
+            emails = dict(conn.execute("SELECT username, email FROM users").fetchall())
+            invite_email = conn.execute("SELECT email FROM invite_tokens").fetchone()[0]
+        assert emails["mixed"] == "mixed@example.com"
+        assert emails["plain"] == "plain@x.test"
+        # Collision: the mixed-case row is left alone rather than breaking UNIQUE.
+        assert emails["clash_a"] == "Clash@x.test"
+        assert emails["clash_b"] == "clash@x.test"
+        assert invite_email == "invitee@x.test"
+    finally:
+        command.upgrade(cfg, "head")

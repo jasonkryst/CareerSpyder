@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-11-16
+
+### Fixed
+
+Sign-in problems behind Nginx Proxy Manager ([#291](https://github.com/jasonkryst/CareerSpyder/issues/291)).
+
+- **Visitors behind a reverse proxy no longer share one sign-in limit.**
+  - `TRUSTED_PROXIES` now accepts CIDR ranges, so `172.16.0.0/12` covers NPM's Docker gateway however it changes.
+  - The forwarded-for header is read from the right, skipping trusted proxies, so a chain such as Cloudflare → NPM keys on the real visitor, not the Cloudflare edge.
+  - A spoofed header from an untrusted peer is still ignored, and the app now logs a one-time warning naming that peer so you can see what to add.
+- **Usernames are no longer case-sensitive at sign-in.** A phone keyboard capitalizing the first letter no longer fails a correct password or counts toward the lockout. Usernames keep the case they were created with. At registration, a name that differs from an existing one only by case counts as taken.
+- **Account recovery works for addresses saved with capital letters.** Emails are trimmed and lowercased when saved and compared case-insensitively. A migration normalizes existing addresses, leaving any that would collide with another account's.
+- **"Too many attempts" says how long to wait.** Sign-in, registration and password reset now answer with a `Retry-After` header and "Try again in N minutes." on the page.
+- **Phones no longer auto-capitalize or autocorrect** the username and recovery-email fields.
+
+### Added
+
+- **Admin password reset without email:** `python -m app.cli reset-password <username>` (or `docker compose exec careerspyder python -m app.cli reset-password <username>`). It applies the sign-up password policy and signs the account out everywhere. See README's "Resetting a password without email".
+
 ## [2.3.3] — 2026-11-11
 
 ### Security

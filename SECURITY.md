@@ -85,17 +85,40 @@ it**, so existing passwords keep working.
 | `SECRET_KEY` | Signs session cookies and password-reset links. Must be ≥ 32 random characters. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `PUBLIC_BASE_URL` | The site's canonical HTTPS URL. Enables `Secure` session cookies, and is used for invite/reset links. |
 | `ALLOWED_HOSTS` | Comma-separated hostnames the app will serve (e.g. `jobs.example.com,localhost`). Include `localhost` so Docker's healthcheck keeps working. When unset, all hosts are accepted. |
-| `TRUSTED_PROXIES` | Recommended behind a reverse proxy: comma-separated proxy IPs whose forwarded-for headers the rate limiter trusts (see [Rate limiting](#rate-limiting)). |
+| `TRUSTED_PROXIES` | Recommended behind a reverse proxy: comma-separated proxy IPs or CIDR ranges (e.g. `172.16.0.0/12`) whose forwarded-for headers the rate limiter trusts (see [Rate limiting](#rate-limiting)). |
 
 ### Rate limiting
 
 Login, registration, account recovery, and password reset are rate-limited
 per client IP; **Run now**, URL checks, test emails, and password changes
 are rate-limited per user. Limits are in-memory (per process). Behind a
-reverse proxy, set `TRUSTED_PROXIES` to the proxy's IP(s) so the limiter
-reads the client IP from `X-Forwarded-For` — without it every client
-shares the proxy's IP and one bucket. Forwarded headers from any other
-peer are ignored, so they can't be spoofed to dodge the limit.
+reverse proxy, set `TRUSTED_PROXIES` to the proxies' IPs or CIDR ranges so
+the limiter reads the client IP from `X-Forwarded-For`. Without it, every
+client shares the proxy's IP and one bucket, and a one-time warning naming
+the untrusted peer is logged.
+
+- **Right-to-left walk.** `X-Forwarded-For` is read from the right, skipping
+  trusted proxies. The first untrusted address is the client, so chains
+  (e.g. Cloudflare → NPM) work as long as every hop is listed. Entries to
+  the left of that address were written by the client and are never used.
+- **Untrusted peers.** Forwarded headers from a peer that isn't trusted are
+  ignored, so they can't be spoofed to dodge the limit. Invalid
+  `TRUSTED_PROXIES` entries are skipped with a warning.
+- **Wait time.** A rate-limited sign-in, registration or password reset
+  answers `429` with a `Retry-After` header, and the page says how many
+  minutes to wait. Account recovery deliberately answers the same whether or
+  not it's limited, so it doesn't reveal anything.
+
+### Sign-in identifiers
+
+Usernames and emails are matched case- and whitespace-insensitively at
+sign-in, at registration (a name differing only by case counts as taken),
+and in account recovery. Usernames keep their display case. Emails are
+stored trimmed and lowercased, and migration `0007` normalizes existing
+rows, leaving any that would collide for an admin to resolve. An admin
+without SMTP can reset a password with `python -m app.cli reset-password
+<username>`, which applies the password policy and, because sessions and
+reset links are bound to the password hash, revokes both.
 
 ### CSRF protection
 

@@ -39,6 +39,7 @@ ruff check app tests          # includes flake8-bandit ("S") security rules
 mypy                          # type check (CI's `typecheck` job)
 pip-audit                     # dependency CVE scan (CI's `dependency-audit` job)
 alembic revision -m "..."     # new migration in alembic/versions/ (applied at container start)
+python -m app.cli reset-password <username>   # admin password reset, no SMTP needed (#291)
 uvicorn app.web.main:app --reload --port 8080   # run the app locally
 # Local dev requires a running PostgreSQL instance and DATABASE_URL set in .env
 # On Windows: install libpq (via PostgreSQL installer) for psycopg3 to connect

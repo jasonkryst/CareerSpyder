@@ -21,7 +21,7 @@ from app.web.auth import (
 )
 from app.web.config_checks import public_base_url
 from app.web.flash import flash_redirect
-from app.web.ratelimit import rate_limit
+from app.web.ratelimit import rate_limit, retry_after, wait_message
 from app.web.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,15 @@ def _safe_next(next_url: str) -> str:
     return path
 
 
+def _too_many(request: Request, template: str, lead: str, wait: int) -> HTMLResponse:
+    """429 that says how long to wait, in the page and in ``Retry-After`` (#291)."""
+    resp = templates.TemplateResponse(
+        request, template, {"error": f"{lead} {wait_message(wait)}"}, status_code=429,
+    )
+    resp.headers["Retry-After"] = str(wait)
+    return resp
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if getattr(request.state, "user", None):
@@ -70,12 +79,9 @@ async def login_form(request: Request):
 
 @router.post("/login")
 async def login(request: Request):
-    if not rate_limit(request, "login", max_attempts=10, window_seconds=900):
-        return templates.TemplateResponse(
-            request, "login.html",
-            {"error": "Too many login attempts. Please wait a few minutes before trying again."},
-            status_code=429,
-        )
+    wait = retry_after(request, "login", max_attempts=10, window_seconds=900)
+    if wait:
+        return _too_many(request, "login.html", "Too many sign-in attempts.", wait)
 
     form = dict((await request.form()).items())
     username = str(form.get("username") or "").strip()
@@ -128,7 +134,7 @@ async def account_recovery(request: Request, background_tasks: BackgroundTasks):
         )
 
     form = dict((await request.form()).items())
-    email = str(form.get("email") or "").strip().lower()
+    email = db.normalize_email(str(form.get("email") or ""))
 
     if not email:
         return templates.TemplateResponse(
@@ -160,7 +166,8 @@ async def account_recovery(request: Request, background_tasks: BackgroundTasks):
         )
         reset_url = base_url + f"/reset-password?token={token}"
         background_tasks.add_task(
-            _send_recovery_email, smtp, email, user_with_hash["username"], reset_url,
+            # The stored address, not the typed one: lookups are case-insensitive.
+            _send_recovery_email, smtp, user_with_hash["email"], user_with_hash["username"], reset_url,
         )
 
     return templates.TemplateResponse(
@@ -188,12 +195,9 @@ async def reset_password_form(request: Request):
 
 @router.post("/reset-password", response_class=HTMLResponse)
 async def reset_password(request: Request):
-    if not rate_limit(request, "reset-password", max_attempts=10, window_seconds=900):
-        return templates.TemplateResponse(
-            request, "reset_password.html",
-            {"error": "Too many attempts. Please wait a few minutes and try again."},
-            status_code=429,
-        )
+    wait = retry_after(request, "reset-password", max_attempts=10, window_seconds=900)
+    if wait:
+        return _too_many(request, "reset_password.html", "Too many attempts.", wait)
 
     form = dict((await request.form()).items())
     token = str(form.get("token") or "").strip()
@@ -266,11 +270,9 @@ async def register_form(request: Request):
 
 @router.post("/register")
 async def register(request: Request):
-    if not rate_limit(request, "register", max_attempts=10, window_seconds=3600):
-        return templates.TemplateResponse(
-            request, "register.html",
-            {"error": "Too many attempts. Please wait and try again."}, status_code=429,
-        )
+    wait = retry_after(request, "register", max_attempts=10, window_seconds=3600)
+    if wait:
+        return _too_many(request, "register.html", "Too many attempts.", wait)
 
     form = dict((await request.form()).items())
     token = str(form.get("token") or "").strip()

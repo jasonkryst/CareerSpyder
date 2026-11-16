@@ -311,3 +311,43 @@ def test_invalid_min_length_warning_does_not_echo_the_value(monkeypatch, caplog)
         assert pp.min_length() == 8
     assert "not an integer" in caplog.text
     assert "s3cr3t-looking" not in caplog.text
+
+
+# --- failed_rule / rule_message (constant-only reasons, for the CLI) -------
+
+@pytest.mark.parametrize("pw,confirm,rule", [
+    ("", "", "required"),
+    ("short", "short", "too_short"),
+    (GOOD, GOOD + "x", "mismatch"),
+    ("aaaaaaaaaaaa", "aaaaaaaaaaaa", "pattern"),
+    ("my-careerspyder-pass", "my-careerspyder-pass", "app_name"),
+])
+def test_failed_rule_returns_the_rule_key(pw, confirm, rule):
+    assert pp.failed_rule(pw, confirm) == rule
+
+
+def test_failed_rule_none_for_a_good_password():
+    assert pp.failed_rule(GOOD, GOOD) is None
+
+
+def test_failed_rule_agrees_with_check_new_password():
+    for pw in ("", "short", "aaaaaaaaaaaa", GOOD):
+        rule = pp.failed_rule(pw, pw)
+        msg = pp.check_new_password(pw, pw)
+        assert (rule is None) == (msg is None)
+        if rule is not None:
+            assert msg == pp.rule_message(rule)
+
+
+def test_failed_rule_breached_and_brief_message_omits_count(monkeypatch):
+    monkeypatch.setenv("CHECK_BREACHED_PASSWORDS", "true")
+    rec = Recorder(body=f"{_sha1(GOOD)[5:]}:1234")
+    assert pp.failed_rule(GOOD, GOOD, http_get=rec) == "breached"
+    brief = pp.rule_message("breached")
+    assert "data breach" in brief.lower()
+    assert "1,234" not in brief and "1234" not in brief
+
+
+def test_rule_message_too_short_uses_configured_minimum(monkeypatch):
+    monkeypatch.setenv("PASSWORD_MIN_LENGTH", "12")
+    assert "12 characters" in pp.rule_message("too_short")
