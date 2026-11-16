@@ -41,14 +41,17 @@ def parse_trusted_proxies(raw: str) -> tuple[_Network, ...]:
     """Parse a comma-separated list of IPs/CIDRs. Invalid entries are logged
     and skipped, so one typo can't stop the app from starting."""
     networks: list[_Network] = []
-    for entry in raw.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
+    entries = [e.strip() for e in raw.split(",") if e.strip()]
+    for position, entry in enumerate(entries, start=1):
         try:
             networks.append(ipaddress.ip_network(entry, strict=False))
         except ValueError:
-            logger.warning("TRUSTED_PROXIES: ignoring invalid entry %r", entry)
+            # Report where, not what: the value comes from the environment and
+            # isn't echoed into logs (CodeQL #21).
+            logger.warning(
+                "TRUSTED_PROXIES: ignoring entry %d of %d, which is not an IP "
+                "address or CIDR range", position, len(entries),
+            )
     return tuple(networks)
 
 

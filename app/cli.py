@@ -57,11 +57,13 @@ def reset_password(
         except (EOFError, KeyboardInterrupt):
             print("No password entered; nothing changed.", file=out)
             return 3
-        error = password_policy.check_new_password(
+        # The rule key, not check_new_password's text: what gets printed is
+        # built only from constants (CodeQL #20).
+        rule = password_policy.failed_rule(
             password, confirm, username=user["username"], email=user["email"],
         )
-        if error:
-            print(f"Password rejected: {error}", file=out)
+        if rule:
+            print(f"Password rejected: {password_policy.rule_message(rule)}", file=out)
             return 2
         db.update_password(conn, user["id"], hash_password(password))
     print(

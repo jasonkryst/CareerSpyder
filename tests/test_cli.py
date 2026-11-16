@@ -108,3 +108,19 @@ def test_main_requires_a_command():
     with pytest.raises(SystemExit) as exc:
         cli.main([])
     assert exc.value.code == 2
+
+
+def test_reset_password_breached_message_never_prints_count(pg_dsn, user, monkeypatch):
+    """CodeQL #20: the CLI prints constant wording only, nothing derived
+    from the password (the HIBP breach count included)."""
+    from app.security import password_policy
+
+    monkeypatch.setattr(password_policy, "breach_check_enabled", lambda: True)
+    monkeypatch.setattr(password_policy, "pwned_count", lambda *a, **k: 4321)
+    before = _hash(pg_dsn, user["id"])
+    code, out = _run(pg_dsn, "Jason")
+    assert code == 2
+    assert "data breach" in out.lower()
+    assert "4321" not in out and "4,321" not in out
+    assert GOOD not in out
+    assert _hash(pg_dsn, user["id"]) == before

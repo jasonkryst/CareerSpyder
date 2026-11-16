@@ -173,7 +173,9 @@ def test_parse_trusted_proxies_skips_invalid_entries(caplog):
     with caplog.at_level("WARNING", logger="app.web.ratelimit"):
         nets = ratelimit.parse_trusted_proxies("not-an-ip, 10.0.0.0/8, 999.1.1.1")
     assert [str(n) for n in nets] == ["10.0.0.0/8"]
-    assert "not-an-ip" in caplog.text and "999.1.1.1" in caplog.text
+    assert "entry 1 of 3" in caplog.text and "entry 3 of 3" in caplog.text
+    # The raw values aren't echoed into logs.
+    assert "not-an-ip" not in caplog.text and "999.1.1.1" not in caplog.text
 
 
 def test_client_ip_cidr_trusts_any_docker_gateway(monkeypatch):

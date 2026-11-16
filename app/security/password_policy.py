@@ -68,6 +68,10 @@ MESSAGES = {
                 "choose a different password. Your password itself was never sent "
                 "anywhere: only the first 5 characters of its SHA-1 hash were used "
                 "for the lookup.",
+    # The same rule without the breach count, for places that print or log
+    # the reason (the admin CLI): no value derived from the password leaves.
+    "breached_brief": "This password has appeared in a known data breach (Have I Been "
+                      "Pwned), so attackers try it early. Please choose a different password.",
 }
 
 # The SecLists "10k most common" list (MIT; see docs/third-party-notices.md),
@@ -165,6 +169,45 @@ def _contains_context(folded_password: str, word: str) -> bool:
     return folded_password == w or (len(w) >= _CONTEXT_MIN_LEN and w in folded_password)
 
 
+def _first_failure(
+    password: str,
+    confirm: str,
+    *,
+    username: str,
+    email: str,
+    http_get: Callable[..., Any] | None,
+) -> tuple[str, int] | None:
+    """``(rule key, breach count)`` for the first failed rule, or ``None``.
+    The count is 0 except for ``"breached"``. Cheap local checks run first;
+    the HIBP lookup (network) runs only if they all pass and it's enabled."""
+    if not password:
+        return ("required", 0)
+    if len(password) < min_length():
+        return ("too_short", 0)
+    if len(password.encode()) > MAX_PASSWORD_BYTES:
+        return ("too_long", 0)
+    if password != confirm:
+        return ("mismatch", 0)
+
+    folded = password.casefold()
+    if _is_repetitive_or_sequential(folded):
+        return ("pattern", 0)
+    if folded in _common_passwords():
+        return ("common", 0)
+    if _APP_NAME in folded:
+        return ("app_name", 0)
+    if _contains_context(folded, username):
+        return ("username", 0)
+    if _contains_context(folded, email.strip().split("@", 1)[0]):
+        return ("email", 0)
+
+    if breach_check_enabled():
+        count = pwned_count(password, http_get=http_get)
+        if count:
+            return ("breached", count)
+    return None
+
+
 def check_new_password(
     password: str,
     confirm: str,
@@ -174,32 +217,35 @@ def check_new_password(
     http_get: Callable[..., Any] | None = None,
 ) -> str | None:
     """The first reason ``password`` is unacceptable as a new password, or
-    ``None`` if it's fine. Cheap local checks run first; the HIBP lookup
-    (network) runs only if they all pass and the check is enabled."""
-    if not password:
-        return MESSAGES["required"]
-    n = min_length()
-    if len(password) < n:
-        return MESSAGES["too_short"].format(n=n)
-    if len(password.encode()) > MAX_PASSWORD_BYTES:
-        return MESSAGES["too_long"]
-    if password != confirm:
-        return MESSAGES["mismatch"]
+    ``None`` if it's fine. Shown to the user on the web forms."""
+    failure = _first_failure(password, confirm, username=username, email=email, http_get=http_get)
+    if failure is None:
+        return None
+    rule, count = failure
+    if rule == "breached":
+        return MESSAGES["breached"].format(count=f"{count:,}")
+    return rule_message(rule)
 
-    folded = password.casefold()
-    if _is_repetitive_or_sequential(folded):
-        return MESSAGES["pattern"]
-    if folded in _common_passwords():
-        return MESSAGES["common"]
-    if _APP_NAME in folded:
-        return MESSAGES["app_name"]
-    if _contains_context(folded, username):
-        return MESSAGES["username"]
-    if _contains_context(folded, email.strip().split("@", 1)[0]):
-        return MESSAGES["email"]
 
-    if breach_check_enabled():
-        count = pwned_count(password, http_get=http_get)
-        if count:
-            return MESSAGES["breached"].format(count=f"{count:,}")
-    return None
+def failed_rule(
+    password: str,
+    confirm: str,
+    *,
+    username: str = "",
+    email: str = "",
+    http_get: Callable[..., Any] | None = None,
+) -> str | None:
+    """The key (in ``MESSAGES``) of the first rule ``password`` fails, or
+    ``None``. Use with ``rule_message`` where the reason is printed or
+    logged: the key is a constant, never a value derived from the password."""
+    failure = _first_failure(password, confirm, username=username, email=email, http_get=http_get)
+    return None if failure is None else failure[0]
+
+
+def rule_message(rule: str) -> str:
+    """Constant-only wording for a rule key (the breach count is left out)."""
+    if rule == "too_short":
+        return MESSAGES["too_short"].format(n=min_length())
+    if rule == "breached":
+        return MESSAGES["breached_brief"]
+    return MESSAGES[rule]
