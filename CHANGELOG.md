@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-11-18
+
+### Fixed
+
+- **Workday sources no longer fail when Workday rate-limits the server.** Large Workday boards (Duly, Endeavour) were failing every run with `429 Too Many Requests`. Workday throttles by IP across its whole `wd1` cluster, so one large board crawled at full speed could also block the next Workday source.
+  - The adapter now waits 1 second between result pages.
+  - A throttled page (HTTP 429 or 503) is retried up to 3 times, honoring the server's `Retry-After` (capped at 60 seconds) or backing off 5 → 10 → 20 seconds.
+  - A page still throttled after that fails the source as before, rather than keeping the pages it already got, so jobs on the missing pages aren't wrongly marked removed.
+- **The map's geocoding step no longer fails when `GEOCODER_PROVIDER` is blank.** Docker Compose passes an unset `.env` value as an empty string, which was rejected as an unknown provider on every run. Blank now means the default, `nominatim`.
+
 ## [2.4.0] — 2026-11-16
 
 ### Fixed
