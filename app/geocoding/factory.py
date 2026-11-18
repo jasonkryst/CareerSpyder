@@ -9,7 +9,9 @@ _PROVIDERS: dict[str, type] = {
 
 
 def get_geocoder() -> Geocoder:
-    provider = os.environ.get("GEOCODER_PROVIDER", "nominatim")
+    # `or`, not a .get() default: docker-compose passes an unset .env value
+    # through as "" (`${GEOCODER_PROVIDER:-}`), which must still mean default.
+    provider = os.environ.get("GEOCODER_PROVIDER") or "nominatim"
     try:
         provider_cls = _PROVIDERS[provider]
     except KeyError:

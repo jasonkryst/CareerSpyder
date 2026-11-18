@@ -176,6 +176,13 @@ def test_get_geocoder_defaults_to_nominatim(monkeypatch):
     assert isinstance(get_geocoder(), NominatimGeocoder)
 
 
+def test_get_geocoder_treats_blank_provider_as_default(monkeypatch):
+    # docker-compose passes `GEOCODER_PROVIDER: ${GEOCODER_PROVIDER:-}`, so an
+    # unset .env value reaches the app as "" rather than being absent.
+    monkeypatch.setenv("GEOCODER_PROVIDER", "")
+    assert isinstance(get_geocoder(), NominatimGeocoder)
+
+
 def test_get_geocoder_reads_provider_from_env(monkeypatch):
     monkeypatch.setenv("GEOCODER_PROVIDER", "nominatim")
     assert isinstance(get_geocoder(), NominatimGeocoder)

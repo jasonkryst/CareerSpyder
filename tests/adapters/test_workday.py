@@ -1,13 +1,26 @@
+import pytest
+import requests
+
 from app.adapters import workday
 from app.config import WorkdaySource
 
 
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    """Pacing/backoff must never slow the suite down; tests that care about
+    the waits pass their own `sleep` recorder instead."""
+    monkeypatch.setattr(workday, "_sleep", lambda _s: None)
+
+
 class FakeResponse:
-    def __init__(self, payload):
-        self._payload = payload
+    def __init__(self, payload=None, status_code=200, headers=None):
+        self._payload = payload if payload is not None else {}
+        self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
-        pass
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code} Client Error", response=self)
 
     def json(self):
         return self._payload
@@ -158,3 +171,96 @@ def test_job_url_includes_the_career_site_segment():
     jobs = workday.fetch(source, http_post=fake_post)
 
     assert jobs[0].url == "https://nshs.wd1.myworkdayjobs.com/ns-eeh/job/EVH-Evanston-Hospital/RN_R41824-1"
+
+
+# --- Rate limiting (HTTP 429). Workday throttles per client IP across a
+# wdN cluster: a production run saw Duly 429 mid-pagination and Endeavour
+# (same wd1 cluster, run right after) 429 on its very first page.
+
+
+def _ok_page(total, offset):
+    return FakeResponse({"total": total, "jobPostings": [make_posting(req_id=f"JR{offset}")]})
+
+
+def test_fetch_retries_a_429_and_then_succeeds():
+    responses = iter([FakeResponse(status_code=429), _ok_page(1, 0)])
+    waits = []
+
+    jobs = workday.fetch(make_source(), http_post=lambda url, json, timeout: next(responses), sleep=waits.append)
+
+    assert [j.key for j in jobs] == ["workday:JR0"]
+    assert len(waits) == 1 and waits[0] > 0
+
+
+def test_fetch_honors_a_numeric_retry_after_header():
+    responses = iter([FakeResponse(status_code=429, headers={"Retry-After": "7"}), _ok_page(1, 0)])
+    waits = []
+
+    workday.fetch(make_source(), http_post=lambda url, json, timeout: next(responses), sleep=waits.append)
+
+    assert waits == [7.0]
+
+
+def test_fetch_caps_an_excessive_retry_after():
+    responses = iter([FakeResponse(status_code=429, headers={"Retry-After": "3600"}), _ok_page(1, 0)])
+    waits = []
+
+    workday.fetch(make_source(), http_post=lambda url, json, timeout: next(responses), sleep=waits.append)
+
+    assert waits == [workday._MAX_RETRY_WAIT_S]
+
+
+def test_fetch_retries_only_the_throttled_page_not_the_whole_crawl():
+    offsets = []
+    throttled_once = []
+
+    def fake_post(url, json, timeout):
+        offsets.append(json["offset"])
+        if json["offset"] == 20 and not throttled_once:
+            throttled_once.append(True)
+            return FakeResponse(status_code=429)
+        return _ok_page(45, json["offset"])
+
+    jobs = workday.fetch(make_source(), http_post=fake_post, sleep=lambda _s: None)
+
+    assert offsets == [0, 20, 20, 40]
+    assert [j.key for j in jobs] == ["workday:JR0", "workday:JR20", "workday:JR40"]
+
+
+def test_fetch_raises_after_exhausting_retries_rather_than_returning_partial_results():
+    # A partial result would let reconcile_jobs mark the missing jobs removed,
+    # so a persistent 429 must fail the source outright.
+    calls = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json["offset"])
+        if json["offset"] == 0:
+            return _ok_page(45, 0)
+        return FakeResponse(status_code=429)
+
+    with pytest.raises(requests.exceptions.HTTPError):
+        workday.fetch(make_source(), http_post=fake_post, sleep=lambda _s: None)
+
+    assert calls == [0] + [20] * (1 + workday._MAX_RETRIES)
+
+
+def test_fetch_does_not_retry_a_non_throttling_error():
+    calls = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json["offset"])
+        return FakeResponse(status_code=500)
+
+    with pytest.raises(requests.exceptions.HTTPError):
+        workday.fetch(make_source(), http_post=fake_post, sleep=lambda _s: None)
+
+    assert calls == [0]
+
+
+def test_fetch_paces_page_requests_but_not_the_first():
+    waits = []
+
+    workday.fetch(make_source(), http_post=lambda url, json, timeout: _ok_page(45, json["offset"]), sleep=waits.append)
+
+    # Three pages (0, 20, 40): a pause before each page after the first.
+    assert waits == [workday._PAGE_DELAY_S, workday._PAGE_DELAY_S]
