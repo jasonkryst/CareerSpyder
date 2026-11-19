@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.3] — 2026-11-19
+
+### Changed
+
+- **Dependency updates.** Minimum versions raised for FastAPI (0.163.1), psycopg (3.3.9) and Playwright (1.65.2), and for the dev tool ruff (0.17.5). Combines Dependabot PRs #293–#296.
+
 ## [2.4.2] — 2026-11-19
 
 ### Fixed
