@@ -3,6 +3,8 @@ import time
 from collections.abc import Callable
 from urllib.parse import urlparse
 
+import requests
+
 from app.config import WorkdaySource
 from app.models import Job
 from app.security.ssrf_guard import safe_post
@@ -19,6 +21,22 @@ _RETRY_STATUSES = frozenset({429, 503})
 _MAX_RETRIES = 3
 _BACKOFF_BASE_S = 5.0
 _MAX_RETRY_WAIT_S = 60.0
+
+_BLOCK_STATUSES = frozenset({403, 429})
+
+
+class WorkdayBlockedError(requests.exceptions.HTTPError):
+    """The request was refused by bot protection in front of Workday (an HTML
+    block page), not rate-limited by Workday's JSON API. Retrying a deliberate
+    block only adds traffic, so this is raised immediately."""
+
+
+def _is_block_page(resp) -> bool:
+    # Workday's cxs API always answers in JSON, so a 403/429 rendered as an
+    # HTML page came from the edge (Cloudflare, in production), not the API.
+    content_type = (getattr(resp, "headers", None) or {}).get("Content-Type", "")
+    return resp.status_code in _BLOCK_STATUSES and content_type.lower().startswith("text/html")
+
 
 # Resolved at call time (not bound as a default arg) so tests can patch it.
 _sleep: Callable[[float], None] = time.sleep
@@ -85,10 +103,18 @@ def fetch(
                 json={"appliedFacets": {}, "limit": _PAGE_SIZE, "offset": offset, "searchText": ""},
                 timeout=15,
             )
+            if _is_block_page(resp):
+                edge = (getattr(resp, "headers", None) or {}).get("Server", "the site's edge")
+                raise WorkdayBlockedError(
+                    f"workday: {source.name} blocked by {edge} bot protection (HTTP {resp.status_code} "
+                    f"HTML block page) at {api_url}; not retrying -- a browser on the same network "
+                    "may still get through",
+                    response=resp,
+                )
             if resp.status_code not in _RETRY_STATUSES or attempt == _MAX_RETRIES:
                 break
             wait = _retry_wait(resp, attempt)
-            logger.info(
+            logger.warning(
                 "workday: %s throttled (HTTP %s) at offset %d; retrying in %.0fs",
                 source.name, resp.status_code, offset, wait,
             )
