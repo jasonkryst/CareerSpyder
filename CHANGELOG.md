@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.2] — 2026-11-19
+
+### Fixed
+
+- **A Workday source blocked by bot protection now says so, instead of retrying.** Duly and Endeavour's 429s turned out to be Cloudflare HTML block pages, not Workday API rate limits: a desktop browser on the same IP got through at the same moment. Retrying a deliberate block only adds traffic and keeps it in place.
+  - A 403 or 429 that comes back as an HTML page now fails the source immediately with `WorkdayBlockedError`, naming the source, the status and the edge (e.g. `cloudflare`), so the log shows the real cause.
+  - A JSON 429 or 503 from Workday's own API is still retried with backoff, as in 2.4.1.
+- **Workday throttle retries now appear in the container log.** The app configures no logging, so Python drops anything below WARNING; the `throttled … retrying` line was INFO and never showed up. It's now WARNING.
+
 ## [2.4.1] — 2026-11-18
 
 ### Fixed

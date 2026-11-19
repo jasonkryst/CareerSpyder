@@ -264,3 +264,62 @@ def test_fetch_paces_page_requests_but_not_the_first():
 
     # Three pages (0, 20, 40): a pause before each page after the first.
     assert waits == [workday._PAGE_DELAY_S, workday._PAGE_DELAY_S]
+
+
+# --- Edge bot protection. Production got 429s from Cloudflare that were an
+# HTML block page, not an API rate limit: the same IP got 200s from a desktop
+# browser and from another client at the same moment. Retrying a deliberate
+# block only adds traffic, so it fails fast with a clear reason.
+
+
+def _block_page(status):
+    return FakeResponse(
+        status_code=status,
+        headers={"Content-Type": "text/html; charset=UTF-8", "Server": "cloudflare"},
+    )
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_fetch_fails_fast_on_an_html_block_page_without_retrying(status):
+    calls, waits = [], []
+
+    def fake_post(url, json, timeout):
+        calls.append(json["offset"])
+        return _block_page(status)
+
+    with pytest.raises(workday.WorkdayBlockedError) as exc:
+        workday.fetch(make_source(), http_post=fake_post, sleep=waits.append)
+
+    assert calls == [0]
+    assert waits == []
+    message = str(exc.value)
+    assert f"HTTP {status}" in message
+    assert "blocked" in message and "cloudflare" in message.lower()
+
+
+def test_block_error_is_still_an_http_error():
+    # Callers that already handle requests' HTTPError keep working.
+    assert issubclass(workday.WorkdayBlockedError, requests.exceptions.HTTPError)
+
+
+def test_a_json_429_is_still_treated_as_a_rate_limit_and_retried():
+    responses = iter([
+        FakeResponse(status_code=429, headers={"Content-Type": "application/json"}),
+        _ok_page(1, 0),
+    ])
+    waits = []
+
+    jobs = workday.fetch(make_source(), http_post=lambda url, json, timeout: next(responses), sleep=waits.append)
+
+    assert len(jobs) == 1 and len(waits) == 1
+
+
+def test_throttle_retries_are_logged_at_warning_so_production_shows_them(caplog):
+    # The app configures no logging, so Python's last-resort handler drops
+    # anything below WARNING -- an INFO retry line never reaches the container log.
+    responses = iter([FakeResponse(status_code=429), _ok_page(1, 0)])
+
+    with caplog.at_level("WARNING", logger="app.adapters.workday"):
+        workday.fetch(make_source(), http_post=lambda url, json, timeout: next(responses), sleep=lambda _s: None)
+
+    assert any("throttled" in r.getMessage() and r.levelname == "WARNING" for r in caplog.records)
